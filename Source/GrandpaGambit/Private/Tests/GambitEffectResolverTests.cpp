@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 
+#include "Data/Validation/GambitDataValidation.h"
 #include "Data/Assets/GambitItemEffectDefinition.h"
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Dice/Evaluation/GambitDiceCombinationEvaluator.h"
@@ -86,6 +87,17 @@ namespace
 		Context.PriceBeforeModifiers = Price;
 		Context.ResolvedPrice = Price;
 		return Context;
+	}
+
+	bool HasValidationIssue(
+		const TArray<FGambitDataValidationIssue>& Issues,
+		const EGambitDataValidationSeverity Severity,
+		const TCHAR* MessageFragment)
+	{
+		return Issues.ContainsByPredicate([Severity, MessageFragment](const FGambitDataValidationIssue& Issue)
+		{
+			return Issue.Severity == Severity && Issue.Message.Contains(MessageFragment);
+		});
 	}
 }
 
@@ -205,6 +217,105 @@ bool FGambitConsumableOpponentTargetEffectTest::RunTest(const FString& Parameter
 	TestEqual(TEXT("source gains 4 gold"), SourceEconomy->GetCurrentGold(), SourceGoldBefore + 4);
 	TestEqual(TEXT("steal gold records target loss and source gain"), Context.DebugGoldLines.Num(), 2);
 	TestTrue(TEXT("steal gold records a debug effect event"), Context.DebugEffectEvents.Num() > 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitConsumableUsablePhasesTest,
+	"GrandpaGambit.Consumables.UsablePhases",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitConsumableUsablePhasesTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UGambitConsumableDefinition* DefaultConsumable = NewObject<UGambitConsumableDefinition>();
+	TestTrue(TEXT("consumables default to Action phase usage"), DefaultConsumable->CanBeUsedDuringPhase(EGambitRoundPhase::Action));
+	TestFalse(TEXT("consumables explicitly reject None phase usage"), DefaultConsumable->CanBeUsedDuringPhase(EGambitRoundPhase::None));
+	TestFalse(TEXT("default consumables cannot be used during Reward"), DefaultConsumable->CanBeUsedDuringPhase(EGambitRoundPhase::Reward));
+
+	UGambitConsumableDefinition* RewardConsumable = NewObject<UGambitConsumableDefinition>();
+	RewardConsumable->UsablePhases.Reset();
+	RewardConsumable->UsablePhases.Add(EGambitRoundPhase::Reward);
+	TestFalse(TEXT("configured consumable cannot be used during Action when Action is not listed"), RewardConsumable->CanBeUsedDuringPhase(EGambitRoundPhase::Action));
+	TestTrue(TEXT("configured consumable can be used during Reward"), RewardConsumable->CanBeUsedDuringPhase(EGambitRoundPhase::Reward));
+
+	UGambitConsumableDefinition* ConsumableWithNoneListed = NewObject<UGambitConsumableDefinition>();
+	ConsumableWithNoneListed->UsablePhases.Reset();
+	ConsumableWithNoneListed->UsablePhases.Add(EGambitRoundPhase::None);
+	ConsumableWithNoneListed->UsablePhases.Add(EGambitRoundPhase::Action);
+	TestFalse(TEXT("listed None phase is still never usable"), ConsumableWithNoneListed->CanBeUsedDuringPhase(EGambitRoundPhase::None));
+
+	UGambitConsumableDefinition* InvalidConsumable = NewObject<UGambitConsumableDefinition>();
+	InvalidConsumable->ItemId = TEXT("consumable.test.invalid_phases");
+	InvalidConsumable->ActionScoreModifier.AdditiveBonus = 1.0f;
+	InvalidConsumable->UsablePhases.Reset();
+
+	TArray<FGambitDataValidationIssue> Issues;
+	GambitDataValidation::ValidateItemDefinition(InvalidConsumable, Issues);
+	TestTrue(
+		TEXT("data validation rejects consumables with no usable phases"),
+		HasValidationIssue(Issues, EGambitDataValidationSeverity::Error, TEXT("no usable phases")));
+
+	UGambitConsumableDefinition* InvalidHookConsumable = NewObject<UGambitConsumableDefinition>();
+	InvalidHookConsumable->ItemId = TEXT("consumable.test.invalid_hook");
+	InvalidHookConsumable->ActionScoreModifier.AdditiveBonus = 1.0f;
+	UGambitItemEffectDefinition* InvalidHookEffect = MakeEffectDefinition(InvalidHookConsumable, EGambitEffectHook::Reward, EGambitItemEffectType::AddGold);
+	InvalidHookEffect->Amount = 1.0f;
+	InvalidHookConsumable->EffectDefinitions.Add(InvalidHookEffect);
+
+	TArray<FGambitDataValidationIssue> HookIssues;
+	GambitDataValidation::ValidateItemDefinition(InvalidHookConsumable, HookIssues);
+	TestTrue(
+		TEXT("data validation rejects non-ConsumableUse hooks on consumables"),
+		HasValidationIssue(HookIssues, EGambitDataValidationSeverity::Error, TEXT("must execute with ConsumableUse")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitLegacyShortcutValidationTest,
+	"GrandpaGambit.Items.LegacyShortcutValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitLegacyShortcutValidationTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UGambitModuleDefinition* NeutralModule = NewObject<UGambitModuleDefinition>();
+	TestFalse(TEXT("neutral module helper reports no legacy persistent payload"), NeutralModule->HasNonNeutralPersistentScoreModifier());
+
+	UGambitModuleDefinition* MixedModule = NewObject<UGambitModuleDefinition>();
+	MixedModule->ItemId = TEXT("module.test.mixed_legacy");
+	MixedModule->PersistentScoreModifier.AdditiveBonus = 10.0f;
+	UGambitItemEffectDefinition* ModuleEffect = MakeEffectDefinition(MixedModule, EGambitEffectHook::ScoreModifier, EGambitItemEffectType::AddScoreFlat);
+	ModuleEffect->Amount = 2.0f;
+	MixedModule->EffectDefinitions.Add(ModuleEffect);
+	TestTrue(TEXT("module helper detects non-neutral persistent modifier"), MixedModule->HasNonNeutralPersistentScoreModifier());
+
+	TArray<FGambitDataValidationIssue> ModuleIssues;
+	GambitDataValidation::ValidateItemDefinition(MixedModule, ModuleIssues);
+	TestTrue(
+		TEXT("mixed module legacy shortcut and EffectDefinitions emits a warning"),
+		HasValidationIssue(ModuleIssues, EGambitDataValidationSeverity::Warning, TEXT("PersistentScoreModifier and EffectDefinitions")));
+	TestFalse(TEXT("mixed module warning remains non-blocking"), GambitDataValidation::HasBlockingIssues(ModuleIssues));
+
+	UGambitConsumableDefinition* NeutralConsumable = NewObject<UGambitConsumableDefinition>();
+	TestFalse(TEXT("neutral consumable helper reports no legacy action payload"), NeutralConsumable->HasNonNeutralActionScoreModifier());
+
+	UGambitConsumableDefinition* MixedConsumable = NewObject<UGambitConsumableDefinition>();
+	MixedConsumable->ItemId = TEXT("consumable.test.mixed_legacy");
+	MixedConsumable->ActionScoreModifier.AdditiveBonus = 5.0f;
+	UGambitItemEffectDefinition* ConsumableEffect = MakeEffectDefinition(MixedConsumable, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddGold);
+	ConsumableEffect->Amount = 1.0f;
+	MixedConsumable->EffectDefinitions.Add(ConsumableEffect);
+	TestTrue(TEXT("consumable helper detects non-neutral action modifier"), MixedConsumable->HasNonNeutralActionScoreModifier());
+
+	TArray<FGambitDataValidationIssue> ConsumableIssues;
+	GambitDataValidation::ValidateItemDefinition(MixedConsumable, ConsumableIssues);
+	TestTrue(
+		TEXT("mixed consumable legacy shortcut and EffectDefinitions emits a warning"),
+		HasValidationIssue(ConsumableIssues, EGambitDataValidationSeverity::Warning, TEXT("ActionScoreModifier and EffectDefinitions")));
+	TestFalse(TEXT("mixed consumable warning remains non-blocking"), GambitDataValidation::HasBlockingIssues(ConsumableIssues));
 	return true;
 }
 

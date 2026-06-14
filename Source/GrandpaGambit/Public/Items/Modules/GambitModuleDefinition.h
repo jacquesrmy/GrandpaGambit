@@ -12,6 +12,9 @@ class GRANDPAGAMBIT_API UGambitModuleDefinition : public UGambitItemDefinition
 public:
 	UGambitModuleDefinition();
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Module")
+	UFUNCTION(BlueprintPure, Category = "Gambit|Module")
+	bool HasNonNeutralPersistentScoreModifier() const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Module", meta = (DisplayName = "Legacy Persistent Score Modifier", ToolTip = "Legacy shortcut applied during ScoreModifier. Prefer EffectDefinitions for new object effects; do not use both unless preserving an existing asset during migration."))
 	FGambitScoreModifierContext PersistentScoreModifier;
 };

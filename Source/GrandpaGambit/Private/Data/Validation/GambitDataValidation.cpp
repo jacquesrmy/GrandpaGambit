@@ -733,7 +733,16 @@ void GambitDataValidation::ValidateItemDefinition(
 		}
 
 		ValidateScoreModifier(ModuleDefinition->PersistentScoreModifier, Label, OutIssues);
-		if (IsNeutralScoreModifier(ModuleDefinition->PersistentScoreModifier) && !HasUsableEffectPayload(ItemDefinition))
+		if (ModuleDefinition->HasNonNeutralPersistentScoreModifier() && ItemDefinition->EffectDefinitions.Num() > 0)
+		{
+			AddWarning(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s uses legacy PersistentScoreModifier and EffectDefinitions. Prefer one source of truth; migrate the legacy shortcut into EffectDefinitions when safe."),
+					*Label));
+		}
+
+		if (!ModuleDefinition->HasNonNeutralPersistentScoreModifier() && !HasUsableEffectPayload(ItemDefinition))
 		{
 			AddError(OutIssues, FString::Printf(TEXT("%s is a module with no persistent modifier or effect payload."), *Label));
 		}
@@ -747,7 +756,53 @@ void GambitDataValidation::ValidateItemDefinition(
 		}
 
 		ValidateScoreModifier(ConsumableDefinition->ActionScoreModifier, Label, OutIssues);
-		if (IsNeutralScoreModifier(ConsumableDefinition->ActionScoreModifier) && !HasUsableEffectPayload(ItemDefinition))
+		if (ConsumableDefinition->HasNonNeutralActionScoreModifier() && ItemDefinition->EffectDefinitions.Num() > 0)
+		{
+			AddWarning(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s uses legacy ActionScoreModifier and EffectDefinitions. Prefer one source of truth; migrate the legacy shortcut into EffectDefinitions when safe."),
+					*Label));
+		}
+
+		bool bHasUsablePhase = false;
+		for (const EGambitRoundPhase UsablePhase : ConsumableDefinition->UsablePhases)
+		{
+			if (!IsValidEnumValue(UsablePhase))
+			{
+				AddError(OutIssues, FString::Printf(TEXT("%s has an invalid usable phase."), *Label));
+				continue;
+			}
+
+			if (UsablePhase != EGambitRoundPhase::None)
+			{
+				bHasUsablePhase = true;
+			}
+		}
+
+		if (!bHasUsablePhase)
+		{
+			AddError(OutIssues, FString::Printf(TEXT("%s is a consumable with no usable phases."), *Label));
+		}
+
+		for (int32 EffectIndex = 0; EffectIndex < ItemDefinition->EffectDefinitions.Num(); ++EffectIndex)
+		{
+			const UGambitItemEffectDefinition* EffectDefinition = ItemDefinition->EffectDefinitions[EffectIndex].Get();
+			if (!EffectDefinition || EffectDefinition->Hook == EGambitEffectHook::ConsumableUse)
+			{
+				continue;
+			}
+
+			AddError(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s effect[%d] uses hook %s; player-activated consumables must execute with ConsumableUse. UsablePhases only controls activation windows."),
+					*Label,
+					EffectIndex,
+					*GambitDataValidation::EffectHookToString(EffectDefinition->Hook)));
+		}
+
+		if (!ConsumableDefinition->HasNonNeutralActionScoreModifier() && !HasUsableEffectPayload(ItemDefinition))
 		{
 			AddError(OutIssues, FString::Printf(TEXT("%s is a consumable with no action modifier or effect payload."), *Label));
 		}

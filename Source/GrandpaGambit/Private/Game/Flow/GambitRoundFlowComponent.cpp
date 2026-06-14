@@ -580,13 +580,16 @@ bool UGambitRoundFlowComponent::RequestUseConsumableOnTargetSelectedDie(
 	AGambitGameState* GameState = GetGambitGameState();
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	bool bSuccess = false;
-	if (GameState && CurrentPhase == EGambitRoundPhase::Action && PlayerState)
+	if (GameState && PlayerState)
 	{
 		UGambitConsumableDefinition* ConsumableDefinition = nullptr;
 		const TArray<FGambitConsumableRuntimeSlot>& ConsumableSlots = PlayerState->GetConsumableSlotsRef();
 		const FGambitConsumableRuntimeSlot* Slot = ConsumableSlots.IsValidIndex(SlotIndex) ? &ConsumableSlots[SlotIndex] : nullptr;
 		const bool bTargetsOpponent = TargetPlayerState && TargetPlayerState != PlayerState;
-		if (Slot && Slot->Definition && (!bTargetsOpponent || Slot->Definition->bCanTargetOpponent))
+		if (Slot
+			&& Slot->Definition
+			&& Slot->Definition->CanBeUsedDuringPhase(CurrentPhase)
+			&& (!bTargetsOpponent || Slot->Definition->bCanTargetOpponent))
 		{
 			const AGambitPlayerState* SelectedDieOwner = bTargetsOpponent ? TargetPlayerState : PlayerState;
 			const bool bSelectedDieValid = SelectedDieOwner && SelectedDieOwner->GetDiceStatesRef().IsValidIndex(SelectedDieIndex);
