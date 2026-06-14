@@ -87,11 +87,6 @@ void UGambitPlayerRoundStateComponent::ApplyRoundScore(const FGambitScoreBreakdo
 	OnRoundScoreChanged.Broadcast(CurrentRoundScore);
 }
 
-void UGambitPlayerRoundStateComponent::ApplyRoundConsumableModifier(const FGambitScoreModifierContext& Modifier)
-{
-	ApplyTemporaryScoreModifier(Modifier);
-}
-
 void UGambitPlayerRoundStateComponent::ApplyTemporaryScoreModifier(const FGambitScoreModifierContext& Modifier)
 {
 	RoundConsumableModifier = MergeScoreModifiers(RoundConsumableModifier, Modifier);
@@ -157,7 +152,7 @@ void UGambitPlayerRoundStateComponent::AppendDebugShopLines(const TArray<FGambit
 	}
 }
 
-FGambitScoreModifierContext UGambitPlayerRoundStateComponent::BuildCombinedScoreModifier(const FGambitScoreModifierContext& PersistentModifier) const
+FGambitScoreModifierContext UGambitPlayerRoundStateComponent::BuildCombinedScoreModifier() const
 {
-	return MergeScoreModifiers(PersistentModifier, RoundConsumableModifier);
+	return RoundConsumableModifier;
 }

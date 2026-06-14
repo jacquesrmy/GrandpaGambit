@@ -45,9 +45,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player")
 	void AddVictoryPoints(int32 VictoryPointsToAdd);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Player")
-	bool UseConsumableSlot(int32 SlotIndex);
-
 	bool ConsumeConsumableDefinitionAtSlot(int32 SlotIndex, UGambitConsumableDefinition*& OutDefinition);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player")

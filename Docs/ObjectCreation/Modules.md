@@ -1,6 +1,6 @@
 # Modules DataAsset Plan
 
-Les modules utilisent `UGambitModuleDefinition`. Les bonus fixes simples peuvent passer par `PersistentScoreModifier`; les effets conditionnels doivent passer par `UGambitItemEffectDefinition`.
+Les modules utilisent `UGambitModuleDefinition`. Les bonus fixes simples et les effets conditionnels doivent passer par `UGambitItemEffectDefinition`.
 
 La fiche complète de chaque module est dans `ObjectMatrix.csv`. Ce fichier sert à lire les familles et les priorités sans parcourir tout le CSV.
 

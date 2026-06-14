@@ -26,9 +26,6 @@ public:
 	void ApplyRoundScore(const FGambitScoreBreakdown& ScoreBreakdown);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round State")
-	void ApplyRoundConsumableModifier(const FGambitScoreModifierContext& Modifier);
-
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round State")
 	void ApplyTemporaryScoreModifier(const FGambitScoreModifierContext& Modifier);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Debug")
@@ -52,7 +49,7 @@ public:
 	FGambitScoreModifierContext GetTemporaryScoreModifier() const { return RoundConsumableModifier; }
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round State")
-	FGambitScoreModifierContext BuildCombinedScoreModifier(const FGambitScoreModifierContext& PersistentModifier) const;
+	FGambitScoreModifierContext BuildCombinedScoreModifier() const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round State")
 	int32 GetCurrentRoundScore() const { return CurrentRoundScore; }

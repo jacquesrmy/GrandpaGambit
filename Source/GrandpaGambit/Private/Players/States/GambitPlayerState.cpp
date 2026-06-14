@@ -155,23 +155,6 @@ void AGambitPlayerState::AddVictoryPoints(const int32 VictoryPointsToAdd)
 	OnVictoryPointsChanged.Broadcast(TotalVictoryPoints);
 }
 
-bool AGambitPlayerState::UseConsumableSlot(const int32 SlotIndex)
-{
-	if (!InventoryComponent || !RoundStateComponent)
-	{
-		return false;
-	}
-
-	FGambitScoreModifierContext ConsumedModifier;
-	if (!InventoryComponent->ConsumeConsumableAtSlot(SlotIndex, ConsumedModifier))
-	{
-		return false;
-	}
-
-	RoundStateComponent->ApplyRoundConsumableModifier(ConsumedModifier);
-	return true;
-}
-
 bool AGambitPlayerState::ConsumeConsumableDefinitionAtSlot(
 	const int32 SlotIndex,
 	UGambitConsumableDefinition*& OutDefinition)
@@ -189,21 +172,15 @@ void AGambitPlayerState::ApplyTemporaryScoreModifier(const FGambitScoreModifierC
 
 FGambitScoreModifierContext AGambitPlayerState::BuildCombinedScoreModifier() const
 {
-	FGambitScoreModifierContext PersistentModifier;
-	PersistentModifier.Multiplier = 1.0f;
-	PersistentModifier.DiminishingFactor = 1.0f;
-
-	if (InventoryComponent)
-	{
-		PersistentModifier = InventoryComponent->BuildPersistentScoreModifierContext();
-	}
-
 	if (RoundStateComponent)
 	{
-		return RoundStateComponent->BuildCombinedScoreModifier(PersistentModifier);
+		return RoundStateComponent->BuildCombinedScoreModifier();
 	}
 
-	return PersistentModifier;
+	FGambitScoreModifierContext Modifier;
+	Modifier.Multiplier = 1.0f;
+	Modifier.DiminishingFactor = 1.0f;
+	return Modifier;
 }
 
 FGambitScoreModifierContext AGambitPlayerState::GetTemporaryScoreModifier() const

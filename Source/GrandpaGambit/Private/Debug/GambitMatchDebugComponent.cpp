@@ -127,53 +127,6 @@ namespace
 		return FString::Printf(TEXT("[%s]"), *FString::Join(Parts, TEXT(",")));
 	}
 
-	FString FormatMatchDebugModifier(const FGambitScoreModifierContext& Modifier)
-	{
-		return FString::Printf(
-			TEXT("Add=%.2f Mult=%.2f Cap=%.2f DiminishThreshold=%.2f DiminishFactor=%.2f"),
-			Modifier.AdditiveBonus,
-			Modifier.Multiplier,
-			Modifier.ScoreCap,
-			Modifier.DiminishingThreshold,
-			Modifier.DiminishingFactor);
-	}
-
-	FString FormatModuleLegacyModifier(const UGambitModuleDefinition* ModuleDefinition)
-	{
-		if (!ModuleDefinition || !ModuleDefinition->HasNonNeutralPersistentScoreModifier())
-		{
-			return TEXT("None");
-		}
-
-		if (ModuleDefinition->ShouldApplyLegacyPersistentScoreModifier())
-		{
-			return FString::Printf(TEXT("FallbackActive(%s)"), *FormatMatchDebugModifier(ModuleDefinition->PersistentScoreModifier));
-		}
-
-		return FString::Printf(
-			TEXT("IgnoredByEffectDefinitions(Effects=%d %s)"),
-			ModuleDefinition->EffectDefinitions.Num(),
-			*FormatMatchDebugModifier(ModuleDefinition->PersistentScoreModifier));
-	}
-
-	FString FormatConsumableLegacyModifier(const UGambitConsumableDefinition* ConsumableDefinition)
-	{
-		if (!ConsumableDefinition || !ConsumableDefinition->HasNonNeutralActionScoreModifier())
-		{
-			return TEXT("None");
-		}
-
-		if (ConsumableDefinition->ShouldApplyLegacyActionScoreModifier())
-		{
-			return FString::Printf(TEXT("FallbackActive(%s)"), *FormatMatchDebugModifier(ConsumableDefinition->ActionScoreModifier));
-		}
-
-		return FString::Printf(
-			TEXT("IgnoredByEffectDefinitions(Effects=%d %s)"),
-			ConsumableDefinition->EffectDefinitions.Num(),
-			*FormatMatchDebugModifier(ConsumableDefinition->ActionScoreModifier));
-	}
-
 	FString FormatDiceDefinition(const UGambitDiceDefinition* DiceDefinition)
 	{
 		if (!DiceDefinition)
@@ -1758,12 +1711,12 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 		for (const UGambitModuleDefinition* ModuleDefinition : PlayerLoadout->Loadout.StartingModules)
 		{
 			AddKnownItem(ModuleDefinition);
-			UE_LOG(LogGambit, Log, TEXT("DebugData: Loadout Module %s LegacyModifier=%s"), *FormatItemDetails(ModuleDefinition), *FormatModuleLegacyModifier(ModuleDefinition));
+			UE_LOG(LogGambit, Log, TEXT("DebugData: Loadout Module %s"), *FormatItemDetails(ModuleDefinition));
 		}
 		for (const UGambitConsumableDefinition* ConsumableDefinition : PlayerLoadout->Loadout.StartingConsumables)
 		{
 			AddKnownItem(ConsumableDefinition);
-			UE_LOG(LogGambit, Log, TEXT("DebugData: Loadout Consumable %s LegacyModifier=%s"), *FormatItemDetails(ConsumableDefinition), *FormatConsumableLegacyModifier(ConsumableDefinition));
+			UE_LOG(LogGambit, Log, TEXT("DebugData: Loadout Consumable %s"), *FormatItemDetails(ConsumableDefinition));
 		}
 	}
 
@@ -1905,9 +1858,8 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 		UE_LOG(
 			LogGambit,
 			Log,
-			TEXT("DebugData: KnownModule %s LegacyModifier=%s"),
-			*FormatItemDetails(ModuleDefinition),
-			*FormatModuleLegacyModifier(ModuleDefinition));
+			TEXT("DebugData: KnownModule %s"),
+			*FormatItemDetails(ModuleDefinition));
 	}
 
 	UE_LOG(LogGambit, Log, TEXT("DebugData: === KNOWN CONSUMABLES (%d) ==="), KnownConsumableDefinitions.Num());
@@ -1916,9 +1868,8 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 		UE_LOG(
 			LogGambit,
 			Log,
-			TEXT("DebugData: KnownConsumable %s LegacyModifier=%s CanTargetOpponent=%s"),
+			TEXT("DebugData: KnownConsumable %s CanTargetOpponent=%s"),
 			*FormatItemDetails(ConsumableDefinition),
-			*FormatConsumableLegacyModifier(ConsumableDefinition),
 			ConsumableDefinition && ConsumableDefinition->bCanTargetOpponent ? TEXT("Yes") : TEXT("No"));
 	}
 
@@ -2071,11 +2022,10 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 			UE_LOG(
 				LogGambit,
 				Log,
-				TEXT("DebugInventory: %s Module[%d] %s LegacyModifier=%s"),
+				TEXT("DebugInventory: %s Module[%d] %s"),
 				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				Index,
-				*FormatItemDetails(Module),
-				*FormatModuleLegacyModifier(Module));
+				*FormatItemDetails(Module));
 		}
 
 		const TArray<FGambitConsumableRuntimeSlot>& Consumables = PlayerState->GetConsumableSlotsRef();
@@ -2086,11 +2036,10 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 			UE_LOG(
 				LogGambit,
 				Log,
-				TEXT("DebugInventory: %s Consumable[%d] %s LegacyModifier=%s"),
+				TEXT("DebugInventory: %s Consumable[%d] %s"),
 				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				Index,
-				*FormatItemDetails(Consumable),
-				*FormatConsumableLegacyModifier(Consumable));
+				*FormatItemDetails(Consumable));
 		}
 	}
 }
@@ -2282,7 +2231,7 @@ void UGambitMatchDebugComponent::PrintFinalMatchSummary() const
 		}
 		for (const UGambitModuleDefinition* ModuleDefinition : PlayerState->GetActiveModulesRef())
 		{
-			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Module %s LegacyModifier=%s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatItemDetails(ModuleDefinition), *FormatModuleLegacyModifier(ModuleDefinition));
+			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Module %s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatItemDetails(ModuleDefinition));
 		}
 		for (const FGambitConsumableRuntimeSlot& ConsumableSlot : PlayerState->GetConsumableSlotsRef())
 		{

@@ -6,7 +6,6 @@
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
 #include "Items/Effects/GambitItemEffect.h"
-#include "Items/Modules/GambitModuleDefinition.h"
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/Components/GambitEconomyComponent.h"
 #include "Players/Components/GambitInventoryComponent.h"
@@ -1375,56 +1374,6 @@ int32 UGambitEffectResolver::ExecuteItemEffects(UGambitItemDefinition* ItemDefin
 
 	Context.SourceItem = ItemDefinition;
 	int32 TriggeredCount = 0;
-
-	if (Context.Hook == EGambitEffectHook::ScoreModifier)
-	{
-		if (const UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(ItemDefinition))
-		{
-			if (ModuleDefinition->ShouldApplyLegacyPersistentScoreModifier())
-			{
-				ApplyScoreModifier(Context.ScoreModifierDelta, ModuleDefinition->PersistentScoreModifier);
-				AddScoreModifierDebugLine(Context, ModuleDefinition->PersistentScoreModifier, TEXT("Persistent score modifier"));
-				Context.DebugEffectEvents.Add(MakeRuntimeEffectDebugEvent(
-					Context,
-					TEXT("PersistentScoreModifier"),
-					FString::Printf(TEXT("%s applied persistent score modifier"), *GetItemName(ItemDefinition))));
-				TriggeredCount++;
-				UE_LOG(
-					LogGambit,
-					Log,
-					TEXT("EffectResolver: Hook=%s Item=%s Shortcut=PersistentScoreModifier Add=%.2f Mult=%.2f"),
-					*EffectHookToString(Context.Hook),
-					*GetItemName(ItemDefinition),
-					ModuleDefinition->PersistentScoreModifier.AdditiveBonus,
-					ModuleDefinition->PersistentScoreModifier.Multiplier);
-			}
-		}
-	}
-
-	if (Context.Hook == EGambitEffectHook::ConsumableUse)
-	{
-		if (const UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(ItemDefinition))
-		{
-			if (ConsumableDefinition->ShouldApplyLegacyActionScoreModifier())
-			{
-				ApplyScoreModifier(Context.TemporaryScoreModifierDelta, ConsumableDefinition->ActionScoreModifier);
-				AddScoreModifierDebugLine(Context, ConsumableDefinition->ActionScoreModifier, TEXT("Consumable action modifier"));
-				Context.DebugEffectEvents.Add(MakeRuntimeEffectDebugEvent(
-					Context,
-					TEXT("ActionScoreModifier"),
-					FString::Printf(TEXT("%s applied action score modifier"), *GetItemName(ItemDefinition))));
-				TriggeredCount++;
-				UE_LOG(
-					LogGambit,
-					Log,
-					TEXT("EffectResolver: Hook=%s Item=%s Shortcut=ActionScoreModifier Add=%.2f Mult=%.2f"),
-					*EffectHookToString(Context.Hook),
-					*GetItemName(ItemDefinition),
-					ConsumableDefinition->ActionScoreModifier.AdditiveBonus,
-					ConsumableDefinition->ActionScoreModifier.Multiplier);
-			}
-		}
-	}
 
 	for (UGambitItemEffectDefinition* EffectDefinition : ItemDefinition->EffectDefinitions)
 	{

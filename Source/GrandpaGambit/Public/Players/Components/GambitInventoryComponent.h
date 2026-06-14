@@ -46,9 +46,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Inventory")
 	bool RemoveItemDefinition(UGambitItemDefinition* ItemDefinition);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Inventory")
-	bool ConsumeConsumableAtSlot(int32 SlotIndex, FGambitScoreModifierContext& OutModifier);
-
 	bool ConsumeConsumableDefinitionAtSlot(int32 SlotIndex, UGambitConsumableDefinition*& OutDefinition);
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
@@ -98,9 +95,6 @@ public:
 	TArray<FGambitConsumableRuntimeSlot> GetConsumableSlots() const { return ConsumableSlots; }
 
 	const TArray<FGambitConsumableRuntimeSlot>& GetConsumableSlotsRef() const { return ConsumableSlots; }
-
-	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
-	FGambitScoreModifierContext BuildPersistentScoreModifierContext() const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|Inventory")
 	FOnGambitInventoryChanged OnInventoryChanged;

@@ -20,29 +20,6 @@ namespace
 		return ActualRarity == ExpectedRarity;
 	}
 
-	void MergeModifier(const FGambitScoreModifierContext& Source, FGambitScoreModifierContext& Target)
-	{
-		Target.AdditiveBonus += Source.AdditiveBonus;
-		Target.DiceContributionMultiplierBonus += Source.DiceContributionMultiplierBonus;
-		Target.Multiplier *= Source.Multiplier;
-
-		if (Source.ScoreCap > 0.0f)
-		{
-			Target.ScoreCap = (Target.ScoreCap > 0.0f) ? FMath::Min(Target.ScoreCap, Source.ScoreCap) : Source.ScoreCap;
-		}
-
-		if (Source.DiminishingThreshold > 0.0f)
-		{
-			Target.DiminishingThreshold = (Target.DiminishingThreshold > 0.0f)
-				? FMath::Min(Target.DiminishingThreshold, Source.DiminishingThreshold)
-				: Source.DiminishingThreshold;
-		}
-
-		if (Source.DiminishingFactor > 0.0f && Source.DiminishingFactor < 1.0f)
-		{
-			Target.DiminishingFactor = FMath::Min(Target.DiminishingFactor, Source.DiminishingFactor);
-		}
-	}
 }
 
 UGambitInventoryComponent::UGambitInventoryComponent()
@@ -236,22 +213,6 @@ bool UGambitInventoryComponent::RemoveItemDefinition(UGambitItemDefinition* Item
 	return false;
 }
 
-bool UGambitInventoryComponent::ConsumeConsumableAtSlot(const int32 SlotIndex, FGambitScoreModifierContext& OutModifier)
-{
-	UGambitConsumableDefinition* ConsumedDefinition = nullptr;
-	if (!ConsumeConsumableDefinitionAtSlot(SlotIndex, ConsumedDefinition) || !ConsumedDefinition)
-	{
-		return false;
-	}
-
-	OutModifier = FGambitScoreModifierContext();
-	if (ConsumedDefinition->ShouldApplyLegacyActionScoreModifier())
-	{
-		OutModifier = ConsumedDefinition->ActionScoreModifier;
-	}
-	return true;
-}
-
 bool UGambitInventoryComponent::ConsumeConsumableDefinitionAtSlot(
 	const int32 SlotIndex,
 	UGambitConsumableDefinition*& OutDefinition)
@@ -362,28 +323,6 @@ int32 UGambitInventoryComponent::CountOwnedItemsByRarity(
 	}
 
 	return Count;
-}
-
-FGambitScoreModifierContext UGambitInventoryComponent::BuildPersistentScoreModifierContext() const
-{
-	FGambitScoreModifierContext Context;
-	Context.Multiplier = 1.0f;
-	Context.DiminishingFactor = 1.0f;
-
-	for (const UGambitModuleDefinition* Module : ActiveModules)
-	{
-		if (!Module)
-		{
-			continue;
-		}
-
-		if (Module->ShouldApplyLegacyPersistentScoreModifier())
-		{
-			MergeModifier(Module->PersistentScoreModifier, Context);
-		}
-	}
-
-	return Context;
 }
 
 int32 UGambitInventoryComponent::GetModuleSlotCapacity() const

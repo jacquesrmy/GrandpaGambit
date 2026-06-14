@@ -71,7 +71,7 @@ Non crees volontairement :
 
 Checklist :
 
-- [x] Créer d'abord les modules `PersistentScoreModifier` sans conditions pour le sous-ensemble safe.
+- [x] Créer d'abord les modules `EffectDefinitions` sans conditions pour le sous-ensemble safe.
 - [x] Créer les effets conditionnels simples par valeur/combinaison pour le sous-ensemble safe.
 - [x] Ajouter les petites conditions manquantes les plus rentables : parite, all-dice range, raw score threshold.
 - [x] Tester avec 2 et 4 joueurs locaux en smoke match AI headless.

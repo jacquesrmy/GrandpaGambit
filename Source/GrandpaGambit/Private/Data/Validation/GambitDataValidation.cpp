@@ -725,35 +725,16 @@ void GambitDataValidation::ValidateItemDefinition(
 	ValidateEffectDefinitions(ItemDefinition->EffectDefinitions, Label, OutIssues);
 	ValidateEffectClasses(ItemDefinition->EffectClasses, Label, OutIssues);
 
-	if (const UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(ItemDefinition))
+	if (Cast<UGambitModuleDefinition>(ItemDefinition))
 	{
 		if (ItemDefinition->ItemType != EGambitItemType::Module)
 		{
 			AddError(OutIssues, FString::Printf(TEXT("%s is a module class but ItemType is not Module."), *Label));
 		}
 
-		ValidateScoreModifier(ModuleDefinition->PersistentScoreModifier, Label, OutIssues);
-		const bool bHasLegacyPersistentModifier = ModuleDefinition->HasNonNeutralPersistentScoreModifier();
-		if (bHasLegacyPersistentModifier && ItemDefinition->EffectDefinitions.Num() > 0)
+		if (!HasUsableEffectPayload(ItemDefinition))
 		{
-			AddError(
-				OutIssues,
-				FString::Printf(
-					TEXT("%s uses legacy PersistentScoreModifier and EffectDefinitions. EffectDefinitions are the runtime source of truth; PersistentScoreModifier is migration-only and must be cleared."),
-					*Label));
-		}
-		else if (bHasLegacyPersistentModifier)
-		{
-			AddWarning(
-				OutIssues,
-				FString::Printf(
-					TEXT("%s uses legacy-only PersistentScoreModifier. The fallback still runs temporarily, but EffectDefinitions are the source of truth; migrate this migration-only field."),
-					*Label));
-		}
-
-		if (!bHasLegacyPersistentModifier && !HasUsableEffectPayload(ItemDefinition))
-		{
-			AddError(OutIssues, FString::Printf(TEXT("%s is a module with no persistent modifier or effect payload."), *Label));
+			AddError(OutIssues, FString::Printf(TEXT("%s is a module with no effect payload."), *Label));
 		}
 	}
 
@@ -762,25 +743,6 @@ void GambitDataValidation::ValidateItemDefinition(
 		if (ItemDefinition->ItemType != EGambitItemType::Consumable)
 		{
 			AddError(OutIssues, FString::Printf(TEXT("%s is a consumable class but ItemType is not Consumable."), *Label));
-		}
-
-		ValidateScoreModifier(ConsumableDefinition->ActionScoreModifier, Label, OutIssues);
-		const bool bHasLegacyActionModifier = ConsumableDefinition->HasNonNeutralActionScoreModifier();
-		if (bHasLegacyActionModifier && ItemDefinition->EffectDefinitions.Num() > 0)
-		{
-			AddError(
-				OutIssues,
-				FString::Printf(
-					TEXT("%s uses legacy ActionScoreModifier and EffectDefinitions. EffectDefinitions are the runtime source of truth; ActionScoreModifier is migration-only and must be cleared."),
-					*Label));
-		}
-		else if (bHasLegacyActionModifier)
-		{
-			AddWarning(
-				OutIssues,
-				FString::Printf(
-					TEXT("%s uses legacy-only ActionScoreModifier. The fallback still runs temporarily, but EffectDefinitions are the source of truth; migrate this migration-only field."),
-					*Label));
 		}
 
 		bool bHasUsablePhase = false;
@@ -820,9 +782,9 @@ void GambitDataValidation::ValidateItemDefinition(
 					*GambitDataValidation::EffectHookToString(EffectDefinition->Hook)));
 		}
 
-		if (!bHasLegacyActionModifier && !HasUsableEffectPayload(ItemDefinition))
+		if (!HasUsableEffectPayload(ItemDefinition))
 		{
-			AddError(OutIssues, FString::Printf(TEXT("%s is a consumable with no action modifier or effect payload."), *Label));
+			AddError(OutIssues, FString::Printf(TEXT("%s is a consumable with no effect payload."), *Label));
 		}
 
 		if (ConsumableDefinition->bCanTargetOpponent)
