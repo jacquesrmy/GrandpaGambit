@@ -5,6 +5,7 @@
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
+#include "Items/Effects/GambitEffectTargetRules.h"
 #include "Items/Effects/GambitItemEffect.h"
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/Components/GambitEconomyComponent.h"
@@ -180,13 +181,6 @@ namespace
 		DieState.ScoreContributionValue = DieState.EffectiveValue;
 	}
 
-	bool IsEffectResolverSelectedDieTargetRule(const FName TargetRuleId)
-	{
-		return TargetRuleId == TEXT("selected_die")
-			|| TargetRuleId == TEXT("source.selected_die")
-			|| TargetRuleId == TEXT("target.selected_die");
-	}
-
 	int32 ResolveSelectedDieHandIndex(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
 		return Target == EGambitEffectTarget::Target ? Context.TargetDieHandIndex : Context.SourceDieHandIndex;
@@ -214,7 +208,7 @@ namespace
 			return Indexes;
 		}
 
-		if (EffectDefinition && IsEffectResolverSelectedDieTargetRule(EffectDefinition->TargetRuleId))
+		if (EffectDefinition && GambitEffectTargetRules::IsSelectedDieRule(EffectDefinition->TargetRuleId))
 		{
 			const int32 SelectedDieIndex = ResolveSelectedDieHandIndex(Context, Target);
 			if (DiceStates.IsValidIndex(SelectedDieIndex))
@@ -224,9 +218,7 @@ namespace
 			return Indexes;
 		}
 
-		if (EffectDefinition
-			&& (EffectDefinition->TargetRuleId == TEXT("first_rerolled_die")
-				|| EffectDefinition->TargetRuleId == TEXT("first_rerolled_die_this_round")))
+		if (EffectDefinition && GambitEffectTargetRules::IsFirstRerolledDieRule(EffectDefinition->TargetRuleId))
 		{
 			const int32 FirstRerolledDieIndex = Context.FirstRerolledDieHandIndexThisRound;
 			if (DiceStates.IsValidIndex(FirstRerolledDieIndex))

@@ -7,6 +7,7 @@
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
 #include "Items/DiceItems/GambitDiceItemDefinition.h"
+#include "Items/Effects/GambitEffectTargetRules.h"
 #include "Items/Effects/GambitItemEffect.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 #include "Shop/Data/GambitShopLootTable.h"
@@ -129,6 +130,11 @@ namespace
 		return EffectDefinition
 			&& (EffectDefinition->Target == EGambitEffectTarget::Target
 				|| EffectDefinition->Target == EGambitEffectTarget::SourceAndTarget);
+	}
+
+	bool EffectHasOpponentTargetRule(const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		return EffectDefinition && GambitEffectTargetRules::IsOpponentRule(EffectDefinition->TargetRuleId);
 	}
 
 	bool IsShopContextHook(const EGambitEffectHook Hook)
@@ -792,7 +798,8 @@ void GambitDataValidation::ValidateItemDefinition(
 			const bool bHasOpponentTargetEffect = ItemDefinition->EffectDefinitions.ContainsByPredicate(
 				[](const TObjectPtr<UGambitItemEffectDefinition>& EffectDefinition)
 				{
-					return EffectRequestsOpponentTarget(EffectDefinition.Get());
+					return EffectRequestsOpponentTarget(EffectDefinition.Get())
+						|| EffectHasOpponentTargetRule(EffectDefinition.Get());
 				});
 			if (!bHasOpponentTargetEffect)
 			{
@@ -860,6 +867,17 @@ void GambitDataValidation::ValidateEffectDefinition(
 				TEXT("%s uses unsupported effect type %s."),
 				*FullEffectLabel,
 				*EffectTypeToString(EffectDefinition->EffectType)));
+	}
+
+	if (!EffectDefinition->TargetRuleId.IsNone()
+		&& !GambitEffectTargetRules::IsKnownRule(EffectDefinition->TargetRuleId))
+	{
+		AddError(
+			OutIssues,
+			FString::Printf(
+				TEXT("%s uses unknown TargetRuleId %s."),
+				*FullEffectLabel,
+				*GambitEffectTargetRules::DescribeRule(EffectDefinition->TargetRuleId)));
 	}
 
 	if (EffectRequestsOpponentTarget(EffectDefinition) && EffectDefinition->TargetRuleId.IsNone())

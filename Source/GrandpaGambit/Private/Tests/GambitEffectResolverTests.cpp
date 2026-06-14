@@ -9,6 +9,7 @@
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
 #include "Items/DiceItems/GambitDiceItemDefinition.h"
+#include "Items/Effects/GambitEffectTargetRules.h"
 #include "Items/Effects/GambitEffectResolver.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 #include "Players/Components/GambitDiceComponent.h"
@@ -99,6 +100,89 @@ namespace
 			return Issue.Severity == Severity && Issue.Message.Contains(MessageFragment);
 		});
 	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitEffectTargetRulesRecognitionTest,
+	"GrandpaGambit.Effects.TargetRules.Recognition",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitEffectTargetRulesRecognitionTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	TestTrue(TEXT("selected_die is known"), GambitEffectTargetRules::IsKnownRule(GambitEffectTargetRules::SelectedDie));
+	TestTrue(TEXT("selected_die is a selected die rule"), GambitEffectTargetRules::IsSelectedDieRule(GambitEffectTargetRules::SelectedDie));
+	TestTrue(TEXT("selected_die requires selected die input"), GambitEffectTargetRules::RequiresSelectedDie(GambitEffectTargetRules::SelectedDie));
+
+	TestTrue(TEXT("source.selected_die is known"), GambitEffectTargetRules::IsKnownRule(GambitEffectTargetRules::SourceSelectedDie));
+	TestTrue(TEXT("source.selected_die is a selected die rule"), GambitEffectTargetRules::IsSelectedDieRule(GambitEffectTargetRules::SourceSelectedDie));
+	TestTrue(TEXT("source.selected_die requires selected die input"), GambitEffectTargetRules::RequiresSelectedDie(GambitEffectTargetRules::SourceSelectedDie));
+
+	TestTrue(TEXT("target.selected_die is known"), GambitEffectTargetRules::IsKnownRule(GambitEffectTargetRules::TargetSelectedDie));
+	TestTrue(TEXT("target.selected_die is a selected die rule"), GambitEffectTargetRules::IsSelectedDieRule(GambitEffectTargetRules::TargetSelectedDie));
+	TestTrue(TEXT("target.selected_die requires selected die input"), GambitEffectTargetRules::RequiresSelectedDie(GambitEffectTargetRules::TargetSelectedDie));
+
+	TestTrue(TEXT("first_rerolled_die is known"), GambitEffectTargetRules::IsKnownRule(GambitEffectTargetRules::FirstRerolledDie));
+	TestTrue(TEXT("first_rerolled_die is a first rerolled die rule"), GambitEffectTargetRules::IsFirstRerolledDieRule(GambitEffectTargetRules::FirstRerolledDie));
+
+	TestTrue(TEXT("first_rerolled_die_this_round is known"), GambitEffectTargetRules::IsKnownRule(GambitEffectTargetRules::FirstRerolledDieThisRound));
+	TestTrue(TEXT("first_rerolled_die_this_round is a first rerolled die rule"), GambitEffectTargetRules::IsFirstRerolledDieRule(GambitEffectTargetRules::FirstRerolledDieThisRound));
+
+	TestTrue(TEXT("target.opponent is known"), GambitEffectTargetRules::IsKnownRule(GambitEffectTargetRules::TargetOpponent));
+	TestTrue(TEXT("target.opponent is an opponent rule"), GambitEffectTargetRules::IsOpponentRule(GambitEffectTargetRules::TargetOpponent));
+	TestFalse(TEXT("target.opponent does not require selected die input"), GambitEffectTargetRules::RequiresSelectedDie(GambitEffectTargetRules::TargetOpponent));
+
+	TestFalse(TEXT("empty TargetRuleId is not a known rule value"), GambitEffectTargetRules::IsKnownRule(NAME_None));
+	TestFalse(TEXT("unknown target rule is not known"), GambitEffectTargetRules::IsKnownRule(TEXT("unknown.target_rule")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitEffectTargetRuleValidationTest,
+	"GrandpaGambit.Items.TargetRuleValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitEffectTargetRuleValidationTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UGambitItemEffectDefinition* EmptyRuleEffect = MakeEffectDefinition(GetTransientPackage(), EGambitEffectHook::ScoreModifier, EGambitItemEffectType::AddGold);
+	EmptyRuleEffect->Amount = 1.0f;
+	TArray<FGambitDataValidationIssue> EmptyRuleIssues;
+	GambitDataValidation::ValidateEffectDefinition(EmptyRuleEffect, TEXT("Test"), 0, EmptyRuleIssues);
+	TestFalse(
+		TEXT("empty TargetRuleId does not produce a target rule validation error by default"),
+		HasValidationIssue(EmptyRuleIssues, EGambitDataValidationSeverity::Error, TEXT("TargetRuleId")));
+
+	UGambitItemEffectDefinition* UnknownRuleEffect = MakeEffectDefinition(GetTransientPackage(), EGambitEffectHook::ScoreModifier, EGambitItemEffectType::AddGold);
+	UnknownRuleEffect->Amount = 1.0f;
+	UnknownRuleEffect->TargetRuleId = TEXT("unknown.target_rule");
+	TArray<FGambitDataValidationIssue> UnknownRuleIssues;
+	GambitDataValidation::ValidateEffectDefinition(UnknownRuleEffect, TEXT("Test"), 0, UnknownRuleIssues);
+	TestTrue(
+		TEXT("unknown TargetRuleId produces validation error"),
+		HasValidationIssue(UnknownRuleIssues, EGambitDataValidationSeverity::Error, TEXT("unknown TargetRuleId")));
+
+	UGambitConsumableDefinition* OpponentConsumable = NewObject<UGambitConsumableDefinition>();
+	OpponentConsumable->ItemId = TEXT("consumable.test.target_rule_opponent");
+	OpponentConsumable->bCanTargetOpponent = true;
+	UGambitItemEffectDefinition* OpponentEffect = MakeEffectDefinition(OpponentConsumable, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::StealGold);
+	OpponentEffect->Target = EGambitEffectTarget::Target;
+	OpponentEffect->TargetRuleId = GambitEffectTargetRules::TargetOpponent;
+	OpponentEffect->Amount = 1.0f;
+	OpponentConsumable->EffectDefinitions.Add(OpponentEffect);
+
+	TArray<FGambitDataValidationIssue> OpponentIssues;
+	GambitDataValidation::ValidateItemDefinition(OpponentConsumable, OpponentIssues);
+	TestFalse(
+		TEXT("target.opponent satisfies opponent target rule validation"),
+		HasValidationIssue(OpponentIssues, EGambitDataValidationSeverity::Error, TEXT("opponent target rule")));
+	TestFalse(
+		TEXT("target.opponent does not produce a TargetRuleId validation error"),
+		HasValidationIssue(OpponentIssues, EGambitDataValidationSeverity::Error, TEXT("TargetRuleId")));
+
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -1709,7 +1793,7 @@ bool FGambitB3PolishTransformResetsTest::RunTest(const FString& Parameters)
 
 	UGambitConsumableDefinition* Polish = NewObject<UGambitConsumableDefinition>();
 	UGambitItemEffectDefinition* EffectDefinition = MakeEffectDefinition(Polish, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::TransformDiceForRound);
-	EffectDefinition->TargetRuleId = TEXT("selected_die");
+	EffectDefinition->TargetRuleId = GambitEffectTargetRules::SelectedDie;
 	EffectDefinition->TransformDiceDefinition = SilverDie;
 	Polish->EffectDefinitions.Add(EffectDefinition);
 
@@ -1748,7 +1832,7 @@ bool FGambitB3DirectConsumableDieMutationTest::RunTest(const FString& Parameters
 
 	UGambitConsumableDefinition* Injection = NewObject<UGambitConsumableDefinition>();
 	UGambitItemEffectDefinition* InjectionEffect = MakeEffectDefinition(Injection, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::ModifyDieValue);
-	InjectionEffect->TargetRuleId = TEXT("selected_die");
+	InjectionEffect->TargetRuleId = GambitEffectTargetRules::SelectedDie;
 	InjectionEffect->Amount = 2.0f;
 	Injection->EffectDefinitions.Add(InjectionEffect);
 
@@ -1762,7 +1846,7 @@ bool FGambitB3DirectConsumableDieMutationTest::RunTest(const FString& Parameters
 
 	UGambitConsumableDefinition* Lock = NewObject<UGambitConsumableDefinition>();
 	UGambitItemEffectDefinition* LockEffect = MakeEffectDefinition(Lock, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::LockDie);
-	LockEffect->TargetRuleId = TEXT("selected_die");
+	LockEffect->TargetRuleId = GambitEffectTargetRules::SelectedDie;
 	Lock->EffectDefinitions.Add(LockEffect);
 
 	FGambitEffectExecutionContext LockContext;
@@ -1795,7 +1879,7 @@ bool FGambitB3BribeOpponentTargetTest::RunTest(const FString& Parameters)
 
 	UGambitItemEffectDefinition* TargetPenalty = MakeEffectDefinition(Bribe, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddTemporaryScoreModifier);
 	TargetPenalty->Target = EGambitEffectTarget::Target;
-	TargetPenalty->TargetRuleId = TEXT("target.opponent");
+	TargetPenalty->TargetRuleId = GambitEffectTargetRules::TargetOpponent;
 	TargetPenalty->Multiplier = 0.9f;
 	TargetPenalty->Conditions.Add(HasGold);
 	Bribe->EffectDefinitions.Add(TargetPenalty);
@@ -1836,7 +1920,7 @@ bool FGambitB3GoldenRerollIncreaseRewardTest::RunTest(const FString& Parameters)
 	{
 		UGambitConsumableDefinition* GoldenReroll = NewObject<UGambitConsumableDefinition>();
 		UGambitItemEffectDefinition* RerollEffect = MakeEffectDefinition(GoldenReroll, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::RerollDie);
-		RerollEffect->TargetRuleId = TEXT("selected_die");
+		RerollEffect->TargetRuleId = GambitEffectTargetRules::SelectedDie;
 		GoldenReroll->EffectDefinitions.Add(RerollEffect);
 
 		UGambitItemEffectDefinition* GoldEffect = MakeEffectDefinition(GoldenReroll, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddGold);

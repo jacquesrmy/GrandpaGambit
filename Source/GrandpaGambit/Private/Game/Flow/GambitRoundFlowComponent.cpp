@@ -14,6 +14,7 @@
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
 #include "Items/Effects/GambitEffectResolver.h"
+#include "Items/Effects/GambitEffectTargetRules.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 #include "Managers/SharedPool/GambitSharedPoolComponent.h"
 #include "Players/Components/GambitDiceComponent.h"
@@ -92,13 +93,6 @@ namespace
 		return ItemDefinition->GetResolvedItemId().ToString();
 	}
 
-	bool IsRoundFlowSelectedDieTargetRule(const FName TargetRuleId)
-	{
-		return TargetRuleId == TEXT("selected_die")
-			|| TargetRuleId == TEXT("source.selected_die")
-			|| TargetRuleId == TEXT("target.selected_die");
-	}
-
 	bool ConsumableRequiresSelectedDie(const UGambitConsumableDefinition* ConsumableDefinition)
 	{
 		if (!ConsumableDefinition)
@@ -109,7 +103,7 @@ namespace
 		return ConsumableDefinition->EffectDefinitions.ContainsByPredicate(
 			[](const TObjectPtr<UGambitItemEffectDefinition>& EffectDefinition)
 			{
-				return EffectDefinition && IsRoundFlowSelectedDieTargetRule(EffectDefinition->TargetRuleId);
+				return EffectDefinition && GambitEffectTargetRules::RequiresSelectedDie(EffectDefinition->TargetRuleId);
 			});
 	}
 
