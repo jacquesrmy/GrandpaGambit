@@ -6,7 +6,7 @@
 
 namespace
 {
-	const TArray<int32>& GetFallbackD6Faces()
+	const TArray<int32>& GetDiceDefinitionFallbackD6Faces()
 	{
 		static const TArray<int32> FallbackFaces = { 1, 2, 3, 4, 5, 6 };
 		return FallbackFaces;
@@ -46,12 +46,12 @@ FName UGambitDiceDefinition::GetResolvedDiceId() const
 
 TArray<int32> UGambitDiceDefinition::GetResolvedFaces() const
 {
-	return Faces.Num() > 0 ? Faces : GetFallbackD6Faces();
+	return Faces.Num() > 0 ? Faces : GetDiceDefinitionFallbackD6Faces();
 }
 
 int32 UGambitDiceDefinition::GetFaceValue(const int32 FaceIndex) const
 {
-	const TArray<int32>& ResolvedFaces = Faces.Num() > 0 ? Faces : GetFallbackD6Faces();
+	const TArray<int32>& ResolvedFaces = Faces.Num() > 0 ? Faces : GetDiceDefinitionFallbackD6Faces();
 	if (!ResolvedFaces.IsValidIndex(FaceIndex))
 	{
 		return ResolvedFaces[0];
@@ -72,7 +72,7 @@ float UGambitDiceDefinition::GetFaceWeight(const int32 FaceIndex) const
 
 int32 UGambitDiceDefinition::RollFaceIndex(FRandomStream& RandomStream) const
 {
-	const TArray<int32>& ResolvedFaces = Faces.Num() > 0 ? Faces : GetFallbackD6Faces();
+	const TArray<int32>& ResolvedFaces = Faces.Num() > 0 ? Faces : GetDiceDefinitionFallbackD6Faces();
 	if (ResolvedFaces.Num() <= 1)
 	{
 		return 0;

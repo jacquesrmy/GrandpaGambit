@@ -18,7 +18,7 @@ namespace
 {
 	constexpr int32 ConsumableScoreThreshold = 40;
 
-	FString PhaseToString(const EGambitRoundPhase Phase)
+	FString DebugAutoPlayerPhaseToString(const EGambitRoundPhase Phase)
 	{
 		switch (Phase)
 		{
@@ -35,7 +35,7 @@ namespace
 		}
 	}
 
-	FString CombinationToString(const EGambitCombinationType Combination)
+	FString DebugAutoPlayerCombinationToString(const EGambitCombinationType Combination)
 	{
 		switch (Combination)
 		{
@@ -53,7 +53,7 @@ namespace
 		}
 	}
 
-	FString ItemTypeToString(const EGambitItemType ItemType)
+	FString DebugAutoPlayerItemTypeToString(const EGambitItemType ItemType)
 	{
 		switch (ItemType)
 		{
@@ -65,7 +65,7 @@ namespace
 		}
 	}
 
-	FString FormatDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
+	FString FormatDebugAutoPlayerDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
 	{
 		TArray<FString> Values;
 		Values.Reserve(DiceStates.Num());
@@ -93,7 +93,7 @@ namespace
 		return FString::Printf(TEXT("[%s]"), *FString::Join(Values, TEXT(",")));
 	}
 
-	FString FormatItemName(const UGambitItemDefinition* ItemDefinition)
+	FString FormatDebugAutoPlayerItemName(const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!ItemDefinition)
 		{
@@ -108,7 +108,7 @@ namespace
 		return ItemDefinition->GetResolvedItemId().ToString();
 	}
 
-	FString FormatModifier(const FGambitScoreModifierContext& Modifier)
+	FString FormatDebugAutoPlayerModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FString::Printf(
 			TEXT("Add=%.2f Mult=%.2f Cap=%.2f DiminishThreshold=%.2f DiminishFactor=%.2f"),
@@ -475,7 +475,7 @@ void UGambitDebugAutoPlayer::DecideRerolls(AGambitGameMode* GameMode)
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	if (!GameMode || !GameState || CurrentPhase != EGambitRoundPhase::SelectionReroll)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideRerolls skipped Phase=%s"), *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideRerolls skipped Phase=%s"), *DebugAutoPlayerPhaseToString(CurrentPhase));
 		return;
 	}
 
@@ -494,7 +494,7 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	if (!GameMode || !GameState || !PlayerState || CurrentPhase != EGambitRoundPhase::SelectionReroll)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideRerollsForPlayer skipped PlayerIndex=%d Phase=%s"), PlayerIndex, *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideRerollsForPlayer skipped PlayerIndex=%d Phase=%s"), PlayerIndex, *DebugAutoPlayerPhaseToString(CurrentPhase));
 		return;
 	}
 
@@ -511,8 +511,8 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 		Log,
 		TEXT("DebugAI: P%d Selection DiceBefore=%s CombinationBefore=%s RerollsUsed=%d/%d"),
 		PlayerIndex,
-		*FormatDiceValues(PlayerState->GetDiceStatesRef()),
-		*CombinationToString(CombinationBefore.Combination),
+		*FormatDebugAutoPlayerDiceValues(PlayerState->GetDiceStatesRef()),
+		*DebugAutoPlayerCombinationToString(CombinationBefore.Combination),
 		RoundFlow->GetRerollsUsedForPlayer(PlayerState),
 		RoundFlow->GetMaxRerollsForPlayer(PlayerState));
 
@@ -526,7 +526,7 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 		LockTarget.Value,
 		*FormatIndexList(LockedIndices),
 		*LockTarget.Reason,
-		*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+		*FormatDebugAutoPlayerDiceValues(PlayerState->GetDiceStatesRef()));
 
 	int32 RerollCountThisDecision = 0;
 	while (RoundFlow->GetRerollsUsedForPlayer(PlayerState) < RoundFlow->GetMaxRerollsForPlayer(PlayerState))
@@ -552,8 +552,8 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 			UsedAfter,
 			RoundFlow->GetMaxRerollsForPlayer(PlayerState),
 			bRerolled ? TEXT("Success") : TEXT("Failure"),
-			*FormatDiceValues(PlayerState->GetDiceStatesRef()),
-			*CombinationToString(CombinationAfterReroll.Combination));
+			*FormatDebugAutoPlayerDiceValues(PlayerState->GetDiceStatesRef()),
+			*DebugAutoPlayerCombinationToString(CombinationAfterReroll.Combination));
 
 		if (!bRerolled || UsedAfter <= UsedBefore)
 		{
@@ -570,7 +570,7 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 			LockTarget.Value,
 			*FormatIndexList(LockedIndices),
 			*LockTarget.Reason,
-			*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+			*FormatDebugAutoPlayerDiceValues(PlayerState->GetDiceStatesRef()));
 	}
 
 	if (RerollCountThisDecision == 0)
@@ -582,7 +582,7 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 			PlayerIndex,
 			RoundFlow->GetRerollsUsedForPlayer(PlayerState),
 			RoundFlow->GetMaxRerollsForPlayer(PlayerState),
-			*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+			*FormatDebugAutoPlayerDiceValues(PlayerState->GetDiceStatesRef()));
 	}
 }
 
@@ -594,7 +594,7 @@ void UGambitDebugAutoPlayer::DecideActions(AGambitGameMode* GameMode)
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	if (!GameMode || !GameState || CurrentPhase != EGambitRoundPhase::Action)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideActions skipped Phase=%s"), *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideActions skipped Phase=%s"), *DebugAutoPlayerPhaseToString(CurrentPhase));
 		return;
 	}
 
@@ -613,7 +613,7 @@ void UGambitDebugAutoPlayer::DecideActionsForPlayer(AGambitGameMode* GameMode, A
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	if (!GameMode || !GameState || !PlayerState || CurrentPhase != EGambitRoundPhase::Action)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideActionsForPlayer skipped PlayerIndex=%d Phase=%s"), PlayerIndex, *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideActionsForPlayer skipped PlayerIndex=%d Phase=%s"), PlayerIndex, *DebugAutoPlayerPhaseToString(CurrentPhase));
 		return;
 	}
 
@@ -640,7 +640,7 @@ void UGambitDebugAutoPlayer::DecideActionsForPlayer(AGambitGameMode* GameMode, A
 		TEXT("DebugAI: P%d Action EstimatedScore=%d Combination=%s Threshold=%d FirstConsumableSlot=%d ActiveModules=%d"),
 		PlayerIndex,
 		ScoreBefore.FinalScore,
-		*CombinationToString(ScoreBefore.Combination),
+		*DebugAutoPlayerCombinationToString(ScoreBefore.Combination),
 		ConsumableScoreThreshold,
 		SlotIndex,
 		PlayerState->GetActiveModulesRef().Num());
@@ -669,8 +669,8 @@ void UGambitDebugAutoPlayer::DecideActionsForPlayer(AGambitGameMode* GameMode, A
 		PlayerIndex,
 		ScoreBefore.FinalScore,
 		SlotIndex,
-		*FormatItemName(ConsumableDefinition),
-		ConsumableDefinition ? *FormatModifier(ResolveItemScoreModifier(ConsumableDefinition, EGambitEffectHook::ConsumableUse)) : TEXT("None"),
+		*FormatDebugAutoPlayerItemName(ConsumableDefinition),
+		ConsumableDefinition ? *FormatDebugAutoPlayerModifier(ResolveItemScoreModifier(ConsumableDefinition, EGambitEffectHook::ConsumableUse)) : TEXT("None"),
 		bUsed ? TEXT("Success") : TEXT("Failure"),
 		ScoreAfter.FinalScore);
 }
@@ -681,7 +681,7 @@ void UGambitDebugAutoPlayer::DecideShop(AGambitGameMode* GameMode)
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	if (!GameMode || !GameState || CurrentPhase != EGambitRoundPhase::Shop)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideShop skipped Phase=%s"), *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideShop skipped Phase=%s"), *DebugAutoPlayerPhaseToString(CurrentPhase));
 		return;
 	}
 
@@ -698,7 +698,7 @@ void UGambitDebugAutoPlayer::DecideShopForPlayer(AGambitGameMode* GameMode, AGam
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	if (!GameMode || !GameState || !PlayerState || CurrentPhase != EGambitRoundPhase::Shop)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideShopForPlayer skipped PlayerIndex=%d Phase=%s"), PlayerIndex, *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugAI: AIDecideShopForPlayer skipped PlayerIndex=%d Phase=%s"), PlayerIndex, *DebugAutoPlayerPhaseToString(CurrentPhase));
 		return;
 	}
 
@@ -731,8 +731,8 @@ void UGambitDebugAutoPlayer::DecideShopForPlayer(AGambitGameMode* GameMode, AGam
 			TEXT("DebugAI: P%d Shop OfferId=%d Item=%s Type=%s Price=%d Affordable=%s SharedAvailable=%s SlotAllowed=%s"),
 			PlayerIndex,
 			Offer.OfferId,
-			*FormatItemName(ItemDefinition),
-			ItemDefinition ? *ItemTypeToString(ItemDefinition->ItemType) : TEXT("None"),
+			*FormatDebugAutoPlayerItemName(ItemDefinition),
+			ItemDefinition ? *DebugAutoPlayerItemTypeToString(ItemDefinition->ItemType) : TEXT("None"),
 			Offer.Price,
 			bAffordable ? TEXT("Yes") : TEXT("No"),
 			bSharedAvailable ? TEXT("Yes") : TEXT("No"),
@@ -770,8 +770,8 @@ void UGambitDebugAutoPlayer::DecideShopForPlayer(AGambitGameMode* GameMode, AGam
 		TEXT("DebugAI: P%d Shop Chosen OfferId=%d Item=%s Type=%s Reason=%s Gold=%d Result=%s GoldAfter=%d Modules=%d/%d Consumables=%d/%d DiceOwned=%d"),
 		PlayerIndex,
 		OfferSnapshot.OfferId,
-		*FormatItemName(OfferSnapshot.ItemDefinition),
-		OfferSnapshot.ItemDefinition ? *ItemTypeToString(OfferSnapshot.ItemDefinition->ItemType) : TEXT("None"),
+		*FormatDebugAutoPlayerItemName(OfferSnapshot.ItemDefinition),
+		OfferSnapshot.ItemDefinition ? *DebugAutoPlayerItemTypeToString(OfferSnapshot.ItemDefinition->ItemType) : TEXT("None"),
 		*BestCandidate.Reason,
 		Gold,
 		bPurchased ? TEXT("Success") : TEXT("Failure"),

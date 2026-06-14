@@ -15,7 +15,7 @@
 
 namespace
 {
-	FString FormatItemName(const UGambitItemDefinition* ItemDefinition)
+	FString FormatShopItemName(const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!ItemDefinition)
 		{
@@ -178,7 +178,7 @@ void UGambitShopComponent::ResolvePurchasePrice(FGambitShopPurchaseContext& Purc
 		Log,
 		TEXT("Shop: PriceResolve OfferId=%d Item=%s Base=%d Before=%d After=%d Discount=%.2f Surcharge=%.2f FlatDelta=%d Free=%s Reason=%s"),
 		PurchaseContext.OfferId,
-		*FormatItemName(PurchaseContext.ItemDefinition),
+		*FormatShopItemName(PurchaseContext.ItemDefinition),
 		PurchaseContext.BasePrice,
 		PurchaseContext.PriceBeforeModifiers,
 		PurchaseContext.ResolvedPrice,
@@ -229,7 +229,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		{
 			PurchaseContext.FailureReason = TEXT("Blocked by effect");
 		}
-		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase blocked OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase blocked OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 		return false;
 	}
 
@@ -237,7 +237,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 	if (!ValidateInventoryCapacity(ItemDefinition, InventoryComponent, InventoryFailureReason))
 	{
 		PurchaseContext.FailureReason = InventoryFailureReason;
-		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 		return false;
 	}
 
@@ -248,7 +248,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 			EconomyComponent->GetCurrentGold(),
 			PurchaseContext.ResolvedPrice,
 			EconomyComponent->GetEffectiveMinimumGold());
-		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 		return false;
 	}
 
@@ -257,7 +257,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		if (!SharedPoolComponent)
 		{
 			PurchaseContext.FailureReason = TEXT("Missing shared pool component");
-			UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+			UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 			return false;
 		}
 
@@ -265,7 +265,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		if (!Offer.bHasSharedPoolReservation && !PurchaseContext.SharedPoolAvailability.bAvailable)
 		{
 			PurchaseContext.FailureReason = PurchaseContext.SharedPoolAvailability.Reason;
-			UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+			UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 			return false;
 		}
 	}
@@ -273,7 +273,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 	if (!EconomyComponent->SpendGold(PurchaseContext.ResolvedPrice))
 	{
 		PurchaseContext.FailureReason = TEXT("SpendGold rejected purchase");
-		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 		return false;
 	}
 
@@ -293,7 +293,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		}
 		EconomyComponent->AddGold(PurchaseContext.ResolvedPrice);
 		PurchaseContext.FailureReason = TEXT("Shared pool stock commit failed");
-		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 		return false;
 	}
 
@@ -305,7 +305,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		}
 		EconomyComponent->AddGold(PurchaseContext.ResolvedPrice);
 		PurchaseContext.FailureReason = TEXT("Inventory rejected purchased item");
-		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatItemName(ItemDefinition), *PurchaseContext.FailureReason);
+		UE_LOG(LogGambit, Log, TEXT("Shop: Purchase failed OfferId=%d Item=%s Reason=%s"), PurchaseContext.OfferId, *FormatShopItemName(ItemDefinition), *PurchaseContext.FailureReason);
 		return false;
 	}
 
@@ -327,7 +327,7 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		Log,
 		TEXT("Shop: Purchase success OfferId=%d Item=%s Price=%d GoldAfterSpend=%d PurchasesMade=%d"),
 		PurchaseContext.OfferId,
-		*FormatItemName(ItemDefinition),
+		*FormatShopItemName(ItemDefinition),
 		PurchaseContext.ResolvedPrice,
 		EconomyComponent->GetCurrentGold(),
 		PurchasesMadeThisShop);
@@ -358,7 +358,7 @@ void UGambitShopComponent::ApplyPostPurchaseAdjustments(
 		Log,
 		TEXT("Shop: PostPurchase OfferId=%d Item=%s CashbackPercent=%.2f CashbackGold=%d GoldDelta=%d GoldFinal=%d"),
 		PurchaseContext.OfferId,
-		*FormatItemName(PurchaseContext.ItemDefinition),
+		*FormatShopItemName(PurchaseContext.ItemDefinition),
 		PurchaseContext.CashbackPercent,
 		PurchaseContext.CashbackGold,
 		PurchaseContext.GoldDeltaOnPurchase,

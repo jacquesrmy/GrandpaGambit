@@ -38,7 +38,7 @@ namespace
 		return Object ? Object->GetPathName() : FString(TEXT("None"));
 	}
 
-	bool IsNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
+	bool IsDataValidationNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
 			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
@@ -148,7 +148,7 @@ namespace
 		}
 	}
 
-	UGambitItemDefinition* ResolveItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
+	UGambitItemDefinition* ResolveDataValidationItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
 	{
 		if (ItemId.IsNone() || !Catalog)
 		{
@@ -187,15 +187,15 @@ namespace
 		return FindInEntries(Catalog->DiceItemEntries);
 	}
 
-	UGambitItemDefinition* ResolveCatalogEntryDefinition(
+	UGambitItemDefinition* ResolveDataValidationCatalogEntryDefinition(
 		const FName ItemId,
 		UGambitItemDefinition* ItemDefinition,
 		const UGambitItemCatalogDataAsset* Catalog)
 	{
-		return ItemDefinition ? ItemDefinition : ResolveItemFromCatalog(ItemId, Catalog);
+		return ItemDefinition ? ItemDefinition : ResolveDataValidationItemFromCatalog(ItemId, Catalog);
 	}
 
-	FName ResolveCatalogEntryId(const FName EntryId, const UGambitItemDefinition* ItemDefinition)
+	FName ResolveDataValidationCatalogEntryId(const FName EntryId, const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!EntryId.IsNone())
 		{
@@ -320,7 +320,7 @@ namespace
 		switch (EffectDefinition->EffectType)
 		{
 		case EGambitItemEffectType::ScoreModifier:
-			if (IsNeutralScoreModifier(EffectDefinition->ScoreModifier))
+			if (IsDataValidationNeutralScoreModifier(EffectDefinition->ScoreModifier))
 			{
 				AddError(OutIssues, FString::Printf(TEXT("%s is ScoreModifier but has no score modifier values."), *EffectLabel));
 			}
@@ -368,7 +368,7 @@ namespace
 			}
 			break;
 		case EGambitItemEffectType::AddTemporaryScoreModifier:
-			if (IsNeutralScoreModifier(EffectDefinition->ScoreModifier)
+			if (IsDataValidationNeutralScoreModifier(EffectDefinition->ScoreModifier)
 				&& !HasConfiguredAmount(EffectDefinition)
 				&& !HasConfiguredMultiplier(EffectDefinition))
 			{
@@ -950,8 +950,8 @@ void GambitDataValidation::ValidateShopLootTable(
 	for (int32 EntryIndex = 0; EntryIndex < LootTable->WeightedItems.Num(); ++EntryIndex)
 	{
 		const FGambitShopWeightedEntry& Entry = LootTable->WeightedItems[EntryIndex];
-		const UGambitItemDefinition* ItemDefinition = ResolveCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, Catalog);
-		const FName ItemId = ResolveCatalogEntryId(Entry.ItemId, ItemDefinition);
+		const UGambitItemDefinition* ItemDefinition = ResolveDataValidationCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, Catalog);
+		const FName ItemId = ResolveDataValidationCatalogEntryId(Entry.ItemId, ItemDefinition);
 		const FString EntryLabel = FString::Printf(TEXT("%s WeightedItems[%d]"), *Label, EntryIndex);
 
 		if (!ItemDefinition && Entry.ItemId.IsNone())
@@ -1030,8 +1030,8 @@ void GambitDataValidation::ValidateSharedPoolDefinition(
 	for (int32 EntryIndex = 0; EntryIndex < SharedPoolDefinition->StockEntries.Num(); ++EntryIndex)
 	{
 		const FGambitSharedStockEntry& Entry = SharedPoolDefinition->StockEntries[EntryIndex];
-		const UGambitItemDefinition* ItemDefinition = ResolveCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, Catalog);
-		const FName ItemId = ResolveCatalogEntryId(Entry.ItemId, ItemDefinition);
+		const UGambitItemDefinition* ItemDefinition = ResolveDataValidationCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, Catalog);
+		const FName ItemId = ResolveDataValidationCatalogEntryId(Entry.ItemId, ItemDefinition);
 		const FString EntryLabel = FString::Printf(TEXT("%s StockEntries[%d]"), *Label, EntryIndex);
 
 		if (!ItemDefinition && Entry.ItemId.IsNone())

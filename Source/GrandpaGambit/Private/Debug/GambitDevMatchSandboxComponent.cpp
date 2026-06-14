@@ -12,7 +12,7 @@
 
 namespace
 {
-	FString PhaseToString(const EGambitRoundPhase Phase)
+	FString DevSandboxPhaseToString(const EGambitRoundPhase Phase)
 	{
 		if (const UEnum* Enum = StaticEnum<EGambitRoundPhase>())
 		{
@@ -186,7 +186,7 @@ FGambitDevSandboxSnapshot UGambitDevMatchSandboxComponent::BuildSandboxSnapshot(
 	Snapshot.Summary = FString::Printf(
 		TEXT("Round=%d Phase=%s Players=%d Inspect=%d"),
 		Snapshot.RoundIndex,
-		*PhaseToString(Snapshot.Phase),
+		*DevSandboxPhaseToString(Snapshot.Phase),
 		Snapshot.PlayerSlots.Num(),
 		Snapshot.InspectedPlayerIndex);
 	return Snapshot;
@@ -462,7 +462,7 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestAdvanceCur
 		return MakeResult(
 			false,
 			EGambitDevSandboxActionStatus::Unsupported,
-			FString::Printf(TEXT("Phase %s has no manual sandbox advance"), *PhaseToString(PhaseBefore)),
+			FString::Printf(TEXT("Phase %s has no manual sandbox advance"), *DevSandboxPhaseToString(PhaseBefore)),
 			INDEX_NONE,
 			PhaseBefore);
 	}
@@ -471,7 +471,7 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestAdvanceCur
 	return MakeResult(
 		true,
 		EGambitDevSandboxActionStatus::Success,
-		FString::Printf(TEXT("Advanced gated phase %s"), *PhaseToString(PhaseBefore)),
+		FString::Printf(TEXT("Advanced gated phase %s"), *DevSandboxPhaseToString(PhaseBefore)),
 		INDEX_NONE,
 		PhaseBefore);
 }
@@ -492,7 +492,7 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestAdvanceToS
 		const EGambitRoundPhase PhaseBefore = GameState->GetCurrentPhase();
 		if (PhaseBefore == EGambitRoundPhase::Shop || PhaseBefore == EGambitRoundPhase::None)
 		{
-			return MakeResult(true, EGambitDevSandboxActionStatus::Success, FString::Printf(TEXT("Stopped at phase %s"), *PhaseToString(PhaseBefore)), INDEX_NONE, PhaseBefore);
+			return MakeResult(true, EGambitDevSandboxActionStatus::Success, FString::Printf(TEXT("Stopped at phase %s"), *DevSandboxPhaseToString(PhaseBefore)), INDEX_NONE, PhaseBefore);
 		}
 
 		LastResult = RequestAdvanceCurrentPhase();
@@ -500,7 +500,7 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestAdvanceToS
 		const EGambitRoundPhase PhaseAfter = UpdatedGameState ? UpdatedGameState->GetCurrentPhase() : EGambitRoundPhase::None;
 		if (!LastResult.bSuccess || PhaseAfter == PhaseBefore)
 		{
-			return MakeResult(false, LastResult.Status, FString::Printf(TEXT("Advance to shop stopped at phase %s"), *PhaseToString(PhaseAfter)), INDEX_NONE, PhaseBefore);
+			return MakeResult(false, LastResult.Status, FString::Printf(TEXT("Advance to shop stopped at phase %s"), *DevSandboxPhaseToString(PhaseAfter)), INDEX_NONE, PhaseBefore);
 		}
 	}
 
@@ -697,7 +697,7 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestAIDecision
 		return MakeResult(
 			false,
 			EGambitDevSandboxActionStatus::InvalidPhase,
-			FString::Printf(TEXT("AI decision skipped: phase %s is not a player decision phase"), *PhaseToString(PhaseBefore)),
+			FString::Printf(TEXT("AI decision skipped: phase %s is not a player decision phase"), *DevSandboxPhaseToString(PhaseBefore)),
 			INDEX_NONE,
 			PhaseBefore);
 	}
@@ -763,7 +763,7 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestAIShopDeci
 		return MakeResult(
 			false,
 			EGambitDevSandboxActionStatus::InvalidPhase,
-			FString::Printf(TEXT("AI shop decision skipped: phase %s is not Shop"), *PhaseToString(PhaseBefore)),
+			FString::Printf(TEXT("AI shop decision skipped: phase %s is not Shop"), *DevSandboxPhaseToString(PhaseBefore)),
 			INDEX_NONE,
 			PhaseBefore);
 	}

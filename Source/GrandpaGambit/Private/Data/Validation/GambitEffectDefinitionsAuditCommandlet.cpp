@@ -23,7 +23,7 @@ namespace
 		return TEXT("Docs/Audits/EffectDefinitionsMigrationAudit.md");
 	}
 
-	bool IsNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
+	bool IsEffectDefinitionsAuditNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
 			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
@@ -445,7 +445,7 @@ int32 UGambitEffectDefinitionsAuditCommandlet::Main(const FString& Params)
 		const FGambitScoreModifierContext& LegacyModifier = ModuleDefinition
 			? ModuleDefinition->PersistentScoreModifier
 			: ConsumableDefinition->ActionScoreModifier;
-		const bool bLegacyNonNeutral = !IsNeutralScoreModifier(LegacyModifier);
+		const bool bLegacyNonNeutral = !IsEffectDefinitionsAuditNeutralScoreModifier(LegacyModifier);
 		const int32 EffectDefinitionCount = ItemDefinition->EffectDefinitions.Num();
 		const bool bHasEffectDefinitions = EffectDefinitionCount > 0;
 

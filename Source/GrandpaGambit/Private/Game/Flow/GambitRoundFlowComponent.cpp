@@ -27,7 +27,7 @@
 
 namespace
 {
-	FString PhaseToString(const EGambitRoundPhase Phase)
+	FString RoundFlowPhaseToString(const EGambitRoundPhase Phase)
 	{
 		switch (Phase)
 		{
@@ -44,7 +44,7 @@ namespace
 		}
 	}
 
-	FString CombinationToString(const EGambitCombinationType Combination)
+	FString RoundFlowCombinationToString(const EGambitCombinationType Combination)
 	{
 		switch (Combination)
 		{
@@ -62,7 +62,7 @@ namespace
 		}
 	}
 
-	FString FormatDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
+	FString FormatRoundFlowDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
 	{
 		TArray<FString> Values;
 		Values.Reserve(DiceStates.Num());
@@ -77,7 +77,7 @@ namespace
 		return FString::Printf(TEXT("[%s]"), *FString::Join(Values, TEXT(", ")));
 	}
 
-	FString FormatItemName(const UGambitItemDefinition* ItemDefinition)
+	FString FormatRoundFlowItemName(const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!ItemDefinition)
 		{
@@ -92,7 +92,7 @@ namespace
 		return ItemDefinition->GetResolvedItemId().ToString();
 	}
 
-	bool IsSelectedDieTargetRule(const FName TargetRuleId)
+	bool IsRoundFlowSelectedDieTargetRule(const FName TargetRuleId)
 	{
 		return TargetRuleId == TEXT("selected_die")
 			|| TargetRuleId == TEXT("source.selected_die")
@@ -109,18 +109,18 @@ namespace
 		return ConsumableDefinition->EffectDefinitions.ContainsByPredicate(
 			[](const TObjectPtr<UGambitItemEffectDefinition>& EffectDefinition)
 			{
-				return EffectDefinition && IsSelectedDieTargetRule(EffectDefinition->TargetRuleId);
+				return EffectDefinition && IsRoundFlowSelectedDieTargetRule(EffectDefinition->TargetRuleId);
 			});
 	}
 
-	FString FormatOffer(const FGambitShopOffer& Offer)
+	FString FormatRoundFlowOffer(const FGambitShopOffer& Offer)
 	{
 		const UGambitItemDefinition* ItemDefinition = Offer.ItemDefinition;
 		const FString ItemId = ItemDefinition ? ItemDefinition->GetResolvedItemId().ToString() : TEXT("None");
 		return FString::Printf(
 			TEXT("OfferId=%d Item=%s ItemId=%s BasePrice=%d Price=%d SharedPool=%s Reserved=%s"),
 			Offer.OfferId,
-			*FormatItemName(ItemDefinition),
+			*FormatRoundFlowItemName(ItemDefinition),
 			*ItemId,
 			Offer.BasePrice,
 			Offer.Price,
@@ -128,7 +128,7 @@ namespace
 			Offer.bHasSharedPoolReservation ? TEXT("Yes") : TEXT("No"));
 	}
 
-	FString BuildPlayerLabel(const AGambitPlayerState* PlayerState, const TArray<AGambitPlayerState*>& Players)
+	FString BuildRoundFlowPlayerLabel(const AGambitPlayerState* PlayerState, const TArray<AGambitPlayerState*>& Players)
 	{
 		const int32 PlayerIndex = Players.IndexOfByKey(PlayerState);
 		const FString PlayerName = PlayerState ? PlayerState->GetPlayerName() : FString();
@@ -149,7 +149,7 @@ namespace
 			LogGambit,
 			Log,
 			TEXT("RoundFlow: %s Gold=%d VP=%d Score=%d DiceCount=%d Modules=%d/%d Consumables=%d/%d Dice=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildRoundFlowPlayerLabel(PlayerState, Players),
 			PlayerState->GetCurrentGold(),
 			PlayerState->GetTotalVictoryPoints(),
 			PlayerState->GetCurrentRoundScore(),
@@ -158,11 +158,11 @@ namespace
 			SlotState.ModuleSlotsCapacity,
 			SlotState.ConsumableSlotsUsed,
 			SlotState.ConsumableSlotsCapacity,
-			*FormatDiceValues(DiceStates));
+			*FormatRoundFlowDiceValues(DiceStates));
 	}
 
 	template <typename TEnum>
-	FString EnumToDebugString(const TEnum Value)
+	FString RoundFlowEnumToDebugString(const TEnum Value)
 	{
 		if (const UEnum* Enum = StaticEnum<TEnum>())
 		{
@@ -217,7 +217,7 @@ namespace
 			1.0f,
 			0.0f,
 			static_cast<float>(ScoreBreakdown.BaseCombinationScore),
-			FString::Printf(TEXT("%s base score: %d"), *CombinationToString(ScoreBreakdown.Combination), ScoreBreakdown.BaseCombinationScore)));
+			FString::Printf(TEXT("%s base score: %d"), *RoundFlowCombinationToString(ScoreBreakdown.Combination), ScoreBreakdown.BaseCombinationScore)));
 
 		PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
 			EGambitDebugScoreLineType::DiceSum,
@@ -318,13 +318,13 @@ namespace
 		if (const UGambitItemDefinition* ItemDefinition = Offer.ItemDefinition)
 		{
 			Line.ItemId = ItemDefinition->GetResolvedItemId();
-			Line.ItemName = FormatItemName(ItemDefinition);
+			Line.ItemName = FormatRoundFlowItemName(ItemDefinition);
 			Line.ItemType = ItemDefinition->ItemType;
 			Line.Rarity = ItemDefinition->Rarity;
 			if (ItemDefinition->bUsesSharedPool && SharedPoolComponent)
 			{
 				const FGambitSharedPoolAvailabilityResult Availability = SharedPoolComponent->QueryItemAvailability(ItemDefinition);
-				Line.SharedPoolState = EnumToDebugString(Availability.State);
+				Line.SharedPoolState = RoundFlowEnumToDebugString(Availability.State);
 				Line.SharedPoolReason = Availability.Reason;
 			}
 		}
@@ -360,7 +360,7 @@ namespace
 		Line.GoldDeltaOnPurchase = PurchaseContext.GoldDeltaOnPurchase;
 		Line.bUsesSharedPool = PurchaseContext.bUsesSharedPool;
 		Line.bHasSharedPoolReservation = PurchaseContext.bHasSharedPoolReservation;
-		Line.SharedPoolState = EnumToDebugString(PurchaseContext.SharedPoolAvailability.State);
+		Line.SharedPoolState = RoundFlowEnumToDebugString(PurchaseContext.SharedPoolAvailability.State);
 		Line.SharedPoolReason = PurchaseContext.SharedPoolAvailability.Reason;
 		Line.bPurchaseSucceeded = PurchaseContext.bPurchaseSucceeded;
 		Line.bRefused = !PurchaseContext.bPurchaseSucceeded;
@@ -370,7 +370,7 @@ namespace
 		if (const UGambitItemDefinition* ItemDefinition = PurchaseContext.ItemDefinition.Get())
 		{
 			Line.ItemId = ItemDefinition->GetResolvedItemId();
-			Line.ItemName = FormatItemName(ItemDefinition);
+			Line.ItemName = FormatRoundFlowItemName(ItemDefinition);
 			Line.ItemType = ItemDefinition->ItemType;
 			Line.Rarity = ItemDefinition->Rarity;
 		}
@@ -459,12 +459,12 @@ void UGambitRoundFlowComponent::SetPlayerReady(AGambitPlayerState* PlayerState, 
 	PlayerReadyMap.Add(PlayerState, bReady);
 	const AGambitGameState* GameState = GetGambitGameState();
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? RoundFlowPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 	UE_LOG(
 		LogGambit,
 		Log,
 		TEXT("RoundFlow: SetPlayerReady Player=%s Phase=%s Ready=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildRoundFlowPlayerLabel(PlayerState, Players),
 		*PhaseString,
 		bReady ? TEXT("true") : TEXT("false"));
 
@@ -475,7 +475,7 @@ void UGambitRoundFlowComponent::SetPlayerReady(AGambitPlayerState* PlayerState, 
 		ExecuteActiveDiceEffects(ShopSkippedContext);
 		CommitEffectContext(ShopSkippedContext);
 		PlayerState->SkipShop(GameState->GetSharedPoolComponent());
-		UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopSkipped"), *BuildPlayerLabel(PlayerState, Players));
+	UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopSkipped"), *BuildRoundFlowPlayerLabel(PlayerState, Players));
 	}
 
 	AdvanceWhenAllPlayersReady();
@@ -492,13 +492,13 @@ bool UGambitRoundFlowComponent::RequestSetDieLocked(AGambitPlayerState* PlayerSt
 	}
 
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
-	const FString DiceString = PlayerState ? FormatDiceValues(PlayerState->GetDiceStatesRef()) : FString(TEXT("[]"));
+	const FString DiceString = PlayerState ? FormatRoundFlowDiceValues(PlayerState->GetDiceStatesRef()) : FString(TEXT("[]"));
 	UE_LOG(
 		LogGambit,
 		Log,
 		TEXT("RoundFlow: RequestSetDieLocked Player=%s Phase=%s DieIndex=%d Locked=%s Result=%s Dice=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
-		*PhaseToString(CurrentPhase),
+		*BuildRoundFlowPlayerLabel(PlayerState, Players),
+		*RoundFlowPhaseToString(CurrentPhase),
 		DieIndex,
 		bLocked ? TEXT("true") : TEXT("false"),
 		bSuccess ? TEXT("Success") : TEXT("Failure"),
@@ -544,13 +544,13 @@ bool UGambitRoundFlowComponent::RequestReroll(AGambitPlayerState* PlayerState)
 
 	const int32 UsedAfter = GetRerollCount(PlayerState);
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
-	const FString DiceString = PlayerState ? FormatDiceValues(PlayerState->GetDiceStatesRef()) : FString(TEXT("[]"));
+	const FString DiceString = PlayerState ? FormatRoundFlowDiceValues(PlayerState->GetDiceStatesRef()) : FString(TEXT("[]"));
 	UE_LOG(
 		LogGambit,
 		Log,
 		TEXT("RoundFlow: RequestReroll Player=%s Phase=%s RerollsUsed=%d/%d Result=%s Dice=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
-		*PhaseToString(CurrentPhase),
+		*BuildRoundFlowPlayerLabel(PlayerState, Players),
+		*RoundFlowPhaseToString(CurrentPhase),
 		UsedAfter,
 		EffectiveRerollLimit,
 		bSuccess ? TEXT("Success") : TEXT("Failure"),
@@ -629,9 +629,9 @@ bool UGambitRoundFlowComponent::RequestUseConsumableOnTargetSelectedDie(
 		LogGambit,
 		Log,
 		TEXT("RoundFlow: RequestUseConsumable Player=%s Target=%s Phase=%s Slot=%d Result=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
-		*BuildPlayerLabel(TargetPlayerState, Players),
-		*PhaseToString(CurrentPhase),
+		*BuildRoundFlowPlayerLabel(PlayerState, Players),
+		*BuildRoundFlowPlayerLabel(TargetPlayerState, Players),
+		*RoundFlowPhaseToString(CurrentPhase),
 		SlotIndex,
 		bSuccess ? TEXT("Success") : TEXT("Failure"));
 	return bSuccess;
@@ -694,7 +694,7 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 			PurchaseGoldLine.LineType = EGambitDebugGoldLineType::Purchase;
 			PurchaseGoldLine.Phase = CurrentPhase;
 			PurchaseGoldLine.SourceId = PurchaseContext.ItemDefinition->GetResolvedItemId();
-			PurchaseGoldLine.SourceName = FormatItemName(PurchaseContext.ItemDefinition.Get());
+			PurchaseGoldLine.SourceName = FormatRoundFlowItemName(PurchaseContext.ItemDefinition.Get());
 			PurchaseGoldLine.RequestedDelta = -PurchaseContext.ResolvedPrice;
 			PurchaseGoldLine.ActualDelta = GoldAfterPurchase - GoldBeforePurchase;
 			PurchaseGoldLine.GoldBefore = GoldBeforePurchase;
@@ -722,7 +722,7 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 				PostPurchaseGoldLine.LineType = EGambitDebugGoldLineType::Cashback;
 				PostPurchaseGoldLine.Phase = CurrentPhase;
 				PostPurchaseGoldLine.SourceId = PurchaseContext.ItemDefinition->GetResolvedItemId();
-				PostPurchaseGoldLine.SourceName = FormatItemName(PurchaseContext.ItemDefinition.Get());
+				PostPurchaseGoldLine.SourceName = FormatRoundFlowItemName(PurchaseContext.ItemDefinition.Get());
 				PostPurchaseGoldLine.RequestedDelta = PurchaseContext.CashbackGold + PurchaseContext.GoldDeltaOnPurchase;
 				PostPurchaseGoldLine.ActualDelta = GoldAfterPostPurchase - GoldBeforePostPurchase;
 				PostPurchaseGoldLine.GoldBefore = GoldBeforePostPurchase;
@@ -744,19 +744,19 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 				LogGambit,
 				Log,
 				TEXT("RoundFlow: RequestPurchaseOffer refused Player=%s OfferId=%d Reason=%s"),
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildRoundFlowPlayerLabel(PlayerState, Players),
 				OfferId,
 				*PurchaseContext.FailureReason);
 		}
 	}
 
-	const FString OfferString = bFoundOffer ? FormatOffer(OfferSnapshot) : FString::Printf(TEXT("OfferId=%d NotFound"), OfferId);
+	const FString OfferString = bFoundOffer ? FormatRoundFlowOffer(OfferSnapshot) : FString::Printf(TEXT("OfferId=%d NotFound"), OfferId);
 	UE_LOG(
 		LogGambit,
 		Log,
 		TEXT("RoundFlow: RequestPurchaseOffer Player=%s Phase=%s Offer=%s Result=%s GoldRemaining=%d"),
-		*BuildPlayerLabel(PlayerState, Players),
-		*PhaseToString(CurrentPhase),
+		*BuildRoundFlowPlayerLabel(PlayerState, Players),
+		*RoundFlowPhaseToString(CurrentPhase),
 		*OfferString,
 		bSuccess ? TEXT("Success") : TEXT("Failure"),
 		PlayerState ? PlayerState->GetCurrentGold() : 0);
@@ -784,7 +784,7 @@ bool UGambitRoundFlowComponent::TransitionToPhase(const EGambitRoundPhase NewPha
 	const EGambitRoundPhase CurrentPhase = GameState->GetCurrentPhase();
 	if (!IsTransitionAllowed(CurrentPhase, NewPhase))
 	{
-		UE_LOG(LogGambit, Warning, TEXT("RoundFlow: invalid transition %s -> %s"), *PhaseToString(CurrentPhase), *PhaseToString(NewPhase));
+		UE_LOG(LogGambit, Warning, TEXT("RoundFlow: invalid transition %s -> %s"), *RoundFlowPhaseToString(CurrentPhase), *RoundFlowPhaseToString(NewPhase));
 		return false;
 	}
 
@@ -794,8 +794,8 @@ bool UGambitRoundFlowComponent::TransitionToPhase(const EGambitRoundPhase NewPha
 		Log,
 		TEXT("RoundFlow: Round=%d PhaseTransition Old=%s New=%s"),
 		GameState->GetCurrentRoundIndex(),
-		*PhaseToString(CurrentPhase),
-		*PhaseToString(NewPhase));
+		*RoundFlowPhaseToString(CurrentPhase),
+		*RoundFlowPhaseToString(NewPhase));
 	OnPhaseEntered.Broadcast(NewPhase);
 
 	switch (NewPhase)
@@ -898,8 +898,8 @@ void UGambitRoundFlowComponent::EnterRollPhase()
 				LogGambit,
 				Log,
 				TEXT("RoundFlow: %s Dice: %s"),
-				*BuildPlayerLabel(PlayerState, Players),
-				*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+				*BuildRoundFlowPlayerLabel(PlayerState, Players),
+				*FormatRoundFlowDiceValues(PlayerState->GetDiceStatesRef()));
 		}
 	}
 
@@ -972,8 +972,8 @@ void UGambitRoundFlowComponent::EnterResolutionPhase()
 			LogGambit,
 			Log,
 			TEXT("RoundFlow: %s Resolution Combination=%s DiceSum=%d DiceContributionBonus=%.2f Base=%d Additive=%.2f Multiplier=%.2f BeforeCap=%.2f AfterCap=%.2f Final=%d"),
-			*BuildPlayerLabel(PlayerState, Players),
-			*CombinationToString(ScoreBreakdown.Combination),
+			*BuildRoundFlowPlayerLabel(PlayerState, Players),
+			*RoundFlowCombinationToString(ScoreBreakdown.Combination),
 			ScoreBreakdown.DiceSum,
 			ScoreBreakdown.DiceContributionMultiplierBonus,
 			ScoreBreakdown.BaseCombinationScore,
@@ -1011,7 +1011,7 @@ void UGambitRoundFlowComponent::EnterRewardPhase()
 			LogGambit,
 			Log,
 			TEXT("RoundFlow: %s Reward BaseGold=%d Interest=%d GoldFinal=%d"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildRoundFlowPlayerLabel(PlayerState, Players),
 			BaseGoldReward,
 			Interest,
 			PlayerState->GetCurrentGold());
@@ -1060,7 +1060,7 @@ void UGambitRoundFlowComponent::EnterRankingPhase()
 			Log,
 			TEXT("RoundFlow: Ranking Rank=%d Player=%s RoundScore=%d VPGained=%d TotalVP=%d"),
 			Entry.Rank,
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildRoundFlowPlayerLabel(PlayerState, Players),
 			Entry.RoundScore,
 			Entry.VictoryPointsGranted,
 			PlayerState ? PlayerState->GetTotalVictoryPoints() : 0);
@@ -1110,13 +1110,13 @@ void UGambitRoundFlowComponent::EnterShopPhase()
 			const TArray<FGambitShopOffer>& Offers = PlayerState->GetCurrentShopOffersRef();
 			if (Offers.Num() == 0)
 			{
-				UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopOffers=None"), *BuildPlayerLabel(PlayerState, Players));
+				UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopOffers=None"), *BuildRoundFlowPlayerLabel(PlayerState, Players));
 			}
 
 			for (const FGambitShopOffer& Offer : Offers)
 			{
 				PlayerState->AddDebugShopLine(BuildShopLineFromOffer(Offer, EGambitRoundPhase::Shop, GameState->GetSharedPoolComponent()));
-				UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopOffer %s"), *BuildPlayerLabel(PlayerState, Players), *FormatOffer(Offer));
+				UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopOffer %s"), *BuildRoundFlowPlayerLabel(PlayerState, Players), *FormatRoundFlowOffer(Offer));
 			}
 		}
 	}
@@ -1149,7 +1149,7 @@ void UGambitRoundFlowComponent::EnterRoundEndPhase()
 				LogGambit,
 				Log,
 				TEXT("RoundFlow: %s DestroyedDiceCommitted=%d OwnedDiceRemaining=%d"),
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildRoundFlowPlayerLabel(PlayerState, Players),
 				DestroyedDiceCount,
 				PlayerState->GetSlotState().OwnedDiceCount);
 		}
@@ -1171,7 +1171,7 @@ void UGambitRoundFlowComponent::EnterRoundEndPhase()
 
 		if (FinalRanking.Num() > 0 && FinalRanking[0])
 		{
-			UE_LOG(LogGambit, Log, TEXT("RoundFlow: Match complete. Winner=%s VP=%d"), *BuildPlayerLabel(FinalRanking[0], Players), FinalRanking[0]->GetTotalVictoryPoints());
+			UE_LOG(LogGambit, Log, TEXT("RoundFlow: Match complete. Winner=%s VP=%d"), *BuildRoundFlowPlayerLabel(FinalRanking[0], Players), FinalRanking[0]->GetTotalVictoryPoints());
 		}
 
 		for (int32 Index = 0; Index < FinalRanking.Num(); ++Index)
@@ -1182,7 +1182,7 @@ void UGambitRoundFlowComponent::EnterRoundEndPhase()
 				Log,
 				TEXT("RoundFlow: FinalRank=%d Player=%s TotalVP=%d LastRoundScore=%d Gold=%d"),
 				Index + 1,
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildRoundFlowPlayerLabel(PlayerState, Players),
 				PlayerState ? PlayerState->GetTotalVictoryPoints() : 0,
 				PlayerState ? PlayerState->GetCurrentRoundScore() : 0,
 				PlayerState ? PlayerState->GetCurrentGold() : 0);

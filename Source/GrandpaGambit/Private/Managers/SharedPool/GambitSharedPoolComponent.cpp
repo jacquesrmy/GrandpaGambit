@@ -8,7 +8,7 @@
 
 namespace
 {
-	UGambitItemDefinition* ResolveItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
+	UGambitItemDefinition* ResolveSharedPoolItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
 	{
 		if (ItemId.IsNone() || !Catalog)
 		{
@@ -56,7 +56,7 @@ namespace
 			return Entry.ItemDefinition;
 		}
 
-		return ResolveItemFromCatalog(Entry.ItemId, Catalog);
+		return ResolveSharedPoolItemFromCatalog(Entry.ItemId, Catalog);
 	}
 
 	FName ResolveStockEntryId(const FGambitSharedStockEntry& Entry, const UGambitItemDefinition* Definition)

@@ -2,7 +2,7 @@
 
 namespace
 {
-	bool IsNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
+	bool IsConsumableDefinitionNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
 			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
@@ -27,7 +27,7 @@ bool UGambitConsumableDefinition::CanBeUsedDuringPhase(const EGambitRoundPhase P
 
 bool UGambitConsumableDefinition::HasNonNeutralActionScoreModifier() const
 {
-	return !IsNeutralScoreModifier(ActionScoreModifier);
+	return !IsConsumableDefinitionNeutralScoreModifier(ActionScoreModifier);
 }
 
 bool UGambitConsumableDefinition::ShouldApplyLegacyActionScoreModifier() const

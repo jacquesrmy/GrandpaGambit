@@ -5,7 +5,7 @@
 
 namespace
 {
-	const TArray<int32>& GetFallbackD6Faces()
+	const TArray<int32>& GetDiceComponentFallbackD6Faces()
 	{
 		static const TArray<int32> FallbackFaces = { 1, 2, 3, 4, 5, 6 };
 		return FallbackFaces;
@@ -13,12 +13,12 @@ namespace
 
 	int32 RollFallbackFaceIndex(FRandomStream& RandomStream)
 	{
-		return RandomStream.RandRange(0, GetFallbackD6Faces().Num() - 1);
+		return RandomStream.RandRange(0, GetDiceComponentFallbackD6Faces().Num() - 1);
 	}
 
 	int32 GetFallbackFaceValue(const int32 FaceIndex)
 	{
-		const TArray<int32>& Faces = GetFallbackD6Faces();
+		const TArray<int32>& Faces = GetDiceComponentFallbackD6Faces();
 		return Faces.IsValidIndex(FaceIndex) ? Faces[FaceIndex] : Faces[0];
 	}
 

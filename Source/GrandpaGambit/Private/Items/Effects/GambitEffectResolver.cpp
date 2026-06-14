@@ -181,7 +181,7 @@ namespace
 		DieState.ScoreContributionValue = DieState.EffectiveValue;
 	}
 
-	bool IsSelectedDieTargetRule(const FName TargetRuleId)
+	bool IsEffectResolverSelectedDieTargetRule(const FName TargetRuleId)
 	{
 		return TargetRuleId == TEXT("selected_die")
 			|| TargetRuleId == TEXT("source.selected_die")
@@ -215,7 +215,7 @@ namespace
 			return Indexes;
 		}
 
-		if (EffectDefinition && IsSelectedDieTargetRule(EffectDefinition->TargetRuleId))
+		if (EffectDefinition && IsEffectResolverSelectedDieTargetRule(EffectDefinition->TargetRuleId))
 		{
 			const int32 SelectedDieIndex = ResolveSelectedDieHandIndex(Context, Target);
 			if (DiceStates.IsValidIndex(SelectedDieIndex))
@@ -296,7 +296,7 @@ namespace
 		return DiceDefinition && DiceDefinition->Tags.Contains(Tag);
 	}
 
-	bool RarityMatches(const EGambitItemRarity ActualRarity, const EGambitItemRarity ExpectedRarity, const bool bAtLeastRarity)
+	bool EffectResolverRarityMatches(const EGambitItemRarity ActualRarity, const EGambitItemRarity ExpectedRarity, const bool bAtLeastRarity)
 	{
 		if (bAtLeastRarity)
 		{
@@ -669,7 +669,7 @@ namespace
 		{
 			if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
 			{
-				if (RarityMatches(DiceDefinition->Rarity, Rarity, bAtLeastRarity))
+				if (EffectResolverRarityMatches(DiceDefinition->Rarity, Rarity, bAtLeastRarity))
 				{
 					Count++;
 				}
@@ -1146,7 +1146,7 @@ namespace
 		return true;
 	}
 
-	bool IsNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
+	bool IsEffectResolverNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
 			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
@@ -1157,7 +1157,7 @@ namespace
 	}
 
 	template <typename TEnum>
-	FString EnumToDebugString(const TEnum Value)
+	FString EffectResolverEnumToDebugString(const TEnum Value)
 	{
 		if (const UEnum* Enum = StaticEnum<TEnum>())
 		{
@@ -1221,12 +1221,12 @@ namespace
 			? EGambitDebugEventCategory::Protection
 			: EGambitDebugEventCategory::Effect;
 		Event.Phase = Context.CurrentPhase;
-		Event.HookId = FName(*EnumToDebugString(Context.Hook));
+		Event.HookId = FName(*EffectResolverEnumToDebugString(Context.Hook));
 		Event.SourceId = ResolveDebugSourceId(Context);
 		Event.SourceName = ResolveDebugSourceName(Context);
 		Event.EffectId = GetEffectSourceId(EffectDefinition);
 		Event.EffectTypeId = EffectDefinition ? EffectDefinition->EffectTypeId : NAME_None;
-		Event.EffectTypeName = EffectDefinition ? EnumToDebugString(EffectDefinition->EffectType) : TEXT("RuntimeEffect");
+		Event.EffectTypeName = EffectDefinition ? EffectResolverEnumToDebugString(EffectDefinition->EffectType) : TEXT("RuntimeEffect");
 		Event.TargetRuleId = EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None;
 		Event.TargetName = ResolveDebugTargetName(Context, EffectDefinition ? EffectDefinition->Target : EGambitEffectTarget::Source);
 		Event.bTriggered = bTriggered;
@@ -1244,7 +1244,7 @@ namespace
 		FGambitDebugEffectEvent Event;
 		Event.Category = EGambitDebugEventCategory::Effect;
 		Event.Phase = Context.CurrentPhase;
-		Event.HookId = FName(*EnumToDebugString(Context.Hook));
+		Event.HookId = FName(*EffectResolverEnumToDebugString(Context.Hook));
 		Event.SourceId = ResolveDebugSourceId(Context);
 		Event.SourceName = ResolveDebugSourceName(Context);
 		Event.EffectId = FName(*EffectName);

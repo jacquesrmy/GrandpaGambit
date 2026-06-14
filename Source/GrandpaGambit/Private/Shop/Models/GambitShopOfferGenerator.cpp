@@ -8,7 +8,7 @@
 
 namespace
 {
-	UGambitItemDefinition* ResolveItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
+	UGambitItemDefinition* ResolveShopOfferItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
 	{
 		if (ItemId.IsNone() || !Catalog)
 		{
@@ -56,7 +56,7 @@ namespace
 			return Entry.ItemDefinition;
 		}
 
-		return ResolveItemFromCatalog(Entry.ItemId, Catalog);
+		return ResolveShopOfferItemFromCatalog(Entry.ItemId, Catalog);
 	}
 
 	FName ResolveEntryId(const FGambitShopWeightedEntry& Entry, const UGambitItemDefinition* Definition)

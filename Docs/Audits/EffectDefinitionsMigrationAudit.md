@@ -9,7 +9,7 @@ The asset audit and migration were executed through `GambitEffectDefinitionsAudi
 Command:
 
 ```text
-UnrealEditor-Cmd.exe GrandpaGambit.uproject -unattended -nop4 -nosplash -NullRHI -NoSound -run=GambitEffectDefinitionsAudit -ReportPath=Docs/Audits/EffectDefinitionsMigrationAudit.md
+UnrealEditor-Cmd.exe GrandpaGambit.uproject -unattended -nop4 -nosplash -NullRHI -NoSound -run=GambitEffectDefinitionsAudit
 ```
 
 Final result:
@@ -49,7 +49,7 @@ These assets were legacy-only before migration. Each one now references an `Effe
 
 ## Remaining Legacy C++ Surface
 
-Legacy fields and fallback paths remain intentionally present, but authored content should now treat `EffectDefinitions` as the source of truth.
+Legacy fields and fallback paths remain intentionally present in this pass, but authored content should now treat `EffectDefinitions` as the source of truth.
 
 | File | Remaining reason |
 | --- | --- |
@@ -82,16 +82,18 @@ Legacy fields and fallback paths remain intentionally present, but authored cont
 
 | Check | Result |
 | --- | --- |
+| Standard Unity build | Passed with `Build.bat GrandpaGambitEditor Win64 Development` |
+| Forced Unity build without adaptive exclusions | Passed with `Build.bat GrandpaGambitEditor Win64 Development -ForceUnity -DisableAdaptiveUnity` |
 | Non-Unity build | Passed with `Build.bat GrandpaGambitEditor Win64 Development -DisableUnity` |
-| Standard Unity build | Failed on existing anonymous namespace function collisions unrelated to this migration |
-| `GrandpaGambit.Items` automation suite | Passed |
-| `GrandpaGambit.Consumables` automation suite | Passed |
-| `GrandpaGambit.Effects` automation suite | Passed |
+| `GrandpaGambit.Items` automation suite | Passed, 1/1 |
+| `GrandpaGambit.Consumables` automation suite | Passed, 1/1 |
+| `GrandpaGambit.Effects` automation suite | Passed, 17/17 |
 | Final asset audit | Passed with 0 legacy-only, 0 mixed, 0 blocked, 0 load failures |
 
 ## Risks And Recommendations
 
-- Do not remove the legacy fields or fallback code in this pass. The repository still has a failing standard Unity build, and the fallback paths are covered deliberately while content history settles.
-- Before deleting fallback fields, run this commandlet again, fix the Unity anonymous namespace collisions, and run the same automation suites.
-- New authored module and consumable content should use `EffectDefinitions` only. Legacy shortcut fields should remain neutral.
-- The migration commandlet should be kept until the next cleanup pass so any future legacy-only asset can be detected or migrated through Unreal package saving.
+- Do not remove the legacy fields or fallback code in this pass. They were intentionally preserved while fixing the Unity build.
+- The Unity build failure was caused by repeated helper names inside anonymous namespaces that collide when Unreal aggregates `.cpp` files into unity translation units. Those helpers now use file-specific names.
+- New authored module and consumable content should use `EffectDefinitions` only. Legacy shortcut fields should remain neutral until the cleanup pass removes them.
+- Since the Unity build, non-Unity build, targeted automation suites, and final asset audit all pass, the next pass can remove `PersistentScoreModifier`, `ActionScoreModifier`, and the legacy fallback paths.
+- Keep `GambitEffectDefinitionsAuditCommandlet` available until the cleanup pass is complete so any future legacy-only asset can still be detected through Unreal package loading.

@@ -2,7 +2,7 @@
 
 namespace
 {
-	bool IsNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
+	bool IsModuleDefinitionNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
 			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
@@ -21,7 +21,7 @@ UGambitModuleDefinition::UGambitModuleDefinition()
 
 bool UGambitModuleDefinition::HasNonNeutralPersistentScoreModifier() const
 {
-	return !IsNeutralScoreModifier(PersistentScoreModifier);
+	return !IsModuleDefinitionNeutralScoreModifier(PersistentScoreModifier);
 }
 
 bool UGambitModuleDefinition::ShouldApplyLegacyPersistentScoreModifier() const

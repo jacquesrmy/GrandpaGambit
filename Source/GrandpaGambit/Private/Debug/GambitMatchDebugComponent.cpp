@@ -27,7 +27,7 @@
 
 namespace
 {
-	FString PhaseToString(const EGambitRoundPhase Phase)
+	FString MatchDebugPhaseToString(const EGambitRoundPhase Phase)
 	{
 		switch (Phase)
 		{
@@ -44,7 +44,7 @@ namespace
 		}
 	}
 
-	FString CombinationToString(const EGambitCombinationType Combination)
+	FString MatchDebugCombinationToString(const EGambitCombinationType Combination)
 	{
 		switch (Combination)
 		{
@@ -75,7 +75,7 @@ namespace
 		}
 	}
 
-	FString ItemTypeToString(const EGambitItemType ItemType)
+	FString MatchDebugItemTypeToString(const EGambitItemType ItemType)
 	{
 		switch (ItemType)
 		{
@@ -100,7 +100,7 @@ namespace
 		}
 	}
 
-	FString FormatDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
+	FString FormatMatchDebugDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
 	{
 		TArray<FString> Values;
 		Values.Reserve(DiceStates.Num());
@@ -127,7 +127,7 @@ namespace
 		return FString::Printf(TEXT("[%s]"), *FString::Join(Parts, TEXT(",")));
 	}
 
-	FString FormatModifier(const FGambitScoreModifierContext& Modifier)
+	FString FormatMatchDebugModifier(const FGambitScoreModifierContext& Modifier)
 	{
 		return FString::Printf(
 			TEXT("Add=%.2f Mult=%.2f Cap=%.2f DiminishThreshold=%.2f DiminishFactor=%.2f"),
@@ -147,13 +147,13 @@ namespace
 
 		if (ModuleDefinition->ShouldApplyLegacyPersistentScoreModifier())
 		{
-			return FString::Printf(TEXT("FallbackActive(%s)"), *FormatModifier(ModuleDefinition->PersistentScoreModifier));
+			return FString::Printf(TEXT("FallbackActive(%s)"), *FormatMatchDebugModifier(ModuleDefinition->PersistentScoreModifier));
 		}
 
 		return FString::Printf(
 			TEXT("IgnoredByEffectDefinitions(Effects=%d %s)"),
 			ModuleDefinition->EffectDefinitions.Num(),
-			*FormatModifier(ModuleDefinition->PersistentScoreModifier));
+			*FormatMatchDebugModifier(ModuleDefinition->PersistentScoreModifier));
 	}
 
 	FString FormatConsumableLegacyModifier(const UGambitConsumableDefinition* ConsumableDefinition)
@@ -165,13 +165,13 @@ namespace
 
 		if (ConsumableDefinition->ShouldApplyLegacyActionScoreModifier())
 		{
-			return FString::Printf(TEXT("FallbackActive(%s)"), *FormatModifier(ConsumableDefinition->ActionScoreModifier));
+			return FString::Printf(TEXT("FallbackActive(%s)"), *FormatMatchDebugModifier(ConsumableDefinition->ActionScoreModifier));
 		}
 
 		return FString::Printf(
 			TEXT("IgnoredByEffectDefinitions(Effects=%d %s)"),
 			ConsumableDefinition->EffectDefinitions.Num(),
-			*FormatModifier(ConsumableDefinition->ActionScoreModifier));
+			*FormatMatchDebugModifier(ConsumableDefinition->ActionScoreModifier));
 	}
 
 	FString FormatDiceDefinition(const UGambitDiceDefinition* DiceDefinition)
@@ -194,7 +194,7 @@ namespace
 			*DiceDefinition->GetPathName());
 	}
 
-	FString FormatItemName(const UGambitItemDefinition* ItemDefinition)
+	FString FormatMatchDebugItemName(const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!ItemDefinition)
 		{
@@ -218,9 +218,9 @@ namespace
 
 		return FString::Printf(
 			TEXT("Item=%s ItemId=%s Type=%s Rarity=%s Cost=%d SharedPool=%s MaxStock=%d Path=%s"),
-			*FormatItemName(ItemDefinition),
+			*FormatMatchDebugItemName(ItemDefinition),
 			*ItemDefinition->GetResolvedItemId().ToString(),
-			*ItemTypeToString(ItemDefinition->ItemType),
+			*MatchDebugItemTypeToString(ItemDefinition->ItemType),
 			*RarityToString(ItemDefinition->Rarity),
 			ItemDefinition->Cost,
 			ItemDefinition->bUsesSharedPool ? TEXT("Yes") : TEXT("No"),
@@ -228,16 +228,16 @@ namespace
 			*ItemDefinition->GetPathName());
 	}
 
-	FString FormatOffer(const FGambitShopOffer& Offer)
+	FString FormatMatchDebugOffer(const FGambitShopOffer& Offer)
 	{
 		const UGambitItemDefinition* ItemDefinition = Offer.ItemDefinition;
 		const FString ItemId = ItemDefinition ? ItemDefinition->GetResolvedItemId().ToString() : TEXT("None");
 		return FString::Printf(
 			TEXT("OfferId=%d Item=%s ItemId=%s Type=%s BasePrice=%d Price=%d SharedPool=%s Reserved=%s"),
 			Offer.OfferId,
-			*FormatItemName(ItemDefinition),
+			*FormatMatchDebugItemName(ItemDefinition),
 			*ItemId,
-			ItemDefinition ? *ItemTypeToString(ItemDefinition->ItemType) : TEXT("None"),
+			ItemDefinition ? *MatchDebugItemTypeToString(ItemDefinition->ItemType) : TEXT("None"),
 			Offer.BasePrice,
 			Offer.Price,
 			Offer.bUsesSharedPool ? TEXT("Yes") : TEXT("No"),
@@ -265,14 +265,14 @@ namespace
 
 		return FString::Printf(
 			TEXT("%s Affordable=%s RemainingSharedStock=%s ReservedSharedStock=%s SharedTracked=%s"),
-			*FormatOffer(Offer),
+			*FormatMatchDebugOffer(Offer),
 			bAffordable ? TEXT("Yes") : TEXT("No"),
 			*RemainingSharedStockString,
 			*ReservedSharedStockString,
 			bTracked ? TEXT("Yes") : TEXT("No"));
 	}
 
-	FString BuildPlayerLabel(const AGambitPlayerState* PlayerState, const TArray<AGambitPlayerState*>& Players)
+	FString BuildMatchDebugPlayerLabel(const AGambitPlayerState* PlayerState, const TArray<AGambitPlayerState*>& Players)
 	{
 		const int32 PlayerIndex = Players.IndexOfByKey(PlayerState);
 		const FString PlayerName = PlayerState ? PlayerState->GetPlayerName() : FString();
@@ -280,7 +280,7 @@ namespace
 		return FString::Printf(TEXT("P%d %s"), PlayerIndex, *ResolvedName);
 	}
 
-	UGambitItemDefinition* ResolveItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
+	UGambitItemDefinition* ResolveMatchDebugItemFromCatalog(const FName ItemId, const UGambitItemCatalogDataAsset* Catalog)
 	{
 		if (ItemId.IsNone() || !Catalog)
 		{
@@ -319,7 +319,7 @@ namespace
 		return FindInEntries(Catalog->DiceItemEntries);
 	}
 
-	UGambitItemDefinition* ResolveCatalogEntryDefinition(
+	UGambitItemDefinition* ResolveMatchDebugCatalogEntryDefinition(
 		const FName ItemId,
 		UGambitItemDefinition* ItemDefinition,
 		const UGambitItemCatalogDataAsset* Catalog)
@@ -329,10 +329,10 @@ namespace
 			return ItemDefinition;
 		}
 
-		return ResolveItemFromCatalog(ItemId, Catalog);
+		return ResolveMatchDebugItemFromCatalog(ItemId, Catalog);
 	}
 
-	FName ResolveCatalogEntryId(const FName EntryId, const UGambitItemDefinition* ItemDefinition)
+	FName ResolveMatchDebugCatalogEntryId(const FName EntryId, const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!EntryId.IsNone())
 		{
@@ -412,7 +412,7 @@ namespace
 			Log,
 			TEXT("%s %s Inventory Gold=%d VP=%d Score=%d DiceOwned=%d RuntimeDice=%d Modules=%d/%d Consumables=%d/%d"),
 			Prefix,
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			PlayerState->GetCurrentGold(),
 			PlayerState->GetTotalVictoryPoints(),
 			PlayerState->GetCurrentRoundScore(),
@@ -425,7 +425,7 @@ namespace
 	}
 
 	template <typename TEnum>
-	FString EnumToDebugString(const TEnum Value)
+	FString MatchDebugEnumToDebugString(const TEnum Value)
 	{
 		if (const UEnum* Enum = StaticEnum<TEnum>())
 		{
@@ -459,7 +459,7 @@ void UGambitMatchDebugComponent::PrintMatchSnapshot() const
 		TEXT("DebugMatch: Snapshot Round=%d/%d Phase=%s Players=%d DefaultDice=%d MaxRerolls=%d ShopOffers=%d"),
 		GameState->GetCurrentRoundIndex(),
 		Settings->RoundCount,
-		*PhaseToString(GameState->GetCurrentPhase()),
+		*MatchDebugPhaseToString(GameState->GetCurrentPhase()),
 		Players.Num(),
 		Settings->DefaultActiveDiceCount,
 		Settings->MaxRerollsPerRound,
@@ -477,7 +477,7 @@ void UGambitMatchDebugComponent::PrintMatchSnapshot() const
 				Log,
 				TEXT("DebugMatch: Rank=%d Player=%s RoundScore=%d VPGained=%d TotalVP=%d"),
 				Entry.Rank,
-				*BuildPlayerLabel(RankedPlayer, Players),
+				*BuildMatchDebugPlayerLabel(RankedPlayer, Players),
 				Entry.RoundScore,
 				Entry.VictoryPointsGranted,
 				RankedPlayer ? RankedPlayer->GetTotalVictoryPoints() : 0);
@@ -502,7 +502,7 @@ void UGambitMatchDebugComponent::PrintPlayerSnapshot(AGambitPlayerState* PlayerS
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: %s Gold=%d VP=%d Score=%d DiceCount=%d Modules=%d/%d Consumables=%d/%d Dice=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		Snapshot.CurrentGold,
 		Snapshot.TotalVictoryPoints,
 		Snapshot.CurrentRoundScore,
@@ -511,14 +511,14 @@ void UGambitMatchDebugComponent::PrintPlayerSnapshot(AGambitPlayerState* PlayerS
 		Snapshot.SlotState.ModuleSlotsCapacity,
 		Snapshot.SlotState.ConsumableSlotsUsed,
 		Snapshot.SlotState.ConsumableSlotsCapacity,
-		*FormatDiceValues(DiceStates));
+		*FormatMatchDebugDiceValues(DiceStates));
 
 	UE_LOG(
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: %s ScoreBreakdown Combination=%s DiceSum=%d Base=%d Additive=%.2f Multiplier=%.2f Final=%d"),
-		*BuildPlayerLabel(PlayerState, Players),
-		*CombinationToString(ScoreBreakdown.Combination),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
+		*MatchDebugCombinationToString(ScoreBreakdown.Combination),
 		ScoreBreakdown.DiceSum,
 		ScoreBreakdown.BaseCombinationScore,
 		ScoreBreakdown.AdditiveBonus,
@@ -528,13 +528,13 @@ void UGambitMatchDebugComponent::PrintPlayerSnapshot(AGambitPlayerState* PlayerS
 	const TArray<FGambitShopOffer>& Offers = PlayerState->GetCurrentShopOffersRef();
 	if (Offers.Num() == 0)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffers=None"), *BuildPlayerLabel(PlayerState, Players));
+		UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffers=None"), *BuildMatchDebugPlayerLabel(PlayerState, Players));
 		return;
 	}
 
 	for (const FGambitShopOffer& Offer : Offers)
 	{
-		UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffer %s"), *BuildPlayerLabel(PlayerState, Players), *FormatOffer(Offer));
+		UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffer %s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatMatchDebugOffer(Offer));
 	}
 }
 
@@ -560,7 +560,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 		LogGambit,
 		Log,
 		TEXT("DebugReport: %s Gold=%d VP=%d Score=%d Dice=%d Modules=%d Consumables=%d Effects=%d ScoreLines=%d GoldLines=%d ShopLines=%d"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		Snapshot.CurrentGold,
 		Snapshot.TotalVictoryPoints,
 		Snapshot.CurrentRoundScore,
@@ -578,7 +578,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s Die Hand=%d Instance=%d Name=%s Id=%s Rarity=%s Value=%d Raw=%d ScoreValue=%d ComboCount=%d Locked=%s DefTags=%d RuntimeTags=%d Effects=%d Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			Die.HandIndex,
 			Die.InstanceId,
 			*Die.DisplayName,
@@ -601,7 +601,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s Module Name=%s Id=%s Rarity=%s Cost=%d Tags=%d Effects=%d Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			*Module.DisplayName,
 			*Module.ItemId.ToString(),
 			*RarityToString(Module.Rarity),
@@ -617,7 +617,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s Consumable Name=%s Id=%s Rarity=%s Cost=%d Tags=%d Effects=%d Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			*Consumable.DisplayName,
 			*Consumable.ItemId.ToString(),
 			*RarityToString(Consumable.Rarity),
@@ -633,9 +633,9 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s ScoreLine #%d Type=%s Source=%s Add=%.2f DiceDelta=%.2f Mult=%.2f Before=%.2f After=%.2f Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			Line.Sequence,
-			*EnumToDebugString(Line.LineType),
+			*MatchDebugEnumToDebugString(Line.LineType),
 			*Line.SourceName,
 			Line.AdditiveDelta,
 			Line.DiceContributionDelta,
@@ -651,9 +651,9 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s GoldLine #%d Type=%s Source=%s Requested=%+d Actual=%+d Before=%d After=%d Clamped=%s Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			Line.Sequence,
-			*EnumToDebugString(Line.LineType),
+			*MatchDebugEnumToDebugString(Line.LineType),
 			*Line.SourceName,
 			Line.RequestedDelta,
 			Line.ActualDelta,
@@ -669,9 +669,9 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s ShopLine #%d Type=%s Offer=%d Item=%s Base=%d Final=%d Discount=%.2f Surcharge=%.2f Cashback=%d Shared=%s Result=%s Failure=%s Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			Line.Sequence,
-			*EnumToDebugString(Line.LineType),
+			*MatchDebugEnumToDebugString(Line.LineType),
 			Line.OfferId,
 			*Line.ItemName,
 			Line.BasePrice,
@@ -691,9 +691,9 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			LogGambit,
 			Log,
 			TEXT("DebugReport: %s EffectEvent #%d Category=%s Hook=%s Source=%s Effect=%s Type=%s Target=%s Triggered=%s Negative=%s Prevented=%s Summary=%s"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			Event.Sequence,
-			*EnumToDebugString(Event.Category),
+			*MatchDebugEnumToDebugString(Event.Category),
 			*Event.HookId.ToString(),
 			*Event.SourceName,
 			*Event.EffectId.ToString(),
@@ -718,7 +718,7 @@ void UGambitMatchDebugComponent::DebugReadyAllPlayers()
 {
 	const AGambitGameState* GameState = GetGambitGameState();
 	const EGambitRoundPhase Phase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
-	UE_LOG(LogGambit, Log, TEXT("DebugMatch: Marking all players ready in phase %s"), *PhaseToString(Phase));
+	UE_LOG(LogGambit, Log, TEXT("DebugMatch: Marking all players ready in phase %s"), *MatchDebugPhaseToString(Phase));
 	SetAllPlayersReady(true);
 }
 
@@ -737,11 +737,11 @@ void UGambitMatchDebugComponent::DebugAutoAdvanceCurrentPhase()
 	case EGambitRoundPhase::SelectionReroll:
 	case EGambitRoundPhase::Action:
 	case EGambitRoundPhase::Shop:
-		UE_LOG(LogGambit, Log, TEXT("DebugMatch: Auto-advancing ready-gated phase %s"), *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugMatch: Auto-advancing ready-gated phase %s"), *MatchDebugPhaseToString(CurrentPhase));
 		DebugReadyAllPlayers();
 		break;
 	default:
-		UE_LOG(LogGambit, Log, TEXT("DebugMatch: Phase %s has no debug ready action"), *PhaseToString(CurrentPhase));
+		UE_LOG(LogGambit, Log, TEXT("DebugMatch: Phase %s has no debug ready action"), *MatchDebugPhaseToString(CurrentPhase));
 		break;
 	}
 }
@@ -767,7 +767,7 @@ void UGambitMatchDebugComponent::DebugAutoAdvanceUntilShopOrMatchEnd()
 				Log,
 				TEXT("DebugMatch: AutoAdvanceUntilShop stopped at iteration %d because phase is %s"),
 				Iteration,
-				*PhaseToString(PhaseBefore));
+				*MatchDebugPhaseToString(PhaseBefore));
 			return;
 		}
 
@@ -782,7 +782,7 @@ void UGambitMatchDebugComponent::DebugAutoAdvanceUntilShopOrMatchEnd()
 				Log,
 				TEXT("DebugMatch: AutoAdvanceUntilShop stopped at iteration %d because phase reached %s"),
 				Iteration,
-				*PhaseToString(PhaseAfter));
+				*MatchDebugPhaseToString(PhaseAfter));
 			return;
 		}
 
@@ -793,13 +793,13 @@ void UGambitMatchDebugComponent::DebugAutoAdvanceUntilShopOrMatchEnd()
 				Log,
 				TEXT("DebugMatch: AutoAdvanceUntilShop stopped at iteration %d because phase did not change from %s"),
 				Iteration,
-				*PhaseToString(PhaseBefore));
+				*MatchDebugPhaseToString(PhaseBefore));
 			return;
 		}
 	}
 
 	const AGambitGameState* GameState = GetGambitGameState();
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 	UE_LOG(
 		LogGambit,
 		Log,
@@ -813,7 +813,7 @@ void UGambitMatchDebugComponent::DebugBuyFirstAffordableOfferForAllPlayers()
 	const AGambitGameState* GameState = GetGambitGameState();
 	if (!GameState || GameState->GetCurrentPhase() != EGambitRoundPhase::Shop)
 	{
-		const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+		const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 		UE_LOG(
 			LogGambit,
 			Log,
@@ -857,7 +857,7 @@ void UGambitMatchDebugComponent::DebugBuyFirstAffordableOfferForAllPlayers()
 				LogGambit,
 				Log,
 				TEXT("DebugMatch: %s has no affordable offer at Gold=%d"),
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				GoldBefore);
 			continue;
 		}
@@ -870,11 +870,11 @@ void UGambitMatchDebugComponent::DebugBuyFirstAffordableOfferForAllPlayers()
 			LogGambit,
 			Log,
 			TEXT("DebugMatch: BuyFirstOffer Player=%s GoldBefore=%d OfferId=%d Item=%s Type=%s Cost=%d Result=%s Reason=%s GoldAfter=%d"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			GoldBefore,
 			OfferCopy.OfferId,
-			*FormatItemName(OfferCopy.ItemDefinition),
-			OfferCopy.ItemDefinition ? *ItemTypeToString(OfferCopy.ItemDefinition->ItemType) : TEXT("None"),
+			*FormatMatchDebugItemName(OfferCopy.ItemDefinition),
+			OfferCopy.ItemDefinition ? *MatchDebugItemTypeToString(OfferCopy.ItemDefinition->ItemType) : TEXT("None"),
 			OfferCopy.Price,
 			bPurchased ? TEXT("Success") : TEXT("Failure"),
 			*ResultReason,
@@ -888,7 +888,7 @@ void UGambitMatchDebugComponent::DebugSkipShopForAllPlayers()
 	const AGambitGameState* GameState = GetGambitGameState();
 	if (!GameState || GameState->GetCurrentPhase() != EGambitRoundPhase::Shop)
 	{
-		const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+		const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 		UE_LOG(
 			LogGambit,
 			Log,
@@ -948,7 +948,7 @@ void UGambitMatchDebugComponent::DebugGrantGoldToAllPlayers(const int32 Amount)
 			LogGambit,
 			Log,
 			TEXT("DebugMatch: %s Gold %d -> %d"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			GoldBefore,
 			GoldAfter);
 	}
@@ -960,7 +960,7 @@ void UGambitMatchDebugComponent::DebugGrantConsumable(const int32 PlayerIndex, c
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
 	const UGambitStaticDataSettings* Settings = UGambitStaticDataSettings::Get();
 	const UGambitItemCatalogDataAsset* ItemCatalog = Settings ? Settings->DefaultItemCatalog.LoadSynchronous() : nullptr;
-	UGambitItemDefinition* ItemDefinition = ResolveItemFromCatalog(ConsumableId, ItemCatalog);
+	UGambitItemDefinition* ItemDefinition = ResolveMatchDebugItemFromCatalog(ConsumableId, ItemCatalog);
 	UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(ItemDefinition);
 	UGambitInventoryComponent* InventoryComponent = PlayerState ? PlayerState->GetInventoryComponent() : nullptr;
 
@@ -984,7 +984,7 @@ void UGambitMatchDebugComponent::DebugGrantConsumable(const int32 PlayerIndex, c
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: GrantConsumable Player=%s Item=%s Result=%s Consumables=%d/%d -> %d/%d"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		*FormatItemDetails(ConsumableDefinition),
 		bAdded ? TEXT("Success") : TEXT("Failure"),
 		SlotStateBefore.ConsumableSlotsUsed,
@@ -998,7 +998,7 @@ void UGambitMatchDebugComponent::DebugPrintShop() const
 {
 	const AGambitGameState* GameState = GetGambitGameState();
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 	const UGambitSharedPoolComponent* SharedPoolComponent = GameState ? GameState->GetSharedPoolComponent() : nullptr;
 
 	UE_LOG(LogGambit, Log, TEXT("DebugMatch: PrintShop Phase=%s PlayerCount=%d"), *PhaseString, Players.Num());
@@ -1014,26 +1014,26 @@ void UGambitMatchDebugComponent::DebugPrintShop() const
 			LogGambit,
 			Log,
 			TEXT("DebugMatch: %s Gold=%d ShopOfferCount=%d"),
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			PlayerState->GetCurrentGold(),
 			Offers.Num());
 
 		if (Offers.Num() == 0)
 		{
-			UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffers=None"), *BuildPlayerLabel(PlayerState, Players));
+			UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffers=None"), *BuildMatchDebugPlayerLabel(PlayerState, Players));
 			continue;
 		}
 
 		for (const FGambitShopOffer& Offer : Offers)
 		{
-			UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffer %s"), *BuildPlayerLabel(PlayerState, Players), *FormatOfferForPlayer(Offer, PlayerState, SharedPoolComponent));
+			UE_LOG(LogGambit, Log, TEXT("DebugMatch: %s ShopOffer %s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatOfferForPlayer(Offer, PlayerState, SharedPoolComponent));
 			if (Offer.ItemDefinition && Offer.ItemDefinition->bUsesSharedPool && SharedPoolComponent && !SharedPoolComponent->IsItemTracked(Offer.ItemDefinition))
 			{
 				UE_LOG(
 					LogGambit,
 					Warning,
 					TEXT("DebugMatch: Shop warning %s offers shared-pool item %s but it is not tracked"),
-					*BuildPlayerLabel(PlayerState, Players),
+					*BuildMatchDebugPlayerLabel(PlayerState, Players),
 					*Offer.ItemDefinition->GetResolvedItemId().ToString());
 			}
 		}
@@ -1073,11 +1073,11 @@ void UGambitMatchDebugComponent::DebugBuyOffer(const int32 PlayerIndex, const in
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: BuyOffer Player=%s GoldBefore=%d OfferId=%d Item=%s Type=%s Cost=%d Result=%s Reason=%s GoldAfter=%d"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		GoldBefore,
 		OfferId,
-		bFoundOffer ? *FormatItemName(OfferSnapshot.ItemDefinition) : TEXT("None"),
-		(bFoundOffer && OfferSnapshot.ItemDefinition) ? *ItemTypeToString(OfferSnapshot.ItemDefinition->ItemType) : TEXT("None"),
+		bFoundOffer ? *FormatMatchDebugItemName(OfferSnapshot.ItemDefinition) : TEXT("None"),
+		(bFoundOffer && OfferSnapshot.ItemDefinition) ? *MatchDebugItemTypeToString(OfferSnapshot.ItemDefinition->ItemType) : TEXT("None"),
 		bFoundOffer ? OfferSnapshot.Price : 0,
 		bPurchased ? TEXT("Success") : TEXT("Failure"),
 		*ResultReason,
@@ -1102,9 +1102,9 @@ void UGambitMatchDebugComponent::DebugRerollPlayer(const int32 PlayerIndex)
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: RerollPlayer Player=%s Result=%s Dice=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		bRerolled ? TEXT("Success") : TEXT("Failure"),
-		*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+		*FormatMatchDebugDiceValues(PlayerState->GetDiceStatesRef()));
 }
 
 void UGambitMatchDebugComponent::DebugLockDie(const int32 PlayerIndex, const int32 DieIndex)
@@ -1124,10 +1124,10 @@ void UGambitMatchDebugComponent::DebugLockDie(const int32 PlayerIndex, const int
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: LockDie Player=%s DieIndex=%d Result=%s Dice=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		DieIndex,
 		bLocked ? TEXT("Success") : TEXT("Failure"),
-		*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+		*FormatMatchDebugDiceValues(PlayerState->GetDiceStatesRef()));
 }
 
 void UGambitMatchDebugComponent::DebugUseConsumable(const int32 PlayerIndex, const int32 SlotIndex)
@@ -1147,7 +1147,7 @@ void UGambitMatchDebugComponent::DebugUseConsumable(const int32 PlayerIndex, con
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: UseConsumable Player=%s SlotIndex=%d Result=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		SlotIndex,
 			bUsed ? TEXT("Success") : TEXT("Failure"));
 }
@@ -1169,11 +1169,11 @@ void UGambitMatchDebugComponent::DebugUseConsumableOnDie(const int32 PlayerIndex
 		LogGambit,
 		Log,
 		TEXT("DebugMatch: UseConsumableOnDie Player=%s SlotIndex=%d DieIndex=%d Result=%s Dice=%s"),
-		*BuildPlayerLabel(PlayerState, Players),
+		*BuildMatchDebugPlayerLabel(PlayerState, Players),
 		SlotIndex,
 		DieIndex,
 		bUsed ? TEXT("Success") : TEXT("Failure"),
-		*FormatDiceValues(PlayerState->GetDiceStatesRef()));
+		*FormatMatchDebugDiceValues(PlayerState->GetDiceStatesRef()));
 }
 
 void UGambitMatchDebugComponent::DebugAutoFullMatch()
@@ -1225,14 +1225,14 @@ void UGambitMatchDebugComponent::DebugAutoFullMatch()
 				Log,
 				TEXT("DebugMatch: AutoFullMatch stopped at iteration %d because phase did not change from %s"),
 				Iteration,
-				*PhaseToString(PhaseBefore));
+				*MatchDebugPhaseToString(PhaseBefore));
 			PrintFinalMatchSummary();
 			return;
 		}
 	}
 
 	const AGambitGameState* GameState = GetGambitGameState();
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 	UE_LOG(LogGambit, Log, TEXT("DebugMatch: AutoFullMatch stopped at safety limit, phase=%s"), *PhaseString);
 	PrintFinalMatchSummary();
 }
@@ -1286,7 +1286,7 @@ void UGambitMatchDebugComponent::DebugAIFullRound()
 		Log,
 		TEXT("DebugAI: AIFullRound started Round=%d Phase=%s MaxIterations=%d"),
 		StartRound,
-		*PhaseToString(InitialGameState->GetCurrentPhase()),
+		*MatchDebugPhaseToString(InitialGameState->GetCurrentPhase()),
 		MaxIterations);
 
 	for (int32 Iteration = 0; Iteration < MaxIterations; ++Iteration)
@@ -1314,7 +1314,7 @@ void UGambitMatchDebugComponent::DebugAIFullRound()
 				TEXT("DebugAI: AIFullRound completed at iteration %d NewRound=%d Phase=%s"),
 				Iteration,
 				GameState->GetCurrentRoundIndex(),
-				*PhaseToString(PhaseBefore));
+				*MatchDebugPhaseToString(PhaseBefore));
 			return;
 		}
 
@@ -1354,7 +1354,7 @@ void UGambitMatchDebugComponent::DebugAIFullRound()
 				TEXT("DebugAI: AIFullRound completed at iteration %d NewRound=%d Phase=%s"),
 				Iteration,
 				UpdatedGameState->GetCurrentRoundIndex(),
-				*PhaseToString(PhaseAfter));
+				*MatchDebugPhaseToString(PhaseAfter));
 			return;
 		}
 
@@ -1365,13 +1365,13 @@ void UGambitMatchDebugComponent::DebugAIFullRound()
 				Log,
 				TEXT("DebugAI: AIFullRound stopped at iteration %d because phase did not change from %s"),
 				Iteration,
-				*PhaseToString(PhaseBefore));
+				*MatchDebugPhaseToString(PhaseBefore));
 			return;
 		}
 	}
 
 	const AGambitGameState* GameState = GetGambitGameState();
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 	UE_LOG(LogGambit, Log, TEXT("DebugAI: AIFullRound stopped at safety limit, phase=%s"), *PhaseString);
 }
 
@@ -1433,14 +1433,14 @@ void UGambitMatchDebugComponent::DebugAIFullMatch()
 				Log,
 				TEXT("DebugAI: AIFullMatch stopped at iteration %d because phase did not change from %s"),
 				Iteration,
-				*PhaseToString(PhaseBefore));
+				*MatchDebugPhaseToString(PhaseBefore));
 			PrintFinalMatchSummary();
 			return;
 		}
 	}
 
 	const AGambitGameState* GameState = GetGambitGameState();
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 	UE_LOG(LogGambit, Log, TEXT("DebugAI: AIFullMatch stopped at safety limit, phase=%s"), *PhaseString);
 	PrintFinalMatchSummary();
 }
@@ -1668,7 +1668,7 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 
 			for (const FGambitItemCatalogEntry& Entry : Entries)
 			{
-				UGambitItemDefinition* ItemDefinition = ResolveCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, ItemCatalog);
+				UGambitItemDefinition* ItemDefinition = ResolveMatchDebugCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, ItemCatalog);
 				if (!ItemDefinition)
 				{
 					UE_LOG(LogGambit, Warning, TEXT("DebugData: ItemCatalog %s entry missing ItemDefinition EntryId=%s"), Category, *Entry.ItemId.ToString());
@@ -1677,7 +1677,7 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 
 				UsefulEntries++;
 				AddKnownItem(ItemDefinition);
-				const FName ItemId = ResolveCatalogEntryId(Entry.ItemId, ItemDefinition);
+				const FName ItemId = ResolveMatchDebugCatalogEntryId(Entry.ItemId, ItemDefinition);
 				UE_LOG(LogGambit, Log, TEXT("DebugData: %s %s"), Category, *FormatItemDetails(ItemDefinition));
 				if (ItemId.IsNone())
 				{
@@ -1691,8 +1691,8 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 						TEXT("DebugData: %s item %s has type %s, expected %s"),
 						Category,
 						*ItemId.ToString(),
-						*ItemTypeToString(ItemDefinition->ItemType),
-						*ItemTypeToString(ExpectedType));
+						*MatchDebugItemTypeToString(ItemDefinition->ItemType),
+						*MatchDebugItemTypeToString(ExpectedType));
 				}
 				if (ItemDefinition->bUsesSharedPool && ItemDefinition->SharedPoolMaxStock <= 0)
 				{
@@ -1789,16 +1789,16 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 		}
 		for (const FGambitSharedStockEntry& Entry : SharedPoolDefinition->StockEntries)
 		{
-			UGambitItemDefinition* ItemDefinition = ResolveCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, SharedPoolCatalog);
+			UGambitItemDefinition* ItemDefinition = ResolveMatchDebugCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, SharedPoolCatalog);
 			AddKnownItem(ItemDefinition);
-			const FName ItemId = ResolveCatalogEntryId(Entry.ItemId, ItemDefinition);
-			const UGambitItemDefinition* CatalogItemDefinition = ResolveItemFromCatalog(ItemId, SharedPoolCatalog);
+			const FName ItemId = ResolveMatchDebugCatalogEntryId(Entry.ItemId, ItemDefinition);
+			const UGambitItemDefinition* CatalogItemDefinition = ResolveMatchDebugItemFromCatalog(ItemId, SharedPoolCatalog);
 			UE_LOG(
 				LogGambit,
 				Log,
 				TEXT("DebugData: SharedPool Entry ItemId=%s Item=%s MaxStock=%d"),
 				*ItemId.ToString(),
-				*FormatItemName(ItemDefinition),
+				*FormatMatchDebugItemName(ItemDefinition),
 				Entry.MaxStock);
 			if (!ItemDefinition)
 			{
@@ -1851,15 +1851,15 @@ void UGambitMatchDebugComponent::DebugValidateData() const
 		}
 		for (const FGambitShopWeightedEntry& Entry : ShopLootTable->WeightedItems)
 		{
-			UGambitItemDefinition* ItemDefinition = ResolveCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, LootCatalog);
+			UGambitItemDefinition* ItemDefinition = ResolveMatchDebugCatalogEntryDefinition(Entry.ItemId, Entry.ItemDefinition, LootCatalog);
 			AddKnownItem(ItemDefinition);
-			const FName ItemId = ResolveCatalogEntryId(Entry.ItemId, ItemDefinition);
+			const FName ItemId = ResolveMatchDebugCatalogEntryId(Entry.ItemId, ItemDefinition);
 			UE_LOG(
 				LogGambit,
 				Log,
 				TEXT("DebugData: ShopWeighted ItemId=%s Item=%s Weight=%.2f PriceOverride=%d"),
 				*ItemId.ToString(),
-				*FormatItemName(ItemDefinition),
+				*FormatMatchDebugItemName(ItemDefinition),
 				Entry.Weight,
 				Entry.PriceOverride);
 			if (!ItemDefinition)
@@ -2010,7 +2010,7 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 					LogGambit,
 					Warning,
 					TEXT("DebugInventory: %s owns no dice definitions; runtime fallback %s because DefaultPlayerLoadout is not assigned. Configure DefaultPlayerLoadout for authored match data."),
-					*BuildPlayerLabel(PlayerState, Players),
+					*BuildMatchDebugPlayerLabel(PlayerState, Players),
 					bRuntimeFallbackActive ? TEXT("is active") : TEXT("is NOT active"));
 			}
 			else if (!DefaultLoadout)
@@ -2019,7 +2019,7 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 					LogGambit,
 					Warning,
 					TEXT("DebugInventory: %s owns no dice definitions; DefaultPlayerLoadout is assigned (%s) but failed to load, runtime fallback %s."),
-					*BuildPlayerLabel(PlayerState, Players),
+					*BuildMatchDebugPlayerLabel(PlayerState, Players),
 					*DefaultLoadoutPath.ToString(),
 					bRuntimeFallbackActive ? TEXT("is active") : TEXT("is NOT active"));
 			}
@@ -2029,14 +2029,14 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 					LogGambit,
 					Warning,
 					TEXT("DebugInventory: %s owns no dice definitions; DefaultPlayerLoadout loaded with %d starting dice, so this is incomplete runtime state. Runtime fallback %s."),
-					*BuildPlayerLabel(PlayerState, Players),
+					*BuildMatchDebugPlayerLabel(PlayerState, Players),
 					DefaultLoadout->Loadout.StartingDice.Num(),
 					bRuntimeFallbackActive ? TEXT("is active") : TEXT("is NOT active"));
 			}
 		}
 		for (int32 Index = 0; Index < OwnedDice.Num(); ++Index)
 		{
-			UE_LOG(LogGambit, Log, TEXT("DebugInventory: %s OwnedDie[%d] %s"), *BuildPlayerLabel(PlayerState, Players), Index, *FormatDiceDefinition(OwnedDice[Index]));
+			UE_LOG(LogGambit, Log, TEXT("DebugInventory: %s OwnedDie[%d] %s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), Index, *FormatDiceDefinition(OwnedDice[Index]));
 		}
 
 		const TArray<FGambitDieRuntimeState>& RuntimeDice = PlayerState->GetDiceStatesRef();
@@ -2047,7 +2047,7 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 				LogGambit,
 				Log,
 				TEXT("DebugInventory: %s RuntimeDie[%d] InstanceId=%d Definition=%s FaceIndex=%d Raw=%d Effective=%d ScoreValue=%d ComboCount=%d Sum=%s Combos=%s Reroll=%s Lockable=%s Locked=%s DestroyAfterRound=%s"),
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				Index,
 				DieState.InstanceId,
 				DieState.DiceDefinition ? *DieState.DiceDefinition->GetResolvedDiceId().ToString() : TEXT("FallbackD6"),
@@ -2072,7 +2072,7 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 				LogGambit,
 				Log,
 				TEXT("DebugInventory: %s Module[%d] %s LegacyModifier=%s"),
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				Index,
 				*FormatItemDetails(Module),
 				*FormatModuleLegacyModifier(Module));
@@ -2087,7 +2087,7 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 				LogGambit,
 				Log,
 				TEXT("DebugInventory: %s Consumable[%d] %s LegacyModifier=%s"),
-				*BuildPlayerLabel(PlayerState, Players),
+				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				Index,
 				*FormatItemDetails(Consumable),
 				*FormatConsumableLegacyModifier(Consumable));
@@ -2133,13 +2133,13 @@ void UGambitMatchDebugComponent::DebugPrintSharedPool() const
 		const int32* MaxStockValue = MaxStock.Find(Entry.Key);
 		const int32* ReservedStockValue = ReservedStock.Find(Entry.Key);
 		const int32* PurchasedCountValue = PurchasedCount.Find(Entry.Key);
-		const UGambitItemDefinition* ItemDefinition = ResolveItemFromCatalog(Entry.Key, ItemCatalog);
+		const UGambitItemDefinition* ItemDefinition = ResolveMatchDebugItemFromCatalog(Entry.Key, ItemCatalog);
 		UE_LOG(
 			LogGambit,
 			Log,
 			TEXT("DebugSharedPool: ItemId=%s Item=%s Remaining=%d Reserved=%d Purchased=%d Max=%d"),
 			*Entry.Key.ToString(),
-			*FormatItemName(ItemDefinition),
+			*FormatMatchDebugItemName(ItemDefinition),
 			Entry.Value,
 			ReservedStockValue ? *ReservedStockValue : 0,
 			PurchasedCountValue ? *PurchasedCountValue : 0,
@@ -2170,7 +2170,7 @@ void UGambitMatchDebugComponent::DebugPrintSharedPool() const
 					LogGambit,
 					Warning,
 					TEXT("DebugSharedPool: shop warning Player=%s OfferId=%d ItemId=%s is shared-pool but not tracked"),
-					*BuildPlayerLabel(PlayerState, Players),
+					*BuildMatchDebugPlayerLabel(PlayerState, Players),
 					Offer.OfferId,
 					*Offer.ItemDefinition->GetResolvedItemId().ToString());
 			}
@@ -2231,7 +2231,7 @@ void UGambitMatchDebugComponent::PrintFinalMatchSummary() const
 
 		return A.GetTotalVictoryPoints() > B.GetTotalVictoryPoints();
 	});
-	const FString PhaseString = GameState ? PhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
+	const FString PhaseString = GameState ? MatchDebugPhaseToString(GameState->GetCurrentPhase()) : FString(TEXT("MissingGameState"));
 
 	UE_LOG(
 		LogGambit,
@@ -2247,7 +2247,7 @@ void UGambitMatchDebugComponent::PrintFinalMatchSummary() const
 			LogGambit,
 			Log,
 			TEXT("DebugMatch: Winner=%s VP=%d Gold=%d"),
-			*BuildPlayerLabel(FinalRanking[0], Players),
+			*BuildMatchDebugPlayerLabel(FinalRanking[0], Players),
 			FinalRanking[0]->GetTotalVictoryPoints(),
 			FinalRanking[0]->GetCurrentGold());
 	}
@@ -2266,7 +2266,7 @@ void UGambitMatchDebugComponent::PrintFinalMatchSummary() const
 			Log,
 			TEXT("DebugMatch: FinalRank=%d Player=%s VP=%d Gold=%d LastScore=%d Dice=%d Modules=%d/%d Consumables=%d/%d"),
 			RankIndex + 1,
-			*BuildPlayerLabel(PlayerState, Players),
+			*BuildMatchDebugPlayerLabel(PlayerState, Players),
 			PlayerState->GetTotalVictoryPoints(),
 			PlayerState->GetCurrentGold(),
 			PlayerState->GetCurrentRoundScore(),
@@ -2278,16 +2278,16 @@ void UGambitMatchDebugComponent::PrintFinalMatchSummary() const
 
 		for (const UGambitDiceDefinition* DiceDefinition : PlayerState->GetOwnedDiceDefinitionsRef())
 		{
-			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Dice %s"), *BuildPlayerLabel(PlayerState, Players), *FormatDiceDefinition(DiceDefinition));
+			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Dice %s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatDiceDefinition(DiceDefinition));
 		}
 		for (const UGambitModuleDefinition* ModuleDefinition : PlayerState->GetActiveModulesRef())
 		{
-			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Module %s LegacyModifier=%s"), *BuildPlayerLabel(PlayerState, Players), *FormatItemDetails(ModuleDefinition), *FormatModuleLegacyModifier(ModuleDefinition));
+			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Module %s LegacyModifier=%s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatItemDetails(ModuleDefinition), *FormatModuleLegacyModifier(ModuleDefinition));
 		}
 		for (const FGambitConsumableRuntimeSlot& ConsumableSlot : PlayerState->GetConsumableSlotsRef())
 		{
 			const UGambitConsumableDefinition* ConsumableDefinition = ConsumableSlot.Definition;
-			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Consumable %s"), *BuildPlayerLabel(PlayerState, Players), *FormatItemDetails(ConsumableDefinition));
+			UE_LOG(LogGambit, Log, TEXT("DebugMatch: Final %s Consumable %s"), *BuildMatchDebugPlayerLabel(PlayerState, Players), *FormatItemDetails(ConsumableDefinition));
 		}
 	}
 }

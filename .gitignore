@@ -1,0 +1,103 @@
+# =========================
+# Unreal Engine
+# =========================
+
+# Build folders
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# Visual Studio / Rider / IDE
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Unreal generated files
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.xcodeproj
+*.xcworkspace
+
+# Unreal logs / backups
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Packaged builds
+Windows/
+WindowsNoEditor/
+Linux/
+LinuxNoEditor/
+Mac/
+MacNoEditor/
+Android/
+IOS/
+
+# Crash reports
+Crashes/
+
+# =========================
+# Node.js
+# =========================
+
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+.nuxt/
+out/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Cache
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
+
+# =========================
+# OS / Misc
+# =========================
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Package managers
+# =========================
+
+# Garde les lockfiles versionnés normalement :
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+.dotnet-cli/
+.dotnet/
+.vsconfig
+Content/CarpentersWorkshop/
+Content/ConferenceRoom/
+Content/Low_Poly_Sci-Fi_Corridor/

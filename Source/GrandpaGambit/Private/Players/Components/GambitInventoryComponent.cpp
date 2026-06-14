@@ -10,7 +10,7 @@
 
 namespace
 {
-	bool RarityMatches(const EGambitItemRarity ActualRarity, const EGambitItemRarity ExpectedRarity, const bool bAtLeastRarity)
+	bool InventoryRarityMatches(const EGambitItemRarity ActualRarity, const EGambitItemRarity ExpectedRarity, const bool bAtLeastRarity)
 	{
 		if (bAtLeastRarity)
 		{
@@ -321,7 +321,7 @@ int32 UGambitInventoryComponent::CountOwnedDiceByRarity(
 	int32 Count = 0;
 	for (const UGambitDiceDefinition* DiceDefinition : OwnedDiceDefinitions)
 	{
-		if (DiceDefinition && RarityMatches(DiceDefinition->Rarity, Rarity, bAtLeastRarity))
+		if (DiceDefinition && InventoryRarityMatches(DiceDefinition->Rarity, Rarity, bAtLeastRarity))
 		{
 			Count++;
 		}
@@ -337,7 +337,7 @@ int32 UGambitInventoryComponent::CountActiveModulesByRarity(
 	int32 Count = 0;
 	for (const UGambitModuleDefinition* ModuleDefinition : ActiveModules)
 	{
-		if (ModuleDefinition && RarityMatches(ModuleDefinition->Rarity, Rarity, bAtLeastRarity))
+		if (ModuleDefinition && InventoryRarityMatches(ModuleDefinition->Rarity, Rarity, bAtLeastRarity))
 		{
 			Count++;
 		}
@@ -355,7 +355,7 @@ int32 UGambitInventoryComponent::CountOwnedItemsByRarity(
 
 	for (const FGambitConsumableRuntimeSlot& Slot : ConsumableSlots)
 	{
-		if (Slot.Definition && RarityMatches(Slot.Definition->Rarity, Rarity, bAtLeastRarity))
+		if (Slot.Definition && InventoryRarityMatches(Slot.Definition->Rarity, Rarity, bAtLeastRarity))
 		{
 			Count++;
 		}
