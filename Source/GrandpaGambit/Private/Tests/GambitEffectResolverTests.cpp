@@ -281,8 +281,32 @@ bool FGambitLegacyShortcutValidationTest::RunTest(const FString& Parameters)
 {
 	(void)Parameters;
 
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+
 	UGambitModuleDefinition* NeutralModule = NewObject<UGambitModuleDefinition>();
 	TestFalse(TEXT("neutral module helper reports no legacy persistent payload"), NeutralModule->HasNonNeutralPersistentScoreModifier());
+	TestFalse(TEXT("neutral module does not apply legacy persistent payload"), NeutralModule->ShouldApplyLegacyPersistentScoreModifier());
+
+	UGambitModuleDefinition* LegacyOnlyModule = NewObject<UGambitModuleDefinition>();
+	LegacyOnlyModule->ItemId = TEXT("module.test.legacy_only");
+	LegacyOnlyModule->PersistentScoreModifier.AdditiveBonus = 3.0f;
+	TestTrue(TEXT("legacy-only module applies legacy persistent payload"), LegacyOnlyModule->ShouldApplyLegacyPersistentScoreModifier());
+	TArray<FGambitDataValidationIssue> LegacyModuleIssues;
+	GambitDataValidation::ValidateItemDefinition(LegacyOnlyModule, LegacyModuleIssues);
+	TestTrue(
+		TEXT("legacy-only module emits migration-only warning"),
+		HasValidationIssue(LegacyModuleIssues, EGambitDataValidationSeverity::Warning, TEXT("legacy-only PersistentScoreModifier")));
+	TestFalse(TEXT("legacy-only module warning remains non-blocking while fallback exists"), GambitDataValidation::HasBlockingIssues(LegacyModuleIssues));
+
+	FGambitEffectExecutionContext LegacyModuleContext;
+	LegacyModuleContext.Hook = EGambitEffectHook::ScoreModifier;
+	Resolver->ExecuteItemEffects(LegacyOnlyModule, LegacyModuleContext);
+	TestEqual(TEXT("legacy-only module fallback still applies additive score"), LegacyModuleContext.ScoreModifierDelta.AdditiveBonus, 3.0f);
+
+	UGambitInventoryComponent* LegacyModuleInventoryComponent = NewObject<UGambitInventoryComponent>();
+	TestTrue(TEXT("test inventory accepts legacy-only module"), LegacyModuleInventoryComponent->AddModule(LegacyOnlyModule));
+	const FGambitScoreModifierContext LegacyPersistentModifier = LegacyModuleInventoryComponent->BuildPersistentScoreModifierContext();
+	TestEqual(TEXT("inventory persistent path still applies legacy-only module fallback"), LegacyPersistentModifier.AdditiveBonus, 3.0f);
 
 	UGambitModuleDefinition* MixedModule = NewObject<UGambitModuleDefinition>();
 	MixedModule->ItemId = TEXT("module.test.mixed_legacy");
@@ -291,16 +315,70 @@ bool FGambitLegacyShortcutValidationTest::RunTest(const FString& Parameters)
 	ModuleEffect->Amount = 2.0f;
 	MixedModule->EffectDefinitions.Add(ModuleEffect);
 	TestTrue(TEXT("module helper detects non-neutral persistent modifier"), MixedModule->HasNonNeutralPersistentScoreModifier());
+	TestFalse(TEXT("mixed module does not apply legacy persistent payload"), MixedModule->ShouldApplyLegacyPersistentScoreModifier());
 
 	TArray<FGambitDataValidationIssue> ModuleIssues;
 	GambitDataValidation::ValidateItemDefinition(MixedModule, ModuleIssues);
 	TestTrue(
-		TEXT("mixed module legacy shortcut and EffectDefinitions emits a warning"),
-		HasValidationIssue(ModuleIssues, EGambitDataValidationSeverity::Warning, TEXT("PersistentScoreModifier and EffectDefinitions")));
-	TestFalse(TEXT("mixed module warning remains non-blocking"), GambitDataValidation::HasBlockingIssues(ModuleIssues));
+		TEXT("mixed module legacy shortcut and EffectDefinitions emits an error"),
+		HasValidationIssue(ModuleIssues, EGambitDataValidationSeverity::Error, TEXT("PersistentScoreModifier and EffectDefinitions")));
+	TestTrue(TEXT("mixed module validation is blocking after migration"), GambitDataValidation::HasBlockingIssues(ModuleIssues));
+
+	FGambitEffectExecutionContext MixedModuleContext;
+	MixedModuleContext.Hook = EGambitEffectHook::ScoreModifier;
+	Resolver->ExecuteItemEffects(MixedModule, MixedModuleContext);
+	TestEqual(TEXT("mixed module applies EffectDefinitions additive only"), MixedModuleContext.ScoreModifierDelta.AdditiveBonus, 2.0f);
+
+	UGambitInventoryComponent* InventoryComponent = NewObject<UGambitInventoryComponent>();
+	TestTrue(TEXT("test inventory accepts mixed module"), InventoryComponent->AddModule(MixedModule));
+	const FGambitScoreModifierContext PersistentModifier = InventoryComponent->BuildPersistentScoreModifierContext();
+	TestEqual(TEXT("inventory persistent modifier ignores mixed module legacy shortcut"), PersistentModifier.AdditiveBonus, 0.0f);
 
 	UGambitConsumableDefinition* NeutralConsumable = NewObject<UGambitConsumableDefinition>();
 	TestFalse(TEXT("neutral consumable helper reports no legacy action payload"), NeutralConsumable->HasNonNeutralActionScoreModifier());
+	TestFalse(TEXT("neutral consumable does not apply legacy action payload"), NeutralConsumable->ShouldApplyLegacyActionScoreModifier());
+
+	UGambitConsumableDefinition* LegacyOnlyConsumable = NewObject<UGambitConsumableDefinition>();
+	LegacyOnlyConsumable->ItemId = TEXT("consumable.test.legacy_only");
+	LegacyOnlyConsumable->ActionScoreModifier.AdditiveBonus = 3.0f;
+	TestTrue(TEXT("legacy-only consumable applies legacy action payload"), LegacyOnlyConsumable->ShouldApplyLegacyActionScoreModifier());
+	TArray<FGambitDataValidationIssue> LegacyConsumableIssues;
+	GambitDataValidation::ValidateItemDefinition(LegacyOnlyConsumable, LegacyConsumableIssues);
+	TestTrue(
+		TEXT("legacy-only consumable emits migration-only warning"),
+		HasValidationIssue(LegacyConsumableIssues, EGambitDataValidationSeverity::Warning, TEXT("legacy-only ActionScoreModifier")));
+	TestFalse(TEXT("legacy-only consumable warning remains non-blocking while fallback exists"), GambitDataValidation::HasBlockingIssues(LegacyConsumableIssues));
+
+	FGambitEffectExecutionContext LegacyConsumableContext;
+	LegacyConsumableContext.Hook = EGambitEffectHook::ConsumableUse;
+	Resolver->ExecuteItemEffects(LegacyOnlyConsumable, LegacyConsumableContext);
+	TestEqual(TEXT("legacy-only consumable fallback still applies temporary score"), LegacyConsumableContext.TemporaryScoreModifierDelta.AdditiveBonus, 3.0f);
+
+	UGambitInventoryComponent* LegacyConsumableInventoryComponent = NewObject<UGambitInventoryComponent>();
+	TestTrue(TEXT("test inventory accepts legacy-only consumable"), LegacyConsumableInventoryComponent->AddConsumable(LegacyOnlyConsumable));
+	FGambitScoreModifierContext LegacyConsumedModifier;
+	TestTrue(TEXT("test inventory consumes legacy-only consumable"), LegacyConsumableInventoryComponent->ConsumeConsumableAtSlot(0, LegacyConsumedModifier));
+	TestEqual(TEXT("inventory consume path still applies legacy-only consumable fallback"), LegacyConsumedModifier.AdditiveBonus, 3.0f);
+
+	UGambitConsumableDefinition* MigratedFlatConsumable = NewObject<UGambitConsumableDefinition>();
+	UGambitItemEffectDefinition* MigratedFlatEffect = MakeEffectDefinition(MigratedFlatConsumable, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddScoreFlat);
+	MigratedFlatEffect->Amount = 4.0f;
+	MigratedFlatConsumable->EffectDefinitions.Add(MigratedFlatEffect);
+	FGambitEffectExecutionContext MigratedFlatConsumableContext;
+	MigratedFlatConsumableContext.Hook = EGambitEffectHook::ConsumableUse;
+	Resolver->ExecuteItemEffects(MigratedFlatConsumable, MigratedFlatConsumableContext);
+	TestEqual(TEXT("migrated consumable flat score uses temporary modifier channel"), MigratedFlatConsumableContext.TemporaryScoreModifierDelta.AdditiveBonus, 4.0f);
+	TestEqual(TEXT("migrated consumable flat score does not use persistent score delta"), MigratedFlatConsumableContext.ScoreModifierDelta.AdditiveBonus, 0.0f);
+
+	UGambitConsumableDefinition* MigratedMultiplierConsumable = NewObject<UGambitConsumableDefinition>();
+	UGambitItemEffectDefinition* MigratedMultiplierEffect = MakeEffectDefinition(MigratedMultiplierConsumable, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::MultiplyScore);
+	MigratedMultiplierEffect->Multiplier = 1.5f;
+	MigratedMultiplierConsumable->EffectDefinitions.Add(MigratedMultiplierEffect);
+	FGambitEffectExecutionContext MigratedMultiplierConsumableContext;
+	MigratedMultiplierConsumableContext.Hook = EGambitEffectHook::ConsumableUse;
+	Resolver->ExecuteItemEffects(MigratedMultiplierConsumable, MigratedMultiplierConsumableContext);
+	TestEqual(TEXT("migrated consumable multiplier uses temporary modifier channel"), MigratedMultiplierConsumableContext.TemporaryScoreModifierDelta.Multiplier, 1.5f);
+	TestEqual(TEXT("migrated consumable multiplier does not use persistent score delta"), MigratedMultiplierConsumableContext.ScoreModifierDelta.Multiplier, 1.0f);
 
 	UGambitConsumableDefinition* MixedConsumable = NewObject<UGambitConsumableDefinition>();
 	MixedConsumable->ItemId = TEXT("consumable.test.mixed_legacy");
@@ -309,13 +387,30 @@ bool FGambitLegacyShortcutValidationTest::RunTest(const FString& Parameters)
 	ConsumableEffect->Amount = 1.0f;
 	MixedConsumable->EffectDefinitions.Add(ConsumableEffect);
 	TestTrue(TEXT("consumable helper detects non-neutral action modifier"), MixedConsumable->HasNonNeutralActionScoreModifier());
+	TestFalse(TEXT("mixed consumable does not apply legacy action payload"), MixedConsumable->ShouldApplyLegacyActionScoreModifier());
 
 	TArray<FGambitDataValidationIssue> ConsumableIssues;
 	GambitDataValidation::ValidateItemDefinition(MixedConsumable, ConsumableIssues);
 	TestTrue(
-		TEXT("mixed consumable legacy shortcut and EffectDefinitions emits a warning"),
-		HasValidationIssue(ConsumableIssues, EGambitDataValidationSeverity::Warning, TEXT("ActionScoreModifier and EffectDefinitions")));
-	TestFalse(TEXT("mixed consumable warning remains non-blocking"), GambitDataValidation::HasBlockingIssues(ConsumableIssues));
+		TEXT("mixed consumable legacy shortcut and EffectDefinitions emits an error"),
+		HasValidationIssue(ConsumableIssues, EGambitDataValidationSeverity::Error, TEXT("ActionScoreModifier and EffectDefinitions")));
+	TestTrue(TEXT("mixed consumable validation is blocking after migration"), GambitDataValidation::HasBlockingIssues(ConsumableIssues));
+
+	UGambitEconomyComponent* EconomyComponent = NewObject<UGambitEconomyComponent>();
+	EconomyComponent->InitializeForMatch();
+	const int32 GoldBeforeMixedConsumable = EconomyComponent->GetCurrentGold();
+	FGambitEffectExecutionContext MixedConsumableContext;
+	MixedConsumableContext.Hook = EGambitEffectHook::ConsumableUse;
+	MixedConsumableContext.SourceEconomyComponent = EconomyComponent;
+	Resolver->ExecuteItemEffects(MixedConsumable, MixedConsumableContext);
+	TestEqual(TEXT("mixed consumable ignores legacy temporary score shortcut"), MixedConsumableContext.TemporaryScoreModifierDelta.AdditiveBonus, 0.0f);
+	TestEqual(TEXT("mixed consumable still executes EffectDefinitions"), EconomyComponent->GetCurrentGold() - GoldBeforeMixedConsumable, 1);
+
+	UGambitInventoryComponent* ConsumableInventoryComponent = NewObject<UGambitInventoryComponent>();
+	TestTrue(TEXT("test inventory accepts mixed consumable"), ConsumableInventoryComponent->AddConsumable(MixedConsumable));
+	FGambitScoreModifierContext ConsumedModifier;
+	TestTrue(TEXT("test inventory consumes mixed consumable"), ConsumableInventoryComponent->ConsumeConsumableAtSlot(0, ConsumedModifier));
+	TestEqual(TEXT("inventory consume path ignores mixed consumable legacy shortcut"), ConsumedModifier.AdditiveBonus, 0.0f);
 	return true;
 }
 

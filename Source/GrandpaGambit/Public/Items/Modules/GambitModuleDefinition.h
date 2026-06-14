@@ -15,6 +15,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gambit|Module")
 	bool HasNonNeutralPersistentScoreModifier() const;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Module", meta = (DisplayName = "Legacy Persistent Score Modifier", ToolTip = "Legacy shortcut applied during ScoreModifier. Prefer EffectDefinitions for new object effects; do not use both unless preserving an existing asset during migration."))
+	UFUNCTION(BlueprintPure, Category = "Gambit|Module")
+	bool ShouldApplyLegacyPersistentScoreModifier() const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Module", meta = (DisplayName = "Legacy Persistent Score Modifier", ToolTip = "Legacy/migration-only shortcut. It is applied during ScoreModifier only when EffectDefinitions is empty; EffectDefinitions are the source of truth for authored content."))
 	FGambitScoreModifierContext PersistentScoreModifier;
 };

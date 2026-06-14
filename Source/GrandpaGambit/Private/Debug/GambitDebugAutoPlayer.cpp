@@ -8,6 +8,7 @@
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
 #include "Items/DiceItems/GambitDiceItemDefinition.h"
+#include "Items/Effects/GambitEffectResolver.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 #include "Managers/SharedPool/GambitSharedPoolComponent.h"
 #include "Players/States/GambitPlayerState.h"
@@ -116,6 +117,25 @@ namespace
 			Modifier.ScoreCap,
 			Modifier.DiminishingThreshold,
 			Modifier.DiminishingFactor);
+	}
+
+	FGambitScoreModifierContext ResolveItemScoreModifier(
+		const UGambitItemDefinition* ItemDefinition,
+		const EGambitEffectHook Hook)
+	{
+		FGambitScoreModifierContext Modifier;
+		if (!ItemDefinition)
+		{
+			return Modifier;
+		}
+
+		UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+		FGambitEffectExecutionContext Context;
+		Context.Hook = Hook;
+		Resolver->ExecuteItemEffects(const_cast<UGambitItemDefinition*>(ItemDefinition), Context);
+		return Hook == EGambitEffectHook::ConsumableUse
+			? Context.TemporaryScoreModifierDelta
+			: Context.ScoreModifierDelta;
 	}
 
 	AGambitGameState* ResolveGameState(AGambitGameMode* GameMode)
@@ -324,14 +344,14 @@ namespace
 
 	FGambitScoreModifierContext GetOfferModifier(const FGambitShopOffer& Offer)
 	{
-		if (const UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(Offer.ItemDefinition.Get()))
+		if (UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(Offer.ItemDefinition.Get()))
 		{
-			return ModuleDefinition->PersistentScoreModifier;
+			return ResolveItemScoreModifier(ModuleDefinition, EGambitEffectHook::ScoreModifier);
 		}
 
-		if (const UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(Offer.ItemDefinition.Get()))
+		if (UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(Offer.ItemDefinition.Get()))
 		{
-			return ConsumableDefinition->ActionScoreModifier;
+			return ResolveItemScoreModifier(ConsumableDefinition, EGambitEffectHook::ConsumableUse);
 		}
 
 		return FGambitScoreModifierContext();
@@ -645,12 +665,12 @@ void UGambitDebugAutoPlayer::DecideActionsForPlayer(AGambitGameMode* GameMode, A
 	UE_LOG(
 		LogGambit,
 		Log,
-		TEXT("DebugAI: P%d Action EstimatedScore=%d UseConsumable Slot=%d Item=%s Modifier=%s Result=%s ScoreAfter=%d"),
+		TEXT("DebugAI: P%d Action EstimatedScore=%d UseConsumable Slot=%d Item=%s ResolvedModifier=%s Result=%s ScoreAfter=%d"),
 		PlayerIndex,
 		ScoreBefore.FinalScore,
 		SlotIndex,
 		*FormatItemName(ConsumableDefinition),
-		ConsumableDefinition ? *FormatModifier(ConsumableDefinition->ActionScoreModifier) : TEXT("None"),
+		ConsumableDefinition ? *FormatModifier(ResolveItemScoreModifier(ConsumableDefinition, EGambitEffectHook::ConsumableUse)) : TEXT("None"),
 		bUsed ? TEXT("Success") : TEXT("Failure"),
 		ScoreAfter.FinalScore);
 }

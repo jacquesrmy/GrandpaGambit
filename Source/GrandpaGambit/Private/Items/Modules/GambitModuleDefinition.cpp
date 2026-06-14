@@ -23,3 +23,8 @@ bool UGambitModuleDefinition::HasNonNeutralPersistentScoreModifier() const
 {
 	return !IsNeutralScoreModifier(PersistentScoreModifier);
 }
+
+bool UGambitModuleDefinition::ShouldApplyLegacyPersistentScoreModifier() const
+{
+	return HasNonNeutralPersistentScoreModifier() && EffectDefinitions.Num() == 0;
+}

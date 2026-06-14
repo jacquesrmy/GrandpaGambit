@@ -29,3 +29,8 @@ bool UGambitConsumableDefinition::HasNonNeutralActionScoreModifier() const
 {
 	return !IsNeutralScoreModifier(ActionScoreModifier);
 }
+
+bool UGambitConsumableDefinition::ShouldApplyLegacyActionScoreModifier() const
+{
+	return HasNonNeutralActionScoreModifier() && EffectDefinitions.Num() == 0;
+}

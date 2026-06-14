@@ -18,7 +18,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gambit|Consumable")
 	bool HasNonNeutralActionScoreModifier() const;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Consumable", meta = (DisplayName = "Legacy Action Score Modifier", ToolTip = "Legacy shortcut applied on ConsumableUse. Prefer EffectDefinitions for new object effects; do not use both unless preserving an existing asset during migration."))
+	UFUNCTION(BlueprintPure, Category = "Gambit|Consumable")
+	bool ShouldApplyLegacyActionScoreModifier() const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Consumable", meta = (DisplayName = "Legacy Action Score Modifier", ToolTip = "Legacy/migration-only shortcut. It is applied on ConsumableUse only when EffectDefinitions is empty; EffectDefinitions are the source of truth for authored content."))
 	FGambitScoreModifierContext ActionScoreModifier;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Consumable", meta = (ToolTip = "Player activation windows only. Effects still execute with the ConsumableUse hook; use delayed-effect state for later resolution."))

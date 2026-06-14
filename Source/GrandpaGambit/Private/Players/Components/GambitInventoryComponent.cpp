@@ -244,7 +244,11 @@ bool UGambitInventoryComponent::ConsumeConsumableAtSlot(const int32 SlotIndex, F
 		return false;
 	}
 
-	OutModifier = ConsumedDefinition->ActionScoreModifier;
+	OutModifier = FGambitScoreModifierContext();
+	if (ConsumedDefinition->ShouldApplyLegacyActionScoreModifier())
+	{
+		OutModifier = ConsumedDefinition->ActionScoreModifier;
+	}
 	return true;
 }
 
@@ -373,7 +377,10 @@ FGambitScoreModifierContext UGambitInventoryComponent::BuildPersistentScoreModif
 			continue;
 		}
 
-		MergeModifier(Module->PersistentScoreModifier, Context);
+		if (Module->ShouldApplyLegacyPersistentScoreModifier())
+		{
+			MergeModifier(Module->PersistentScoreModifier, Context);
+		}
 	}
 
 	return Context;

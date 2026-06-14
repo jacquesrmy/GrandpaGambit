@@ -1103,6 +1103,20 @@ namespace
 		Target = UGambitEffectResolver::MergeScoreModifiers(Target, Source);
 	}
 
+	FGambitScoreModifierContext& ResolveScoreModifierDelta(
+		FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target)
+	{
+		if (Context.Hook == EGambitEffectHook::ConsumableUse)
+		{
+			return Target == EGambitEffectTarget::Target
+				? Context.TargetTemporaryScoreModifierDelta
+				: Context.TemporaryScoreModifierDelta;
+		}
+
+		return Context.ScoreModifierDelta;
+	}
+
 	int32 RollFallbackD6Value(FRandomStream& RandomStream)
 	{
 		static const TArray<int32> FallbackFaces = { 1, 2, 3, 4, 5, 6 };
@@ -1366,7 +1380,7 @@ int32 UGambitEffectResolver::ExecuteItemEffects(UGambitItemDefinition* ItemDefin
 	{
 		if (const UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(ItemDefinition))
 		{
-			if (!IsNeutralScoreModifier(ModuleDefinition->PersistentScoreModifier))
+			if (ModuleDefinition->ShouldApplyLegacyPersistentScoreModifier())
 			{
 				ApplyScoreModifier(Context.ScoreModifierDelta, ModuleDefinition->PersistentScoreModifier);
 				AddScoreModifierDebugLine(Context, ModuleDefinition->PersistentScoreModifier, TEXT("Persistent score modifier"));
@@ -1391,7 +1405,7 @@ int32 UGambitEffectResolver::ExecuteItemEffects(UGambitItemDefinition* ItemDefin
 	{
 		if (const UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(ItemDefinition))
 		{
-			if (!IsNeutralScoreModifier(ConsumableDefinition->ActionScoreModifier))
+			if (ConsumableDefinition->ShouldApplyLegacyActionScoreModifier())
 			{
 				ApplyScoreModifier(Context.TemporaryScoreModifierDelta, ConsumableDefinition->ActionScoreModifier);
 				AddScoreModifierDebugLine(Context, ConsumableDefinition->ActionScoreModifier, TEXT("Consumable action modifier"));
@@ -1965,7 +1979,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	case EGambitItemEffectType::None:
 		return false;
 	case EGambitItemEffectType::ScoreModifier:
-		ApplyScoreModifier(Context.ScoreModifierDelta, EffectDefinition->ScoreModifier);
+		ApplyScoreModifier(ResolveScoreModifierDelta(Context, Target), EffectDefinition->ScoreModifier);
 		AddScoreModifierDebugLine(Context, EffectDefinition->ScoreModifier, GetEffectName(EffectDefinition));
 		return true;
 	case EGambitItemEffectType::AddScoreFlat:
@@ -1977,7 +1991,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		}
 		else
 		{
-			Context.ScoreModifierDelta.AdditiveBonus += static_cast<float>(Amount);
+			ResolveScoreModifierDelta(Context, Target).AdditiveBonus += static_cast<float>(Amount);
 		}
 		const float ScoreAfter = Context.CurrentScoreBreakdown.FinalScore;
 		Context.DebugScoreLines.Add(MakeScoreDebugLine(
@@ -2002,7 +2016,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		}
 		else
 		{
-			Context.ScoreModifierDelta.Multiplier *= Multiplier;
+			ResolveScoreModifierDelta(Context, Target).Multiplier *= Multiplier;
 		}
 		const float ScoreAfter = Context.CurrentScoreBreakdown.FinalScore;
 		Context.DebugScoreLines.Add(MakeScoreDebugLine(
@@ -2025,7 +2039,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			return false;
 		}
 
-		Context.ScoreModifierDelta.DiceContributionMultiplierBonus += Bonus;
+		ResolveScoreModifierDelta(Context, Target).DiceContributionMultiplierBonus += Bonus;
 		Context.DebugScoreLines.Add(MakeScoreDebugLine(
 			Context,
 			EGambitDebugScoreLineType::DiceContribution,
