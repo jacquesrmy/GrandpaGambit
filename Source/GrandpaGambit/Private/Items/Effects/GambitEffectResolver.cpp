@@ -120,9 +120,32 @@ namespace
 		}
 	}
 
-	AGambitPlayerState* ResolvePlayer(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
+	const FGambitResolvedEffectTarget* ResolveContextTargetForRead(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target,
+		FGambitEffectTargetResolveResult& OutResolveResult)
 	{
-		return Target == EGambitEffectTarget::Target ? Context.TargetPlayer.Get() : Context.SourcePlayer.Get();
+		// Conditions and scalars read the requested Source/Target side only; TargetRuleId belongs to effect target routing.
+		OutResolveResult = GambitEffectTargetResolver::ResolveContextTarget(Context, Target);
+		if (!OutResolveResult.bSuccess || OutResolveResult.Targets.Num() == 0)
+		{
+			return nullptr;
+		}
+
+		return &OutResolveResult.Targets[0];
+	}
+
+	EGambitEffectTarget ResolveContextTargetSideForRead(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target)
+	{
+		FGambitEffectTargetResolveResult ResolveResult;
+		if (const FGambitResolvedEffectTarget* ResolvedTarget = ResolveContextTargetForRead(Context, Target, ResolveResult))
+		{
+			return ResolvedTarget->TargetSide;
+		}
+
+		return Target == EGambitEffectTarget::Target ? EGambitEffectTarget::Target : EGambitEffectTarget::Source;
 	}
 
 	UGambitDiceComponent* ResolveDiceComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
@@ -130,14 +153,25 @@ namespace
 		return Target == EGambitEffectTarget::Target ? Context.TargetDiceComponent.Get() : Context.SourceDiceComponent.Get();
 	}
 
-	UGambitEconomyComponent* ResolveEconomyComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
+	AGambitPlayerState* ResolvePlayerForRead(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
-		return Target == EGambitEffectTarget::Target ? Context.TargetEconomyComponent.Get() : Context.SourceEconomyComponent.Get();
+		FGambitEffectTargetResolveResult ResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveContextTargetForRead(Context, Target, ResolveResult);
+		return ResolvedTarget ? ResolvedTarget->Player.Get() : nullptr;
 	}
 
-	UGambitInventoryComponent* ResolveInventoryComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
+	UGambitEconomyComponent* ResolveEconomyComponentForRead(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
-		return Target == EGambitEffectTarget::Target ? Context.TargetInventoryComponent.Get() : Context.SourceInventoryComponent.Get();
+		FGambitEffectTargetResolveResult ResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveContextTargetForRead(Context, Target, ResolveResult);
+		return ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+	}
+
+	UGambitInventoryComponent* ResolveInventoryComponentForRead(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
+	{
+		FGambitEffectTargetResolveResult ResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveContextTargetForRead(Context, Target, ResolveResult);
+		return ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
 	}
 
 	UGambitItemDefinition* ResolveReferencedShopItem(const UGambitItemEffectDefinition* EffectDefinition, const FGambitEffectExecutionContext& Context)
@@ -158,6 +192,13 @@ namespace
 	const TArray<FGambitDieRuntimeState>& ResolveDiceSnapshotConst(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
 		return Target == EGambitEffectTarget::Target ? Context.TargetDice : Context.SourceDice;
+	}
+
+	const TArray<FGambitDieRuntimeState>& ResolveDiceSnapshotForRead(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target)
+	{
+		return ResolveDiceSnapshotConst(Context, ResolveContextTargetSideForRead(Context, Target));
 	}
 
 	void RefreshDiceSnapshot(FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
@@ -216,13 +257,7 @@ namespace
 		const EGambitEffectTarget Target,
 		FGambitEffectTargetResolveResult& OutResolveResult)
 	{
-		OutResolveResult = GambitEffectTargetResolver::ResolveContextTarget(Context, Target);
-		if (!OutResolveResult.bSuccess || OutResolveResult.Targets.Num() == 0)
-		{
-			return nullptr;
-		}
-
-		return &OutResolveResult.Targets[0];
+		return ResolveContextTargetForRead(Context, Target, OutResolveResult);
 	}
 
 	float CalculateDiceAverage(const TArray<FGambitDieRuntimeState>& DiceStates)
@@ -487,7 +522,7 @@ namespace
 		const EGambitEffectTarget Target,
 		const bool bLowest)
 	{
-		const UGambitEconomyComponent* CandidateEconomy = ResolveEconomyComponent(Context, Target);
+		const UGambitEconomyComponent* CandidateEconomy = ResolveEconomyComponentForRead(Context, Target);
 		if (!CandidateEconomy)
 		{
 			return false;
@@ -573,23 +608,23 @@ namespace
 
 	int32 ResolveOwnedDiceCount(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
-		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponentForRead(Context, Target))
 		{
 			return InventoryComponent->GetOwnedDiceCount();
 		}
 
-		return ResolveDiceSnapshotConst(Context, Target).Num();
+		return ResolveDiceSnapshotForRead(Context, Target).Num();
 	}
 
 	int32 ResolveOwnedDiceDistinctTypeCount(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
-		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponentForRead(Context, Target))
 		{
 			return InventoryComponent->GetDistinctOwnedDiceTypeCount();
 		}
 
 		TSet<FName> DiceIds;
-		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotConst(Context, Target))
+		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotForRead(Context, Target))
 		{
 			if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
 			{
@@ -601,13 +636,13 @@ namespace
 
 	int32 ResolveOwnedDiceMostRepeatedTypeCount(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
-		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponentForRead(Context, Target))
 		{
 			return InventoryComponent->GetMostRepeatedOwnedDiceTypeCount();
 		}
 
 		TMap<FName, int32> CountsByDiceId;
-		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotConst(Context, Target))
+		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotForRead(Context, Target))
 		{
 			if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
 			{
@@ -630,13 +665,13 @@ namespace
 		const EGambitItemRarity Rarity,
 		const bool bAtLeastRarity)
 	{
-		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponentForRead(Context, Target))
 		{
 			return InventoryComponent->CountOwnedDiceByRarity(Rarity, bAtLeastRarity);
 		}
 
 		int32 Count = 0;
-		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotConst(Context, Target))
+		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotForRead(Context, Target))
 		{
 			if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
 			{
@@ -655,7 +690,7 @@ namespace
 		const EGambitItemRarity Rarity,
 		const bool bAtLeastRarity)
 	{
-		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponentForRead(Context, Target))
 		{
 			return InventoryComponent->CountOwnedItemsByRarity(Rarity, bAtLeastRarity);
 		}
@@ -669,7 +704,7 @@ namespace
 		const EGambitItemRarity Rarity,
 		const bool bAtLeastRarity)
 	{
-		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (const UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponentForRead(Context, Target))
 		{
 			return InventoryComponent->CountActiveModulesByRarity(Rarity, bAtLeastRarity);
 		}
@@ -766,7 +801,7 @@ namespace
 			return FMath::RoundToInt(Amount);
 		}
 
-		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshotConst(Context, Target);
+		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshotForRead(Context, Target);
 		for (const TPair<FName, float>& ScalarParameter : EffectDefinition->ScalarParameters)
 		{
 			if (ScalarParameter.Key == TEXT("AmountPerMatchingDie"))
@@ -802,14 +837,14 @@ namespace
 			}
 			else if (ScalarParameter.Key == TEXT("AmountPerGold"))
 			{
-				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponentForRead(Context, Target))
 				{
 					Amount += ScalarParameter.Value * static_cast<float>(EconomyComponent->GetCurrentGold());
 				}
 			}
 			else if (ScalarParameter.Key == TEXT("AmountPerGoldTier"))
 			{
-				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponentForRead(Context, Target))
 				{
 					const int32 TierSize = FMath::Max(1, ResolveIntScalar(EffectDefinition, TEXT("GoldTierSize"), 10));
 					Amount += ScalarParameter.Value * static_cast<float>(FMath::Max(0, EconomyComponent->GetCurrentGold()) / TierSize);
@@ -958,7 +993,7 @@ namespace
 			return Multiplier;
 		}
 
-		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshotConst(Context, Target);
+		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshotForRead(Context, Target);
 		for (const TPair<FName, float>& ScalarParameter : EffectDefinition->ScalarParameters)
 		{
 			if (ScalarParameter.Key == TEXT("MultiplierDeltaPerMatchingDie"))
@@ -1007,7 +1042,7 @@ namespace
 			}
 			else if (ScalarParameter.Key == TEXT("MultiplierPerGoldTier"))
 			{
-				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponentForRead(Context, Target))
 				{
 					const int32 TierSize = FMath::Max(1, ResolveIntScalar(EffectDefinition, TEXT("GoldTierSize"), 10));
 					const int32 TierCount = FMath::Max(0, EconomyComponent->GetCurrentGold()) / TierSize;
@@ -1016,7 +1051,7 @@ namespace
 			}
 			else if (ScalarParameter.Key == TEXT("MultiplierDeltaPerGoldTier"))
 			{
-				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+				if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponentForRead(Context, Target))
 				{
 					const int32 TierSize = FMath::Max(1, ResolveIntScalar(EffectDefinition, TEXT("GoldTierSize"), 10));
 					const int32 TierCount = FMath::Max(0, EconomyComponent->GetCurrentGold()) / TierSize;
@@ -1040,7 +1075,7 @@ namespace
 		}
 
 		float Bonus = 0.0f;
-		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotConst(Context, Target))
+		for (const FGambitDieRuntimeState& DieState : ResolveDiceSnapshotForRead(Context, Target))
 		{
 			if (!DieState.bCountsForScoreSum || !DoesDieMatchAllSelectorConditions(DieState, EffectDefinition))
 			{
@@ -1176,7 +1211,7 @@ namespace
 
 	FString ResolveDebugTargetName(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
-		const AGambitPlayerState* TargetPlayer = ResolvePlayer(Context, Target);
+		const AGambitPlayerState* TargetPlayer = ResolvePlayerForRead(Context, Target);
 		if (!TargetPlayer)
 		{
 			return TEXT("None");
@@ -1582,10 +1617,18 @@ bool UGambitEffectResolver::AreConditionsMet(const UGambitItemEffectDefinition* 
 bool UGambitEffectResolver::IsConditionMet(const FGambitEffectConditionDefinition& Condition, FGambitEffectExecutionContext& Context) const
 {
 	bool bResult = true;
-	const EGambitEffectTarget Target = Condition.ConditionTarget == EGambitEffectTarget::Target
+	const EGambitEffectTarget RequestedTarget = Condition.ConditionTarget == EGambitEffectTarget::Target
 		? EGambitEffectTarget::Target
 		: EGambitEffectTarget::Source;
-	const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshotConst(Context, Target);
+	FGambitEffectTargetResolveResult ConditionTargetResolveResult;
+	const FGambitResolvedEffectTarget* ResolvedConditionTarget = ResolveContextTargetForRead(
+		Context,
+		RequestedTarget,
+		ConditionTargetResolveResult);
+	const EGambitEffectTarget Target = ResolvedConditionTarget
+		? ResolvedConditionTarget->TargetSide
+		: RequestedTarget;
+	const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshotForRead(Context, Target);
 
 	switch (Condition.ConditionType)
 	{
@@ -1744,7 +1787,9 @@ bool UGambitEffectResolver::IsConditionMet(const FGambitEffectConditionDefinitio
 		bResult = DoesSourceDieHaveMatchingValue(Context);
 		break;
 	case EGambitEffectConditionType::GoldThreshold:
-		if (const UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+		if (const UGambitEconomyComponent* EconomyComponent = ResolvedConditionTarget
+			? ResolvedConditionTarget->EconomyComponent.Get()
+			: ResolveEconomyComponentForRead(Context, Target))
 		{
 			bResult = CompareInt(EconomyComponent->GetCurrentGold(), Condition.Comparison, Condition.Value);
 		}

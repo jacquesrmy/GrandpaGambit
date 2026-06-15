@@ -407,6 +407,177 @@ bool FGambitEffectTargetResolverNonDiceExecutionTest::RunTest(const FString& Par
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitEffectTargetResolverConditionScalarReadsTest,
+	"GrandpaGambit.Effects.TargetResolver.ConditionScalarReads",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitEffectTargetResolverConditionScalarReadsTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+
+	{
+		UGambitEconomyComponent* SourceEconomy = NewObject<UGambitEconomyComponent>();
+		SourceEconomy->InitializeForMatch();
+		SourceEconomy->AddGold(6);
+
+		UGambitItemEffectDefinition* SourceConditionEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		SourceConditionEffect->Target = EGambitEffectTarget::Source;
+		SourceConditionEffect->Amount = 2.0f;
+
+		FGambitEffectConditionDefinition SourceGoldCondition;
+		SourceGoldCondition.ConditionType = EGambitEffectConditionType::GoldThreshold;
+		SourceGoldCondition.ConditionTarget = EGambitEffectTarget::Source;
+		SourceGoldCondition.Comparison = EGambitEffectComparison::GreaterOrEqual;
+		SourceGoldCondition.Value = 5;
+		SourceConditionEffect->Conditions.Add(SourceGoldCondition);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.SourceEconomyComponent = SourceEconomy;
+		TestTrue(TEXT("source condition resolves through context target"), Resolver->ExecuteEffectDefinition(SourceConditionEffect, Context));
+		TestEqual(TEXT("source condition gates source effect"), SourceEconomy->GetCurrentGold(), 8);
+	}
+
+	{
+		UGambitEconomyComponent* SourceEconomy = NewObject<UGambitEconomyComponent>();
+		SourceEconomy->InitializeForMatch();
+
+		UGambitItemEffectDefinition* TargetConditionEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		TargetConditionEffect->Target = EGambitEffectTarget::Source;
+		TargetConditionEffect->Amount = 3.0f;
+
+		FGambitEffectConditionDefinition TargetDieCondition;
+		TargetDieCondition.ConditionType = EGambitEffectConditionType::DieValueEquals;
+		TargetDieCondition.ConditionTarget = EGambitEffectTarget::Target;
+		TargetDieCondition.Value = 6;
+		TargetConditionEffect->Conditions.Add(TargetDieCondition);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.SourceEconomyComponent = SourceEconomy;
+		Context.TargetDice = { MakeTestDie(6, 1, true, true, 0) };
+		TestTrue(TEXT("target condition resolves target dice through context target"), Resolver->ExecuteEffectDefinition(TargetConditionEffect, Context));
+		TestEqual(TEXT("target condition gates source effect"), SourceEconomy->GetCurrentGold(), 3);
+	}
+
+	{
+		UGambitEconomyComponent* SourceEconomy = NewObject<UGambitEconomyComponent>();
+		SourceEconomy->InitializeForMatch();
+		SourceEconomy->AddGold(3);
+
+		UGambitItemEffectDefinition* SourceGoldScalarEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		SourceGoldScalarEffect->Target = EGambitEffectTarget::Source;
+		SourceGoldScalarEffect->ScalarParameters.Add(TEXT("AmountPerGold"), 2.0f);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.SourceEconomyComponent = SourceEconomy;
+		TestTrue(TEXT("source economy scalar executes"), Resolver->ExecuteEffectDefinition(SourceGoldScalarEffect, Context));
+		TestEqual(TEXT("source economy scalar reads source gold"), SourceEconomy->GetCurrentGold(), 9);
+	}
+
+	{
+		UGambitEconomyComponent* TargetEconomy = NewObject<UGambitEconomyComponent>();
+		TargetEconomy->InitializeForMatch();
+		TargetEconomy->AddGold(4);
+
+		UGambitItemEffectDefinition* TargetGoldScalarEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		TargetGoldScalarEffect->Target = EGambitEffectTarget::Target;
+		TargetGoldScalarEffect->ScalarParameters.Add(TEXT("AmountPerGold"), 2.0f);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.TargetEconomyComponent = TargetEconomy;
+		TestTrue(TEXT("target economy scalar executes"), Resolver->ExecuteEffectDefinition(TargetGoldScalarEffect, Context));
+		TestEqual(TEXT("target economy scalar reads target gold"), TargetEconomy->GetCurrentGold(), 12);
+	}
+
+	{
+		UGambitDiceDefinition* SourceDieA = MakeDiceDefinition(TestOuter, TEXT("dice.test.source_scalar_a"), TArray<int32>({ 1, 2, 3 }));
+		UGambitDiceDefinition* SourceDieB = MakeDiceDefinition(TestOuter, TEXT("dice.test.source_scalar_b"), TArray<int32>({ 4, 5, 6 }));
+		UGambitInventoryComponent* SourceInventory = NewObject<UGambitInventoryComponent>();
+		SourceInventory->AddOwnedDie(SourceDieA);
+		SourceInventory->AddOwnedDie(SourceDieB);
+
+		UGambitEconomyComponent* SourceEconomy = NewObject<UGambitEconomyComponent>();
+		SourceEconomy->InitializeForMatch();
+
+		UGambitItemEffectDefinition* SourceInventoryScalarEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		SourceInventoryScalarEffect->Target = EGambitEffectTarget::Source;
+		SourceInventoryScalarEffect->ScalarParameters.Add(TEXT("AmountPerOwnedDie"), 2.0f);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.SourceEconomyComponent = SourceEconomy;
+		Context.SourceInventoryComponent = SourceInventory;
+		TestTrue(TEXT("source inventory scalar executes"), Resolver->ExecuteEffectDefinition(SourceInventoryScalarEffect, Context));
+		TestEqual(TEXT("source inventory scalar reads owned dice count"), SourceEconomy->GetCurrentGold(), 4);
+	}
+
+	{
+		UGambitEconomyComponent* TargetEconomy = NewObject<UGambitEconomyComponent>();
+		TargetEconomy->InitializeForMatch();
+
+		UGambitItemEffectDefinition* TargetDiceScalarEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		TargetDiceScalarEffect->Target = EGambitEffectTarget::Target;
+		TargetDiceScalarEffect->ScalarParameters.Add(TEXT("AmountPerOwnedDie"), 3.0f);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.TargetEconomyComponent = TargetEconomy;
+		Context.TargetDice = {
+			MakeTestDie(1, 1, true, true, 0),
+			MakeTestDie(2, 1, true, true, 1),
+			MakeTestDie(3, 1, true, true, 2)
+		};
+		TestTrue(TEXT("target dice scalar executes"), Resolver->ExecuteEffectDefinition(TargetDiceScalarEffect, Context));
+		TestEqual(TEXT("target dice scalar falls back to target dice snapshot"), TargetEconomy->GetCurrentGold(), 9);
+	}
+
+	{
+		UGambitEconomyComponent* TargetEconomy = NewObject<UGambitEconomyComponent>();
+		TargetEconomy->InitializeForMatch();
+
+		UGambitItemEffectDefinition* OpponentEffect = MakeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			EGambitItemEffectType::AddGold);
+		OpponentEffect->Target = EGambitEffectTarget::Target;
+		OpponentEffect->TargetRuleId = GambitEffectTargetRules::TargetOpponent;
+		OpponentEffect->Amount = 5.0f;
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.TargetEconomyComponent = TargetEconomy;
+		TestFalse(TEXT("target.opponent fails cleanly without TargetPlayer"), Resolver->ExecuteEffectDefinition(OpponentEffect, Context));
+		TestEqual(TEXT("target.opponent failure leaves target economy unchanged"), TargetEconomy->GetCurrentGold(), 0);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGambitEffectTargetRuleValidationTest,
 	"GrandpaGambit.Items.TargetRuleValidation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
