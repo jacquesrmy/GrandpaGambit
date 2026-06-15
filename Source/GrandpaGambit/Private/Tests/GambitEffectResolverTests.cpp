@@ -138,6 +138,42 @@ bool FGambitEffectTargetRulesRecognitionTest::RunTest(const FString& Parameters)
 
 	TestFalse(TEXT("empty TargetRuleId is not a known rule value"), GambitEffectTargetRules::IsKnownRule(NAME_None));
 	TestFalse(TEXT("unknown target rule is not known"), GambitEffectTargetRules::IsKnownRule(TEXT("unknown.target_rule")));
+
+	const TArray<FName> KnownRuleIds = GambitEffectTargetRules::GetKnownRuleIds();
+	TestEqual(TEXT("known authoring rules count"), KnownRuleIds.Num(), 6);
+	TestTrue(TEXT("known rules include selected_die"), KnownRuleIds.Contains(GambitEffectTargetRules::SelectedDie));
+	TestTrue(TEXT("known rules include source.selected_die"), KnownRuleIds.Contains(GambitEffectTargetRules::SourceSelectedDie));
+	TestTrue(TEXT("known rules include target.selected_die"), KnownRuleIds.Contains(GambitEffectTargetRules::TargetSelectedDie));
+	TestTrue(TEXT("known rules include first_rerolled_die"), KnownRuleIds.Contains(GambitEffectTargetRules::FirstRerolledDie));
+	TestTrue(TEXT("known rules include first_rerolled_die_this_round"), KnownRuleIds.Contains(GambitEffectTargetRules::FirstRerolledDieThisRound));
+	TestTrue(TEXT("known rules include target.opponent"), KnownRuleIds.Contains(GambitEffectTargetRules::TargetOpponent));
+
+	const TArray<FName> AuthorableRuleIds = GambitEffectTargetRules::GetAuthorableRuleIds();
+	TestTrue(TEXT("authorable rules include empty None option"), AuthorableRuleIds.Contains(NAME_None));
+	for (const FName KnownRuleId : KnownRuleIds)
+	{
+		TestTrue(
+			FString::Printf(TEXT("authorable rules include %s"), *KnownRuleId.ToString()),
+			AuthorableRuleIds.Contains(KnownRuleId));
+	}
+	for (const FName AuthorableRuleId : AuthorableRuleIds)
+	{
+		if (!AuthorableRuleId.IsNone())
+		{
+			TestTrue(
+				FString::Printf(TEXT("authorable rule %s is known"), *AuthorableRuleId.ToString()),
+				GambitEffectTargetRules::IsKnownRule(AuthorableRuleId));
+		}
+	}
+
+	const TArray<FName> DropdownOptions = UGambitItemEffectDefinition::GetTargetRuleIdOptions();
+	TestEqual(TEXT("TargetRuleId dropdown option count matches authorable rules"), DropdownOptions.Num(), AuthorableRuleIds.Num());
+	for (const FName AuthorableRuleId : AuthorableRuleIds)
+	{
+		TestTrue(
+			FString::Printf(TEXT("TargetRuleId dropdown includes %s"), *AuthorableRuleId.ToString()),
+			DropdownOptions.Contains(AuthorableRuleId));
+	}
 	return true;
 }
 

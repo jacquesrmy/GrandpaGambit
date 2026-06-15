@@ -9,6 +9,27 @@ namespace GambitEffectTargetRules
 	const FName FirstRerolledDieThisRound(TEXT("first_rerolled_die_this_round"));
 	const FName TargetOpponent(TEXT("target.opponent"));
 
+	TArray<FName> GetKnownRuleIds()
+	{
+		return {
+			SelectedDie,
+			SourceSelectedDie,
+			TargetSelectedDie,
+			FirstRerolledDie,
+			FirstRerolledDieThisRound,
+			TargetOpponent,
+		};
+	}
+
+	TArray<FName> GetAuthorableRuleIds()
+	{
+		TArray<FName> RuleIds;
+		RuleIds.Reserve(7);
+		RuleIds.Add(NAME_None);
+		RuleIds.Append(GetKnownRuleIds());
+		return RuleIds;
+	}
+
 	bool IsKnownRule(const FName TargetRuleId)
 	{
 		return IsSelectedDieRule(TargetRuleId)

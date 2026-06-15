@@ -11,6 +11,8 @@ namespace GambitEffectTargetRules
 	extern GRANDPAGAMBIT_API const FName FirstRerolledDieThisRound;
 	extern GRANDPAGAMBIT_API const FName TargetOpponent;
 
+	GRANDPAGAMBIT_API TArray<FName> GetKnownRuleIds();
+	GRANDPAGAMBIT_API TArray<FName> GetAuthorableRuleIds();
 	GRANDPAGAMBIT_API bool IsKnownRule(FName TargetRuleId);
 	GRANDPAGAMBIT_API bool IsSelectedDieRule(FName TargetRuleId);
 	GRANDPAGAMBIT_API bool IsFirstRerolledDieRule(FName TargetRuleId);

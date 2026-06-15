@@ -1,8 +1,15 @@
 #include "Data/Assets/GambitItemEffectDefinition.h"
 
+#include "Items/Effects/GambitEffectTargetRules.h"
+
 #if WITH_EDITOR
 #include "Data/Validation/GambitDataValidation.h"
 #endif
+
+TArray<FName> UGambitItemEffectDefinition::GetTargetRuleIdOptions()
+{
+	return GambitEffectTargetRules::GetAuthorableRuleIds();
+}
 
 #if WITH_EDITOR
 EDataValidationResult UGambitItemEffectDefinition::IsDataValid(FDataValidationContext& Context) const

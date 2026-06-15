@@ -23,6 +23,9 @@ public:
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
 #endif
 
+	UFUNCTION()
+	static TArray<FName> GetTargetRuleIdOptions();
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	EGambitEffectHook Hook = EGambitEffectHook::ScoreModifier;
 
@@ -38,7 +41,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	FName EffectTypeId;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect", meta = (GetOptions = "GetTargetRuleIdOptions"))
 	FName TargetRuleId;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")

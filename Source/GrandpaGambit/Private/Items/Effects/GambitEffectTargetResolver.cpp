@@ -41,12 +41,12 @@ namespace
 		return NormalizeTargetSide(RequestedTarget);
 	}
 
-	AGambitPlayerState* ResolvePlayer(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
+	AGambitPlayerState* ResolveTargetResolverPlayer(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
 	{
 		return TargetSide == EGambitEffectTarget::Target ? Context.TargetPlayer.Get() : Context.SourcePlayer.Get();
 	}
 
-	UGambitDiceComponent* ResolveDiceComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
+	UGambitDiceComponent* ResolveTargetResolverDiceComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
 	{
 		if (UGambitDiceComponent* DiceComponent = TargetSide == EGambitEffectTarget::Target
 			? Context.TargetDiceComponent.Get()
@@ -55,7 +55,7 @@ namespace
 			return DiceComponent;
 		}
 
-		if (AGambitPlayerState* Player = ResolvePlayer(Context, TargetSide))
+		if (AGambitPlayerState* Player = ResolveTargetResolverPlayer(Context, TargetSide))
 		{
 			return Player->GetDiceComponent();
 		}
@@ -63,7 +63,7 @@ namespace
 		return nullptr;
 	}
 
-	UGambitEconomyComponent* ResolveEconomyComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
+	UGambitEconomyComponent* ResolveTargetResolverEconomyComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
 	{
 		if (UGambitEconomyComponent* EconomyComponent = TargetSide == EGambitEffectTarget::Target
 			? Context.TargetEconomyComponent.Get()
@@ -72,7 +72,7 @@ namespace
 			return EconomyComponent;
 		}
 
-		if (AGambitPlayerState* Player = ResolvePlayer(Context, TargetSide))
+		if (AGambitPlayerState* Player = ResolveTargetResolverPlayer(Context, TargetSide))
 		{
 			return Player->GetEconomyComponent();
 		}
@@ -80,7 +80,7 @@ namespace
 		return nullptr;
 	}
 
-	UGambitInventoryComponent* ResolveInventoryComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
+	UGambitInventoryComponent* ResolveTargetResolverInventoryComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
 	{
 		if (UGambitInventoryComponent* InventoryComponent = TargetSide == EGambitEffectTarget::Target
 			? Context.TargetInventoryComponent.Get()
@@ -89,7 +89,7 @@ namespace
 			return InventoryComponent;
 		}
 
-		if (AGambitPlayerState* Player = ResolvePlayer(Context, TargetSide))
+		if (AGambitPlayerState* Player = ResolveTargetResolverPlayer(Context, TargetSide))
 		{
 			return Player->GetInventoryComponent();
 		}
@@ -97,7 +97,7 @@ namespace
 		return nullptr;
 	}
 
-	UGambitShopComponent* ResolveShopComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
+	UGambitShopComponent* ResolveTargetResolverShopComponent(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget TargetSide)
 	{
 		if (UGambitShopComponent* ShopComponent = TargetSide == EGambitEffectTarget::Target
 			? Context.TargetShopComponent.Get()
@@ -106,7 +106,7 @@ namespace
 			return ShopComponent;
 		}
 
-		if (AGambitPlayerState* Player = ResolvePlayer(Context, TargetSide))
+		if (AGambitPlayerState* Player = ResolveTargetResolverPlayer(Context, TargetSide))
 		{
 			return Player->GetShopComponent();
 		}
@@ -114,14 +114,14 @@ namespace
 		return nullptr;
 	}
 
-	const TArray<FGambitDieRuntimeState>& ResolveDiceSnapshot(
+	const TArray<FGambitDieRuntimeState>& ResolveTargetResolverDiceSnapshot(
 		const FGambitEffectExecutionContext& Context,
 		const EGambitEffectTarget TargetSide)
 	{
 		return TargetSide == EGambitEffectTarget::Target ? Context.TargetDice : Context.SourceDice;
 	}
 
-	float ResolveScalar(const UGambitItemEffectDefinition* EffectDefinition, const FName ParameterName, const float Fallback)
+	float ResolveTargetResolverScalar(const UGambitItemEffectDefinition* EffectDefinition, const FName ParameterName, const float Fallback)
 	{
 		if (!EffectDefinition)
 		{
@@ -136,9 +136,9 @@ namespace
 		return Fallback;
 	}
 
-	int32 ResolveIntScalar(const UGambitItemEffectDefinition* EffectDefinition, const FName ParameterName, const int32 Fallback)
+	int32 ResolveTargetResolverIntScalar(const UGambitItemEffectDefinition* EffectDefinition, const FName ParameterName, const int32 Fallback)
 	{
-		return FMath::RoundToInt(ResolveScalar(EffectDefinition, ParameterName, static_cast<float>(Fallback)));
+		return FMath::RoundToInt(ResolveTargetResolverScalar(EffectDefinition, ParameterName, static_cast<float>(Fallback)));
 	}
 
 	bool HasExplicitDieIndex(const UGambitItemEffectDefinition* EffectDefinition)
@@ -216,7 +216,7 @@ namespace
 			return true;
 		}
 
-		const int32 RequestedIndex = ResolveIntScalar(EffectDefinition, TEXT("DieIndex"), EffectDefinition ? EffectDefinition->DieIndex : INDEX_NONE);
+		const int32 RequestedIndex = ResolveTargetResolverIntScalar(EffectDefinition, TEXT("DieIndex"), EffectDefinition ? EffectDefinition->DieIndex : INDEX_NONE);
 		if (DiceStates.IsValidIndex(RequestedIndex))
 		{
 			OutIndexes.Add(RequestedIndex);
@@ -271,14 +271,14 @@ namespace
 
 		FGambitResolvedEffectTarget ResolvedTarget;
 		ResolvedTarget.TargetSide = TargetSide;
-		ResolvedTarget.Player = ResolvePlayer(Context, TargetSide);
-		ResolvedTarget.DiceComponent = ResolveDiceComponent(Context, TargetSide);
-		ResolvedTarget.EconomyComponent = ResolveEconomyComponent(Context, TargetSide);
-		ResolvedTarget.InventoryComponent = ResolveInventoryComponent(Context, TargetSide);
-		ResolvedTarget.ShopComponent = ResolveShopComponent(Context, TargetSide);
+		ResolvedTarget.Player = ResolveTargetResolverPlayer(Context, TargetSide);
+		ResolvedTarget.DiceComponent = ResolveTargetResolverDiceComponent(Context, TargetSide);
+		ResolvedTarget.EconomyComponent = ResolveTargetResolverEconomyComponent(Context, TargetSide);
+		ResolvedTarget.InventoryComponent = ResolveTargetResolverInventoryComponent(Context, TargetSide);
+		ResolvedTarget.ShopComponent = ResolveTargetResolverShopComponent(Context, TargetSide);
 		ResolvedTarget.TargetRuleId = TargetRuleId;
 
-		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, TargetSide);
+		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveTargetResolverDiceSnapshot(Context, TargetSide);
 		if (ShouldResolveDiceIndexes(EffectDefinition, DiceStates))
 		{
 			FString FailureReason;
@@ -362,11 +362,11 @@ namespace GambitEffectTargetResolver
 
 		FGambitResolvedEffectTarget ResolvedTarget;
 		ResolvedTarget.TargetSide = TargetSide;
-		ResolvedTarget.Player = ResolvePlayer(Context, TargetSide);
-		ResolvedTarget.DiceComponent = ResolveDiceComponent(Context, TargetSide);
-		ResolvedTarget.EconomyComponent = ResolveEconomyComponent(Context, TargetSide);
-		ResolvedTarget.InventoryComponent = ResolveInventoryComponent(Context, TargetSide);
-		ResolvedTarget.ShopComponent = ResolveShopComponent(Context, TargetSide);
+		ResolvedTarget.Player = ResolveTargetResolverPlayer(Context, TargetSide);
+		ResolvedTarget.DiceComponent = ResolveTargetResolverDiceComponent(Context, TargetSide);
+		ResolvedTarget.EconomyComponent = ResolveTargetResolverEconomyComponent(Context, TargetSide);
+		ResolvedTarget.InventoryComponent = ResolveTargetResolverInventoryComponent(Context, TargetSide);
+		ResolvedTarget.ShopComponent = ResolveTargetResolverShopComponent(Context, TargetSide);
 		ResolvedTarget.TargetRuleId = NAME_None;
 
 		FGambitEffectTargetResolveResult Result;
