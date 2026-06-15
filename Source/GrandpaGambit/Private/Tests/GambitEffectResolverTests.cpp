@@ -307,6 +307,106 @@ bool FGambitEffectTargetResolverResolveTargetsTest::RunTest(const FString& Param
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitEffectTargetResolverNonDiceExecutionTest,
+	"GrandpaGambit.Effects.TargetResolver.NonDiceExecution",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitEffectTargetResolverNonDiceExecutionTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* SourcePlayer = TestWorld->SpawnActor<AGambitPlayerState>();
+	AGambitPlayerState* TargetPlayer = TestWorld->SpawnActor<AGambitPlayerState>();
+	const bool bPlayersCreated = TestNotNull(TEXT("source player is created"), SourcePlayer)
+		&& TestNotNull(TEXT("target player is created"), TargetPlayer);
+	if (!bPlayersCreated)
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+	UGambitEconomyComponent* SourceEconomy = NewObject<UGambitEconomyComponent>();
+	UGambitEconomyComponent* TargetEconomy = NewObject<UGambitEconomyComponent>();
+	SourceEconomy->InitializeForMatch();
+	TargetEconomy->InitializeForMatch();
+
+	FGambitEffectExecutionContext Context;
+	Context.Hook = EGambitEffectHook::ConsumableUse;
+	Context.SourcePlayer = SourcePlayer;
+	Context.TargetPlayer = TargetPlayer;
+	Context.SourceEconomyComponent = SourceEconomy;
+	Context.TargetEconomyComponent = TargetEconomy;
+
+	UGambitItemEffectDefinition* AddGoldSource = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	AddGoldSource->Target = EGambitEffectTarget::Source;
+	AddGoldSource->Amount = 3.0f;
+	TestTrue(TEXT("AddGold Source executes"), Resolver->ExecuteEffectDefinition(AddGoldSource, Context));
+	TestEqual(TEXT("AddGold Source changes source economy"), SourceEconomy->GetCurrentGold(), 3);
+	TestEqual(TEXT("AddGold Source does not change target economy"), TargetEconomy->GetCurrentGold(), 0);
+
+	UGambitItemEffectDefinition* AddGoldTarget = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	AddGoldTarget->Target = EGambitEffectTarget::Target;
+	AddGoldTarget->Amount = 4.0f;
+	TestTrue(TEXT("AddGold Target executes"), Resolver->ExecuteEffectDefinition(AddGoldTarget, Context));
+	TestEqual(TEXT("AddGold Target changes target economy"), TargetEconomy->GetCurrentGold(), 4);
+
+	TargetEconomy->AddGold(6);
+	UGambitItemEffectDefinition* SpendGoldTarget = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::SpendGold);
+	SpendGoldTarget->Target = EGambitEffectTarget::Target;
+	SpendGoldTarget->Amount = 5.0f;
+	TestTrue(TEXT("SpendGold Target executes"), Resolver->ExecuteEffectDefinition(SpendGoldTarget, Context));
+	TestEqual(TEXT("SpendGold Target spends target economy"), TargetEconomy->GetCurrentGold(), 5);
+
+	UGambitItemEffectDefinition* OpponentAddGold = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	OpponentAddGold->Target = EGambitEffectTarget::Target;
+	OpponentAddGold->TargetRuleId = GambitEffectTargetRules::TargetOpponent;
+	OpponentAddGold->Amount = 7.0f;
+
+	FGambitEffectExecutionContext MissingOpponentContext = Context;
+	MissingOpponentContext.TargetPlayer = nullptr;
+	const int32 TargetGoldBeforeMissingOpponent = TargetEconomy->GetCurrentGold();
+	TestFalse(TEXT("target.opponent AddGold fails without TargetPlayer"), Resolver->ExecuteEffectDefinition(OpponentAddGold, MissingOpponentContext));
+	TestEqual(TEXT("target.opponent failure does not change target economy"), TargetEconomy->GetCurrentGold(), TargetGoldBeforeMissingOpponent);
+
+	TestTrue(TEXT("target.opponent AddGold executes with different TargetPlayer"), Resolver->ExecuteEffectDefinition(OpponentAddGold, Context));
+	TestEqual(TEXT("target.opponent AddGold changes target economy"), TargetEconomy->GetCurrentGold(), TargetGoldBeforeMissingOpponent + 7);
+
+	UGambitItemEffectDefinition* SourceAndTargetGold = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	SourceAndTargetGold->Target = EGambitEffectTarget::SourceAndTarget;
+	SourceAndTargetGold->Amount = 2.0f;
+	const int32 SourceGoldBeforeSourceAndTarget = SourceEconomy->GetCurrentGold();
+	const int32 TargetGoldBeforeSourceAndTarget = TargetEconomy->GetCurrentGold();
+	TestTrue(TEXT("SourceAndTarget AddGold executes"), Resolver->ExecuteEffectDefinition(SourceAndTargetGold, Context));
+	TestEqual(TEXT("SourceAndTarget AddGold changes source economy"), SourceEconomy->GetCurrentGold(), SourceGoldBeforeSourceAndTarget + 2);
+	TestEqual(TEXT("SourceAndTarget AddGold changes target economy"), TargetEconomy->GetCurrentGold(), TargetGoldBeforeSourceAndTarget + 2);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGambitEffectTargetRuleValidationTest,
 	"GrandpaGambit.Items.TargetRuleValidation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

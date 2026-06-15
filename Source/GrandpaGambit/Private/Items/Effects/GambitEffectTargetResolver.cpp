@@ -354,6 +354,28 @@ namespace GambitEffectTargetResolver
 		return ResolveSingleTarget(EffectDefinition, Context, RequestedTarget);
 	}
 
+	FGambitEffectTargetResolveResult ResolveContextTarget(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget RequestedTarget)
+	{
+		const EGambitEffectTarget TargetSide = NormalizeTargetSide(RequestedTarget);
+
+		FGambitResolvedEffectTarget ResolvedTarget;
+		ResolvedTarget.TargetSide = TargetSide;
+		ResolvedTarget.Player = ResolvePlayer(Context, TargetSide);
+		ResolvedTarget.DiceComponent = ResolveDiceComponent(Context, TargetSide);
+		ResolvedTarget.EconomyComponent = ResolveEconomyComponent(Context, TargetSide);
+		ResolvedTarget.InventoryComponent = ResolveInventoryComponent(Context, TargetSide);
+		ResolvedTarget.ShopComponent = ResolveShopComponent(Context, TargetSide);
+		ResolvedTarget.TargetRuleId = NAME_None;
+
+		FGambitEffectTargetResolveResult Result;
+		Result.bSuccess = true;
+		Result.TargetRuleId = NAME_None;
+		Result.Targets.Add(ResolvedTarget);
+		return Result;
+	}
+
 	int32 ResolveSelectedDieHandIndex(
 		const FGambitEffectExecutionContext& Context,
 		const EGambitEffectTarget RequestedTarget,

@@ -196,6 +196,35 @@ namespace
 		return &OutResolveResult.Targets[0];
 	}
 
+	const FGambitResolvedEffectTarget* ResolveEffectTargetForRuntimeMutation(
+		const UGambitItemEffectDefinition* EffectDefinition,
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target,
+		FGambitEffectTargetResolveResult& OutResolveResult)
+	{
+		OutResolveResult = GambitEffectTargetResolver::ResolveEffectTarget(EffectDefinition, Context, Target);
+		if (!OutResolveResult.bSuccess || OutResolveResult.Targets.Num() == 0)
+		{
+			return nullptr;
+		}
+
+		return &OutResolveResult.Targets[0];
+	}
+
+	const FGambitResolvedEffectTarget* ResolveContextSideForRuntimeMutation(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target,
+		FGambitEffectTargetResolveResult& OutResolveResult)
+	{
+		OutResolveResult = GambitEffectTargetResolver::ResolveContextTarget(Context, Target);
+		if (!OutResolveResult.bSuccess || OutResolveResult.Targets.Num() == 0)
+		{
+			return nullptr;
+		}
+
+		return &OutResolveResult.Targets[0];
+	}
+
 	float CalculateDiceAverage(const TArray<FGambitDieRuntimeState>& DiceStates)
 	{
 		if (DiceStates.Num() == 0)
@@ -1951,7 +1980,11 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		return true;
 	}
 	case EGambitItemEffectType::AddGold:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
 			const int32 GoldAfter = EconomyComponent->AddGold(Amount);
@@ -1961,12 +1994,17 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 				Amount,
 				GoldBefore,
 				GoldAfter,
-				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveDebugTargetName(Context, Target))));
+				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::SpendGold:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			const int32 Cost = FMath::Max(0, Amount);
 			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
@@ -1979,11 +2017,12 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 					-Cost,
 					GoldBefore,
 					EconomyComponent->GetCurrentGold(),
-					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveDebugTargetName(Context, Target))));
+					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
 			}
 			return bSpent;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::ModifyDieValue:
 	{
 		FGambitEffectTargetResolveResult TargetResolveResult;
@@ -2121,7 +2160,10 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			ConsumableDefinition = Context.GrantedConsumable.Get();
 		}
 
-		if (UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitInventoryComponent* InventoryComponent = ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
+		if (InventoryComponent)
 		{
 			const bool bAdded = InventoryComponent->AddConsumable(ConsumableDefinition);
 			if (bAdded)
@@ -2134,7 +2176,14 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	}
 	case EGambitItemEffectType::AddTemporaryScoreModifier:
 	{
-		FGambitScoreModifierContext& TargetModifier = Target == EGambitEffectTarget::Target
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget)
+		{
+			return false;
+		}
+
+		FGambitScoreModifierContext& TargetModifier = ResolvedTarget->TargetSide == EGambitEffectTarget::Target
 			? Context.TargetTemporaryScoreModifierDelta
 			: Context.TemporaryScoreModifierDelta;
 		FGambitScoreModifierContext DebugModifier = EffectDefinition->ScoreModifier;
@@ -2144,7 +2193,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			TargetModifier.AdditiveBonus += static_cast<float>(Amount);
 			DebugModifier.AdditiveBonus += static_cast<float>(Amount);
 		}
-		const float TemporaryMultiplier = ResolveContextualMultiplier(EffectDefinition, Context, Target);
+		const float TemporaryMultiplier = ResolveContextualMultiplier(EffectDefinition, Context, ResolvedTarget->TargetSide);
 		if (!FMath::IsNearlyEqual(TemporaryMultiplier, 1.0f))
 		{
 			TargetModifier.Multiplier *= TemporaryMultiplier;
@@ -2155,8 +2204,12 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	}
 	case EGambitItemEffectType::StealScore:
 	{
-		AGambitPlayerState* SourcePlayer = Context.SourcePlayer.Get();
-		AGambitPlayerState* TargetPlayer = Context.TargetPlayer.Get();
+		FGambitEffectTargetResolveResult SourceResolveResult;
+		const FGambitResolvedEffectTarget* SourceResolvedTarget = ResolveContextSideForRuntimeMutation(Context, EGambitEffectTarget::Source, SourceResolveResult);
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* TargetResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, EGambitEffectTarget::Target, TargetResolveResult);
+		AGambitPlayerState* SourcePlayer = SourceResolvedTarget ? SourceResolvedTarget->Player.Get() : nullptr;
+		AGambitPlayerState* TargetPlayer = TargetResolvedTarget ? TargetResolvedTarget->Player.Get() : nullptr;
 		if (!SourcePlayer || !TargetPlayer || SourcePlayer == TargetPlayer)
 		{
 			return false;
@@ -2209,8 +2262,12 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	}
 	case EGambitItemEffectType::StealGold:
 	{
-		UGambitEconomyComponent* SourceEconomy = Context.SourceEconomyComponent.Get();
-		UGambitEconomyComponent* TargetEconomy = Context.TargetEconomyComponent.Get();
+		FGambitEffectTargetResolveResult SourceResolveResult;
+		const FGambitResolvedEffectTarget* SourceResolvedTarget = ResolveContextSideForRuntimeMutation(Context, EGambitEffectTarget::Source, SourceResolveResult);
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* TargetResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, EGambitEffectTarget::Target, TargetResolveResult);
+		UGambitEconomyComponent* SourceEconomy = SourceResolvedTarget ? SourceResolvedTarget->EconomyComponent.Get() : nullptr;
+		UGambitEconomyComponent* TargetEconomy = TargetResolvedTarget ? TargetResolvedTarget->EconomyComponent.Get() : nullptr;
 		if (!SourceEconomy || !TargetEconomy || SourceEconomy == TargetEconomy)
 		{
 			return false;
@@ -2494,20 +2551,54 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		return true;
 	}
 	case EGambitItemEffectType::ModifyShopOfferCount:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopOfferCountDelta += Amount;
 		return true;
+	}
 	case EGambitItemEffectType::AddShopDiscountPercent:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopPurchase.DiscountPercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
 		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop discount applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.DiscountPercent);
 		return true;
+	}
 	case EGambitItemEffectType::AddShopSurchargePercent:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopPurchase.SurchargePercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
 		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop surcharge applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.SurchargePercent);
 		return true;
+	}
 	case EGambitItemEffectType::AddShopFlatPriceDelta:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopPurchase.FlatPriceDelta += Amount;
 		return true;
+	}
 	case EGambitItemEffectType::MakeShopOfferFree:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		if (Context.Hook == EGambitEffectHook::PostShopGenerate)
 		{
 			if (Context.GeneratedShopOffers.Num() == 0)
@@ -2541,68 +2632,124 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		Context.ShopPurchase.FreeReason = GetEffectName(EffectDefinition);
 		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop offer made free Reason=%s"), *Context.ShopPurchase.FreeReason);
 		return true;
+	}
 	case EGambitItemEffectType::AddShopCashbackPercent:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopPurchase.CashbackPercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
 		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Cashback applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.CashbackPercent);
 		return true;
+	}
 	case EGambitItemEffectType::AddPurchaseGoldDelta:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopPurchase.GoldDeltaOnPurchase += Amount;
 		return true;
+	}
 	case EGambitItemEffectType::BlockShopPurchase:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
 		Context.ShopPurchase.bBlockedByEffect = true;
 		Context.ShopPurchase.FailureReason = GetEffectName(EffectDefinition);
 		return true;
+	}
 	case EGambitItemEffectType::ModifyDebtLimit:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			EconomyComponent->SetDebtLimitModifier(GetEffectSourceId(EffectDefinition), Amount);
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::ModifyMaxGold:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			EconomyComponent->SetMaxGoldModifier(GetEffectSourceId(EffectDefinition), Amount);
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::ModifyInterestInterval:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			EconomyComponent->SetInterestIntervalModifier(GetEffectSourceId(EffectDefinition), Amount);
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::ModifyMaxInterest:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			EconomyComponent->SetMaxInterestModifier(GetEffectSourceId(EffectDefinition), Amount);
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::ModifyInterestBonus:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			EconomyComponent->SetInterestBonusModifier(GetEffectSourceId(EffectDefinition), Amount);
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::AddRecurringGoldIncome:
-		if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
 		{
 			EconomyComponent->AddRecurringGoldIncome(EffectDefinition->EffectId, Amount, ResolveDurationRounds(EffectDefinition));
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::SellItem:
-		if (UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitInventoryComponent* InventoryComponent = ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
+		if (InventoryComponent)
 		{
 			UGambitItemDefinition* ItemToSell = ResolveReferencedShopItem(EffectDefinition, Context);
 			if (!InventoryComponent->RemoveItemDefinition(ItemToSell))
 			{
 				return false;
 			}
-			if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+			if (UGambitEconomyComponent* EconomyComponent = ResolvedTarget->EconomyComponent.Get())
 			{
 				const int32 GoldBefore = EconomyComponent->GetCurrentGold();
 				EconomyComponent->AddGold(Amount);
@@ -2617,15 +2764,20 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::SellDie:
-		if (UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitInventoryComponent* InventoryComponent = ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
+		if (InventoryComponent)
 		{
 			UGambitDiceDefinition* RemovedDieDefinition = nullptr;
 			if (!InventoryComponent->RemoveOwnedDieAtIndex(ResolveIntScalar(EffectDefinition, TEXT("DieIndex"), EffectDefinition->DieIndex), RemovedDieDefinition))
 			{
 				return false;
 			}
-			if (UGambitEconomyComponent* EconomyComponent = ResolveEconomyComponent(Context, Target))
+			if (UGambitEconomyComponent* EconomyComponent = ResolvedTarget->EconomyComponent.Get())
 			{
 				const int32 GoldBefore = EconomyComponent->GetCurrentGold();
 				EconomyComponent->AddGold(Amount);
@@ -2640,6 +2792,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			return true;
 		}
 		return false;
+	}
 	case EGambitItemEffectType::AddSharedPoolStock:
 		if (Context.SharedPoolComponent)
 		{

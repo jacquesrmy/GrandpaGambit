@@ -75,6 +75,10 @@ namespace GambitEffectTargetResolver
 		const FGambitEffectExecutionContext& Context,
 		EGambitEffectTarget RequestedTarget);
 
+	GRANDPAGAMBIT_API FGambitEffectTargetResolveResult ResolveContextTarget(
+		const FGambitEffectExecutionContext& Context,
+		EGambitEffectTarget RequestedTarget);
+
 	GRANDPAGAMBIT_API int32 ResolveSelectedDieHandIndex(
 		const FGambitEffectExecutionContext& Context,
 		EGambitEffectTarget RequestedTarget,
