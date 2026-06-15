@@ -13,7 +13,7 @@
 
 namespace
 {
-	const TCHAR* DefaultContentPath()
+	const TCHAR* GetEffectTargetRulesFixupDefaultContentPath()
 	{
 		return TEXT("/Game");
 	}
@@ -118,7 +118,7 @@ UGambitEffectTargetRulesFixupCommandlet::UGambitEffectTargetRulesFixupCommandlet
 
 int32 UGambitEffectTargetRulesFixupCommandlet::Main(const FString& Params)
 {
-	FString ContentPath = DefaultContentPath();
+	FString ContentPath = GetEffectTargetRulesFixupDefaultContentPath();
 	FParse::Value(*Params, TEXT("ContentPath="), ContentPath);
 	if (!ContentPath.StartsWith(TEXT("/")))
 	{

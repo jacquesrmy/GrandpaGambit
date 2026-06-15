@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 
 #include "Data/Validation/GambitDataValidation.h"
@@ -10,11 +11,13 @@
 #include "Items/Data/GambitItemDefinition.h"
 #include "Items/DiceItems/GambitDiceItemDefinition.h"
 #include "Items/Effects/GambitEffectTargetRules.h"
+#include "Items/Effects/GambitEffectTargetResolver.h"
 #include "Items/Effects/GambitEffectResolver.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/Components/GambitEconomyComponent.h"
 #include "Players/Components/GambitInventoryComponent.h"
+#include "Players/States/GambitPlayerState.h"
 #include "Scoring/Calculators/GambitScoreCalculator.h"
 #include "Managers/SharedPool/GambitSharedPoolComponent.h"
 #include "Shop/Components/GambitShopComponent.h"
@@ -135,6 +138,171 @@ bool FGambitEffectTargetRulesRecognitionTest::RunTest(const FString& Parameters)
 
 	TestFalse(TEXT("empty TargetRuleId is not a known rule value"), GambitEffectTargetRules::IsKnownRule(NAME_None));
 	TestFalse(TEXT("unknown target rule is not known"), GambitEffectTargetRules::IsKnownRule(TEXT("unknown.target_rule")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitEffectTargetResolverResolveTargetsTest,
+	"GrandpaGambit.Effects.TargetResolver.ResolveTargets",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitEffectTargetResolverResolveTargetsTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* SourcePlayer = TestWorld->SpawnActor<AGambitPlayerState>();
+	AGambitPlayerState* TargetPlayer = TestWorld->SpawnActor<AGambitPlayerState>();
+	const bool bPlayersCreated = TestNotNull(TEXT("source player is created"), SourcePlayer)
+		&& TestNotNull(TEXT("target player is created"), TargetPlayer);
+	if (!bPlayersCreated)
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	FGambitEffectExecutionContext Context;
+	Context.SourcePlayer = SourcePlayer;
+	Context.TargetPlayer = TargetPlayer;
+	Context.SourceDice = {
+		MakeTestDie(2, 1, true, true, 0),
+		MakeTestDie(4, 1, true, true, 1),
+	};
+	Context.TargetDice = {
+		MakeTestDie(5, 1, true, true, 0),
+		MakeTestDie(6, 1, true, true, 1),
+	};
+	Context.SourceDieHandIndex = 1;
+	Context.TargetDieHandIndex = 0;
+	Context.FirstRerolledDieHandIndexThisRound = 1;
+
+	UGambitItemEffectDefinition* SourceEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	SourceEffect->Target = EGambitEffectTarget::Source;
+
+	const FGambitEffectTargetResolveResult SourceResult = GambitEffectTargetResolver::ResolveEffectTargets(SourceEffect, Context);
+	TestTrue(TEXT("source target resolves successfully without TargetRuleId"), SourceResult.bSuccess);
+	TestEqual(TEXT("source target resolves one target"), SourceResult.Targets.Num(), 1);
+	TestEqual(TEXT("source target side is Source"), SourceResult.Targets[0].TargetSide, EGambitEffectTarget::Source);
+
+	UGambitItemEffectDefinition* TargetEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	TargetEffect->Target = EGambitEffectTarget::Target;
+
+	const FGambitEffectTargetResolveResult TargetResult = GambitEffectTargetResolver::ResolveEffectTargets(TargetEffect, Context);
+	TestTrue(TEXT("target resolves successfully without TargetRuleId"), TargetResult.bSuccess);
+	TestEqual(TEXT("target resolves one target"), TargetResult.Targets.Num(), 1);
+	TestEqual(TEXT("target side is Target"), TargetResult.Targets[0].TargetSide, EGambitEffectTarget::Target);
+
+	UGambitItemEffectDefinition* SourceAndTargetEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	SourceAndTargetEffect->Target = EGambitEffectTarget::SourceAndTarget;
+
+	const FGambitEffectTargetResolveResult SourceAndTargetResult = GambitEffectTargetResolver::ResolveEffectTargets(SourceAndTargetEffect, Context);
+	TestTrue(TEXT("SourceAndTarget resolves successfully"), SourceAndTargetResult.bSuccess);
+	TestEqual(TEXT("SourceAndTarget resolves two targets"), SourceAndTargetResult.Targets.Num(), 2);
+	TestEqual(TEXT("SourceAndTarget first side is Source"), SourceAndTargetResult.Targets[0].TargetSide, EGambitEffectTarget::Source);
+	TestEqual(TEXT("SourceAndTarget second side is Target"), SourceAndTargetResult.Targets[1].TargetSide, EGambitEffectTarget::Target);
+
+	UGambitItemEffectDefinition* SelectedDieEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	SelectedDieEffect->TargetRuleId = GambitEffectTargetRules::SelectedDie;
+
+	const FGambitEffectTargetResolveResult SelectedDieResult = GambitEffectTargetResolver::ResolveEffectTargets(SelectedDieEffect, Context);
+	TestTrue(TEXT("selected_die resolves successfully"), SelectedDieResult.bSuccess);
+	TestTrue(TEXT("selected_die resolves a die index"), SelectedDieResult.Targets.IsValidIndex(0) && SelectedDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0));
+	if (SelectedDieResult.Targets.IsValidIndex(0) && SelectedDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0))
+	{
+		TestEqual(TEXT("selected_die resolves selected source die index"), SelectedDieResult.Targets[0].DiceHandIndexes[0], 1);
+	}
+
+	UGambitItemEffectDefinition* SourceSelectedDieEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	SourceSelectedDieEffect->Target = EGambitEffectTarget::Target;
+	SourceSelectedDieEffect->TargetRuleId = GambitEffectTargetRules::SourceSelectedDie;
+
+	const FGambitEffectTargetResolveResult SourceSelectedDieResult = GambitEffectTargetResolver::ResolveEffectTargets(SourceSelectedDieEffect, Context);
+	TestTrue(TEXT("source.selected_die resolves successfully"), SourceSelectedDieResult.bSuccess);
+	TestEqual(TEXT("source.selected_die resolves source side"), SourceSelectedDieResult.Targets[0].TargetSide, EGambitEffectTarget::Source);
+	TestTrue(TEXT("source.selected_die resolves a die index"), SourceSelectedDieResult.Targets.IsValidIndex(0) && SourceSelectedDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0));
+	if (SourceSelectedDieResult.Targets.IsValidIndex(0) && SourceSelectedDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0))
+	{
+		TestEqual(TEXT("source.selected_die resolves source selected index"), SourceSelectedDieResult.Targets[0].DiceHandIndexes[0], 1);
+	}
+
+	UGambitItemEffectDefinition* TargetSelectedDieEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	TargetSelectedDieEffect->TargetRuleId = GambitEffectTargetRules::TargetSelectedDie;
+
+	const FGambitEffectTargetResolveResult TargetSelectedDieResult = GambitEffectTargetResolver::ResolveEffectTargets(TargetSelectedDieEffect, Context);
+	TestTrue(TEXT("target.selected_die resolves successfully"), TargetSelectedDieResult.bSuccess);
+	TestEqual(TEXT("target.selected_die resolves target side"), TargetSelectedDieResult.Targets[0].TargetSide, EGambitEffectTarget::Target);
+	TestTrue(TEXT("target.selected_die resolves a die index"), TargetSelectedDieResult.Targets.IsValidIndex(0) && TargetSelectedDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0));
+	if (TargetSelectedDieResult.Targets.IsValidIndex(0) && TargetSelectedDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0))
+	{
+		TestEqual(TEXT("target.selected_die resolves target selected index"), TargetSelectedDieResult.Targets[0].DiceHandIndexes[0], 0);
+	}
+
+	UGambitItemEffectDefinition* FirstRerolledEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::PostReroll,
+		EGambitItemEffectType::ModifyDieValue);
+	FirstRerolledEffect->TargetRuleId = GambitEffectTargetRules::FirstRerolledDieThisRound;
+
+	const FGambitEffectTargetResolveResult FirstRerolledResult = GambitEffectTargetResolver::ResolveEffectTargets(FirstRerolledEffect, Context);
+	TestTrue(TEXT("first_rerolled_die_this_round resolves successfully"), FirstRerolledResult.bSuccess);
+	TestTrue(TEXT("first_rerolled_die_this_round resolves a die index"), FirstRerolledResult.Targets.IsValidIndex(0) && FirstRerolledResult.Targets[0].DiceHandIndexes.IsValidIndex(0));
+	if (FirstRerolledResult.Targets.IsValidIndex(0) && FirstRerolledResult.Targets[0].DiceHandIndexes.IsValidIndex(0))
+	{
+		TestEqual(TEXT("first_rerolled_die_this_round resolves first rerolled index"), FirstRerolledResult.Targets[0].DiceHandIndexes[0], 1);
+	}
+
+	UGambitItemEffectDefinition* OpponentEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::StealGold);
+	OpponentEffect->Target = EGambitEffectTarget::Target;
+	OpponentEffect->TargetRuleId = GambitEffectTargetRules::TargetOpponent;
+
+	FGambitEffectExecutionContext MissingOpponentContext = Context;
+	MissingOpponentContext.TargetPlayer = nullptr;
+	const FGambitEffectTargetResolveResult MissingOpponentResult = GambitEffectTargetResolver::ResolveEffectTargets(OpponentEffect, MissingOpponentContext);
+	TestFalse(TEXT("target.opponent fails without valid target player"), MissingOpponentResult.bSuccess);
+	TestFalse(TEXT("target.opponent failure reason is readable"), MissingOpponentResult.FailureReason.IsEmpty());
+
+	const FGambitEffectTargetResolveResult OpponentResult = GambitEffectTargetResolver::ResolveEffectTargets(OpponentEffect, Context);
+	TestTrue(TEXT("target.opponent succeeds with different target player"), OpponentResult.bSuccess);
+	TestEqual(TEXT("target.opponent resolves target side"), OpponentResult.Targets[0].TargetSide, EGambitEffectTarget::Target);
+	TestTrue(TEXT("target.opponent resolves target player"), OpponentResult.Targets[0].Player.Get() == TargetPlayer);
+
+	UGambitItemEffectDefinition* UnknownRuleEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	UnknownRuleEffect->TargetRuleId = TEXT("unknown.target_rule");
+
+	const FGambitEffectTargetResolveResult UnknownRuleResult = GambitEffectTargetResolver::ResolveEffectTargets(UnknownRuleEffect, Context);
+	TestFalse(TEXT("unknown TargetRuleId fails cleanly"), UnknownRuleResult.bSuccess);
+	TestTrue(TEXT("unknown TargetRuleId failure reason mentions unknown"), UnknownRuleResult.FailureReason.Contains(TEXT("Unknown")));
+
+	TestWorld->DestroyWorld(false);
 	return true;
 }
 

@@ -5,7 +5,7 @@
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
-#include "Items/Effects/GambitEffectTargetRules.h"
+#include "Items/Effects/GambitEffectTargetResolver.h"
 #include "Items/Effects/GambitItemEffect.h"
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/Components/GambitEconomyComponent.h"
@@ -181,68 +181,19 @@ namespace
 		DieState.ScoreContributionValue = DieState.EffectiveValue;
 	}
 
-	int32 ResolveSelectedDieHandIndex(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
-	{
-		return Target == EGambitEffectTarget::Target ? Context.TargetDieHandIndex : Context.SourceDieHandIndex;
-	}
-
-	TArray<int32> BuildAffectedDieIndexes(
+	const FGambitResolvedEffectTarget* ResolveEffectTargetForDiceMutation(
 		const UGambitItemEffectDefinition* EffectDefinition,
 		const FGambitEffectExecutionContext& Context,
 		const EGambitEffectTarget Target,
-		const TArray<FGambitDieRuntimeState>& DiceStates)
+		FGambitEffectTargetResolveResult& OutResolveResult)
 	{
-		TArray<int32> Indexes;
-		if (DiceStates.Num() == 0)
+		OutResolveResult = GambitEffectTargetResolver::ResolveEffectTarget(EffectDefinition, Context, Target);
+		if (!OutResolveResult.bSuccess || OutResolveResult.Targets.Num() == 0)
 		{
-			return Indexes;
+			return nullptr;
 		}
 
-		if (EffectDefinition && EffectDefinition->bAffectAllDice)
-		{
-			Indexes.Reserve(DiceStates.Num());
-			for (int32 Index = 0; Index < DiceStates.Num(); ++Index)
-			{
-				Indexes.Add(Index);
-			}
-			return Indexes;
-		}
-
-		if (EffectDefinition && GambitEffectTargetRules::IsSelectedDieRule(EffectDefinition->TargetRuleId))
-		{
-			const int32 SelectedDieIndex = ResolveSelectedDieHandIndex(Context, Target);
-			if (DiceStates.IsValidIndex(SelectedDieIndex))
-			{
-				Indexes.Add(SelectedDieIndex);
-			}
-			return Indexes;
-		}
-
-		if (EffectDefinition && GambitEffectTargetRules::IsFirstRerolledDieRule(EffectDefinition->TargetRuleId))
-		{
-			const int32 FirstRerolledDieIndex = Context.FirstRerolledDieHandIndexThisRound;
-			if (DiceStates.IsValidIndex(FirstRerolledDieIndex))
-			{
-				Indexes.Add(FirstRerolledDieIndex);
-			}
-			return Indexes;
-		}
-
-		const int32 RequestedIndex = ResolveIntScalar(EffectDefinition, TEXT("DieIndex"), EffectDefinition ? EffectDefinition->DieIndex : INDEX_NONE);
-		if (DiceStates.IsValidIndex(RequestedIndex))
-		{
-			Indexes.Add(RequestedIndex);
-			return Indexes;
-		}
-
-		if (Target == EGambitEffectTarget::Source && DiceStates.IsValidIndex(Context.SourceDieHandIndex))
-		{
-			Indexes.Add(Context.SourceDieHandIndex);
-			return Indexes;
-		}
-
-		Indexes.Add(0);
-		return Indexes;
+		return &OutResolveResult.Targets[0];
 	}
 
 	float CalculateDiceAverage(const TArray<FGambitDieRuntimeState>& DiceStates)
@@ -801,7 +752,13 @@ namespace
 			else if (ScalarParameter.Key == TEXT("AmountPerOtherMatchingDie"))
 			{
 				Amount += ScalarParameter.Value * static_cast<float>(
-					CountMatchingDiceForEffect(DiceStates, EffectDefinition, ResolveSelectedDieHandIndex(Context, Target)));
+					CountMatchingDiceForEffect(
+						DiceStates,
+						EffectDefinition,
+						GambitEffectTargetResolver::ResolveSelectedDieHandIndex(
+							Context,
+							Target,
+							EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None)));
 			}
 			else if (ScalarParameter.Key == TEXT("AmountPerOwnedDie"))
 			{
@@ -1678,7 +1635,7 @@ bool UGambitEffectResolver::IsConditionMet(const FGambitEffectConditionDefinitio
 	}
 	case EGambitEffectConditionType::SourceDieComparedToAverage:
 	{
-		const int32 SourceDieIndex = Target == EGambitEffectTarget::Target ? Context.TargetDieHandIndex : Context.SourceDieHandIndex;
+		const int32 SourceDieIndex = GambitEffectTargetResolver::ResolveSelectedDieHandIndex(Context, Target, NAME_None);
 		if (!DiceStates.IsValidIndex(SourceDieIndex) || DiceStates.Num() == 0)
 		{
 			bResult = false;
@@ -1797,7 +1754,7 @@ bool UGambitEffectResolver::IsConditionMet(const FGambitEffectConditionDefinitio
 		}
 		if (!bResult)
 		{
-			const int32 SelectedDieIndex = ResolveSelectedDieHandIndex(Context, Target);
+			const int32 SelectedDieIndex = GambitEffectTargetResolver::ResolveSelectedDieHandIndex(Context, Target, NAME_None);
 			if (DiceStates.IsValidIndex(SelectedDieIndex))
 			{
 				bResult = DoesDieHaveTag(DiceStates[SelectedDieIndex], Condition.Tag);
@@ -2029,15 +1986,16 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		return false;
 	case EGambitItemEffectType::ModifyDieValue:
 	{
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
-		for (const int32 DieIndex : Indexes)
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
+		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
 			if (DiceComponent)
 			{
@@ -2050,21 +2008,22 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 				RefreshRuntimeScoreContribution(DieState);
 			}
 		}
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::SetDieValue:
 	{
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
 		const int32 DieValue = ResolveIntScalar(EffectDefinition, TEXT("DieValue"), EffectDefinition->DieValue);
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
-		for (const int32 DieIndex : Indexes)
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
+		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
 			if (DiceComponent)
 			{
@@ -2077,20 +2036,21 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 				RefreshRuntimeScoreContribution(DieState);
 			}
 		}
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::LockDie:
 	{
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
-		for (const int32 DieIndex : Indexes)
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
+		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
 			if (DiceComponent)
 			{
@@ -2104,21 +2064,22 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 				}
 			}
 		}
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::RerollDie:
 	{
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
 		bool bRerolledAny = false;
-		for (const int32 DieIndex : Indexes)
+		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
 			const TArray<FGambitDieRuntimeState>& CurrentDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
 			if (!CurrentDiceStates.IsValidIndex(DieIndex))
@@ -2145,7 +2106,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			bRerolledAny = true;
 		}
 
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return bRerolledAny;
 	}
 	case EGambitItemEffectType::AddReroll:
@@ -2298,15 +2259,16 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			return false;
 		}
 
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
-		const int32 DieIndex = Indexes[0];
-		if (UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target))
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		const int32 DieIndex = ResolvedTarget->DiceHandIndexes[0];
+		if (UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get())
 		{
 			DiceComponent->RemoveDieAtIndex(DieIndex);
 		}
@@ -2314,26 +2276,27 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		{
 			DiceStates.RemoveAt(DieIndex);
 		}
-		if (UGambitInventoryComponent* InventoryComponent = ResolveInventoryComponent(Context, Target))
+		if (UGambitInventoryComponent* InventoryComponent = ResolvedTarget->InventoryComponent.Get())
 		{
 			UGambitDiceDefinition* RemovedDieDefinition = nullptr;
 			InventoryComponent->RemoveOwnedDieAtIndex(DieIndex, RemovedDieDefinition);
 		}
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::TransformDiceForRound:
 	{
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
 		UGambitDiceDefinition* DiceDefinition = EffectDefinition->TransformDiceDefinition.Get();
-		for (const int32 DieIndex : Indexes)
+		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
 			if (DiceComponent && DiceDefinition)
 			{
@@ -2372,12 +2335,19 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 				RefreshRuntimeScoreContribution(DieState);
 			}
 		}
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::AddTemporaryDie:
 	{
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget)
+		{
+			return false;
+		}
+
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
 		if (!DiceComponent)
 		{
 			return false;
@@ -2385,7 +2355,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 
 		const bool bRollImmediately = ResolveScalar(EffectDefinition, TEXT("RollImmediately"), 1.0f) > 0.0f;
 		DiceComponent->AddTemporaryDie(EffectDefinition->TransformDiceDefinition.Get(), bRollImmediately, Context.RandomStream);
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::SetDieScoreContributionValue:
@@ -2398,15 +2368,16 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	case EGambitItemEffectType::AddDieRuntimeTags:
 	case EGambitItemEffectType::RemoveDieRuntimeTags:
 	{
-		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, Target);
-		const TArray<int32> Indexes = BuildAffectedDieIndexes(EffectDefinition, Context, Target, DiceStates);
-		if (Indexes.Num() == 0)
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForDiceMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		if (!ResolvedTarget || ResolvedTarget->DiceHandIndexes.Num() == 0)
 		{
 			return false;
 		}
 
-		UGambitDiceComponent* DiceComponent = ResolveDiceComponent(Context, Target);
-		for (const int32 DieIndex : Indexes)
+		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
+		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
+		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
 			switch (EffectDefinition->EffectType)
 			{
@@ -2519,7 +2490,7 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			}
 		}
 
-		RefreshDiceSnapshot(Context, Target);
+		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
 	case EGambitItemEffectType::ModifyShopOfferCount:

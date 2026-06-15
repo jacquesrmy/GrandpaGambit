@@ -15,17 +15,17 @@
 
 namespace
 {
-	const TCHAR* DefaultReportPath()
+	const TCHAR* GetEffectTargetRulesAuditDefaultReportPath()
 	{
 		return TEXT("Docs/Audits/EffectTargetRulesAudit.md");
 	}
 
-	const TCHAR* DefaultContentPath()
+	const TCHAR* GetEffectTargetRulesAuditDefaultContentPath()
 	{
 		return TEXT("/Game");
 	}
 
-	FString EscapeMarkdownCell(FString Value)
+	FString EscapeEffectTargetRulesAuditMarkdownCell(FString Value)
 	{
 		Value.ReplaceInline(TEXT("|"), TEXT("\\|"));
 		Value.ReplaceInline(TEXT("\r"), TEXT(" "));
@@ -33,17 +33,17 @@ namespace
 		return Value;
 	}
 
-	FString FormatBool(const bool bValue)
+	FString FormatEffectTargetRulesAuditBool(const bool bValue)
 	{
 		return bValue ? TEXT("Yes") : TEXT("No");
 	}
 
-	FString FormatName(const FName Name)
+	FString FormatEffectTargetRulesAuditName(const FName Name)
 	{
 		return Name.IsNone() ? TEXT("(empty)") : Name.ToString();
 	}
 
-	FString GetAssetPath(const UObject* Asset, const FAssetData& AssetData)
+	FString GetEffectTargetRulesAuditAssetPath(const UObject* Asset, const FAssetData& AssetData)
 	{
 		if (Asset)
 		{
@@ -53,12 +53,12 @@ namespace
 		return AssetData.GetSoftObjectPath().ToString();
 	}
 
-	FString GetObjectPath(const UObject* Object)
+	FString GetEffectTargetRulesAuditObjectPath(const UObject* Object)
 	{
 		return Object ? Object->GetPathName() : FString(TEXT("None"));
 	}
 
-	FString JoinSortedValues(const TSet<FString>& Values)
+	FString JoinEffectTargetRulesAuditSortedValues(const TSet<FString>& Values)
 	{
 		TArray<FString> SortedValues = Values.Array();
 		SortedValues.Sort();
@@ -122,8 +122,8 @@ namespace
 	FEffectTargetRuleAuditRecord MakeAuditRecord(const UGambitItemEffectDefinition* EffectDefinition)
 	{
 		FEffectTargetRuleAuditRecord Record;
-		Record.AssetPath = GetObjectPath(EffectDefinition);
-		Record.EffectId = FormatName(EffectDefinition ? EffectDefinition->EffectId : NAME_None);
+		Record.AssetPath = GetEffectTargetRulesAuditObjectPath(EffectDefinition);
+		Record.EffectId = FormatEffectTargetRulesAuditName(EffectDefinition ? EffectDefinition->EffectId : NAME_None);
 		Record.EffectType = EffectDefinition
 			? GambitDataValidation::EffectTypeToString(EffectDefinition->EffectType)
 			: TEXT("None");
@@ -140,7 +140,7 @@ namespace
 		Record.bFirstRerolledDieRule = GambitEffectTargetRules::IsFirstRerolledDieRule(TargetRuleId);
 		Record.bOpponentRule = GambitEffectTargetRules::IsOpponentRule(TargetRuleId);
 		Record.bRequiresSelectedDie = GambitEffectTargetRules::RequiresSelectedDie(TargetRuleId);
-		Record.TargetRuleId = FormatName(TargetRuleId);
+		Record.TargetRuleId = FormatEffectTargetRulesAuditName(TargetRuleId);
 		Record.Status = GetTargetRuleStatus(TargetRuleId, Record.bKnownRule);
 		Record.Description = GambitEffectTargetRules::DescribeRule(TargetRuleId);
 		return Record;
@@ -160,7 +160,7 @@ namespace
 			return;
 		}
 
-		const FString EffectPath = GetObjectPath(EffectDefinition);
+		const FString EffectPath = GetEffectTargetRulesAuditObjectPath(EffectDefinition);
 		if (int32* ExistingIndex = RecordIndexByEffectPath.Find(EffectPath))
 		{
 			Records[*ExistingIndex].UsedBy.Add(UsedBy);
@@ -202,7 +202,7 @@ namespace
 		CountsByTargetRuleId.GenerateKeyArray(TargetRuleIds);
 		TargetRuleIds.Sort([](const FName Left, const FName Right)
 		{
-			return FormatName(Left) < FormatName(Right);
+			return FormatEffectTargetRulesAuditName(Left) < FormatEffectTargetRulesAuditName(Right);
 		});
 
 		Lines.Add(TEXT("| TargetRuleId | Count | Status | Description | SelectedDie | FirstRerolledDie | Opponent | RequiresSelectedDie |"));
@@ -212,14 +212,14 @@ namespace
 			const bool bKnownRule = GambitEffectTargetRules::IsKnownRule(TargetRuleId);
 			Lines.Add(FString::Printf(
 				TEXT("| `%s` | %d | %s | %s | %s | %s | %s | %s |"),
-				*EscapeMarkdownCell(FormatName(TargetRuleId)),
+				*EscapeEffectTargetRulesAuditMarkdownCell(FormatEffectTargetRulesAuditName(TargetRuleId)),
 				CountsByTargetRuleId[TargetRuleId],
 				*GetTargetRuleStatus(TargetRuleId, bKnownRule),
-				*EscapeMarkdownCell(GambitEffectTargetRules::DescribeRule(TargetRuleId)),
-				*FormatBool(GambitEffectTargetRules::IsSelectedDieRule(TargetRuleId)),
-				*FormatBool(GambitEffectTargetRules::IsFirstRerolledDieRule(TargetRuleId)),
-				*FormatBool(GambitEffectTargetRules::IsOpponentRule(TargetRuleId)),
-				*FormatBool(GambitEffectTargetRules::RequiresSelectedDie(TargetRuleId))));
+				*EscapeEffectTargetRulesAuditMarkdownCell(GambitEffectTargetRules::DescribeRule(TargetRuleId)),
+				*FormatEffectTargetRulesAuditBool(GambitEffectTargetRules::IsSelectedDieRule(TargetRuleId)),
+				*FormatEffectTargetRulesAuditBool(GambitEffectTargetRules::IsFirstRerolledDieRule(TargetRuleId)),
+				*FormatEffectTargetRulesAuditBool(GambitEffectTargetRules::IsOpponentRule(TargetRuleId)),
+				*FormatEffectTargetRulesAuditBool(GambitEffectTargetRules::RequiresSelectedDie(TargetRuleId))));
 		}
 		Lines.Add(TEXT(""));
 	}
@@ -241,19 +241,19 @@ namespace
 		{
 			Lines.Add(FString::Printf(
 				TEXT("| `%s` | `%s` | %s | %s | %s | `%s` | %s | %s | %s | %s | %s | %s | `%s` |"),
-				*EscapeMarkdownCell(Record.AssetPath),
-				*EscapeMarkdownCell(Record.EffectId),
-				*EscapeMarkdownCell(Record.EffectType),
-				*EscapeMarkdownCell(Record.Hook),
-				*EscapeMarkdownCell(Record.Target),
-				*EscapeMarkdownCell(Record.TargetRuleId),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.AssetPath),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.EffectId),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.EffectType),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.Hook),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.Target),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.TargetRuleId),
 				*Record.Status,
-				*FormatBool(Record.bRequiresSelectedDie),
-				*FormatBool(Record.bOpponentRule),
-				*FormatBool(Record.bSelectedDieRule),
-				*FormatBool(Record.bFirstRerolledDieRule),
-				*EscapeMarkdownCell(Record.Description),
-				*EscapeMarkdownCell(JoinSortedValues(Record.UsedBy))));
+				*FormatEffectTargetRulesAuditBool(Record.bRequiresSelectedDie),
+				*FormatEffectTargetRulesAuditBool(Record.bOpponentRule),
+				*FormatEffectTargetRulesAuditBool(Record.bSelectedDieRule),
+				*FormatEffectTargetRulesAuditBool(Record.bFirstRerolledDieRule),
+				*EscapeEffectTargetRulesAuditMarkdownCell(Record.Description),
+				*EscapeEffectTargetRulesAuditMarkdownCell(JoinEffectTargetRulesAuditSortedValues(Record.UsedBy))));
 		}
 		Lines.Add(TEXT(""));
 	}
@@ -273,14 +273,14 @@ int32 UGambitEffectTargetRulesAuditCommandlet::Main(const FString& Params)
 	FParse::Value(*Params, TEXT("ReportPath="), ReportPath);
 	if (ReportPath.IsEmpty())
 	{
-		ReportPath = FPaths::Combine(FPaths::ProjectDir(), DefaultReportPath());
+		ReportPath = FPaths::Combine(FPaths::ProjectDir(), GetEffectTargetRulesAuditDefaultReportPath());
 	}
 	else if (FPaths::IsRelative(ReportPath))
 	{
 		ReportPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), ReportPath);
 	}
 
-	FString ContentPath = DefaultContentPath();
+	FString ContentPath = GetEffectTargetRulesAuditDefaultContentPath();
 	FParse::Value(*Params, TEXT("ContentPath="), ContentPath);
 	if (!ContentPath.StartsWith(TEXT("/")))
 	{
@@ -332,7 +332,7 @@ int32 UGambitEffectTargetRulesAuditCommandlet::Main(const FString& Params)
 			continue;
 		}
 
-		const FString AssetPath = GetAssetPath(Asset, AssetData);
+		const FString AssetPath = GetEffectTargetRulesAuditAssetPath(Asset, AssetData);
 		if (const UGambitItemEffectDefinition* EffectDefinition = Cast<UGambitItemEffectDefinition>(Asset))
 		{
 			StandaloneEffectAssetCount++;
