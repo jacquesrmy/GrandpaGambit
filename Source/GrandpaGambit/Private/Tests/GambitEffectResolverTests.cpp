@@ -2540,6 +2540,22 @@ bool FGambitB3BribeOpponentTargetTest::RunTest(const FString& Parameters)
 	UGambitConsumableDefinition* Bribe = NewObject<UGambitConsumableDefinition>();
 	Bribe->bCanTargetOpponent = true;
 
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* SourcePlayer = TestWorld->SpawnActor<AGambitPlayerState>();
+	AGambitPlayerState* TargetPlayer = TestWorld->SpawnActor<AGambitPlayerState>();
+	const bool bPlayersCreated = TestNotNull(TEXT("source player is created"), SourcePlayer)
+		&& TestNotNull(TEXT("target player is created"), TargetPlayer);
+	if (!bPlayersCreated)
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
 	FGambitEffectConditionDefinition HasGold;
 	HasGold.ConditionType = EGambitEffectConditionType::GoldThreshold;
 	HasGold.Comparison = EGambitEffectComparison::GreaterOrEqual;
@@ -2566,12 +2582,15 @@ bool FGambitB3BribeOpponentTargetTest::RunTest(const FString& Parameters)
 
 	FGambitEffectExecutionContext Context;
 	Context.Hook = EGambitEffectHook::ConsumableUse;
+	Context.SourcePlayer = SourcePlayer;
+	Context.TargetPlayer = TargetPlayer;
 	Context.SourceEconomyComponent = SourceEconomy;
 	Context.TargetEconomyComponent = TargetEconomy;
 	Resolver->ExecuteItemEffects(Bribe, Context);
 
 	TestEqual(TEXT("bribe spends 5 source gold"), SourceEconomy->GetCurrentGold(), SourceGoldBefore - 5);
 	TestEqual(TEXT("bribe applies target x0.9 temporary multiplier"), Context.TargetTemporaryScoreModifierDelta.Multiplier, 0.9f);
+	TestWorld->DestroyWorld(false);
 	return true;
 }
 
