@@ -24,6 +24,33 @@ Effect types directement utiles :
 - Shared pool : `AddSharedPoolStock`, `SetSharedPoolPurchaseLimit`, `SetSharedPoolItemUnavailable`
 - Copie simple : `CopyLastTriggeredEffect`
 
+## Negative effect categories and defenses
+
+`bNegativeEffect` remains the flag that marks an effect as harmful. New assets should also set `NegativeEffectCategories` so defenses can filter what they block.
+
+Available categories:
+
+- `Generic`
+- `GoldSteal`
+- `GoldLoss`
+- `ScorePenalty`
+- `ScoreSteal`
+- `DieValueReduction`
+- `DieDestroyOrRemove`
+- `ForcedReroll`
+- `LockModification`
+- `ShopBlock`
+- `SharedPoolSabotage`
+
+Configuration rules:
+
+- For a negative effect, fill `NegativeEffectCategories` with one or more concrete categories.
+- If `bNegativeEffect` is true and `NegativeEffectCategories` is empty, the resolver falls back to `Generic`; validation emits a warning.
+- For a defense, use `EffectType = PreventNegativeEffect` and fill `PreventedNegativeEffectCategories` with the categories it can block.
+- A `PreventNegativeEffect` defense with an empty `PreventedNegativeEffectCategories` list is intentionally global and keeps legacy behavior.
+- `PreventNegativeEffectBlockCount = 0` means unlimited blocks within the current effect context; values above 0 consume one charge per blocked effect.
+- Do not put `None` inside either category array. Leave the array empty for fallback/global behavior.
+
 Ajouts B2 finalises :
 
 - Score : `MultiplyDiceContribution` ajoute un bonus de contribution par de dans le breakdown, sans multiplier le score final.

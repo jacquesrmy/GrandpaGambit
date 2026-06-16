@@ -104,6 +104,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	bool bNegativeEffect = false;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect|Negative")
+	TArray<EGambitNegativeEffectCategory> NegativeEffectCategories;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect|Defense")
+	TArray<EGambitNegativeEffectCategory> PreventedNegativeEffectCategories;
+
+	// 0 keeps legacy behavior: protection remains active for every matching negative effect in this context.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect|Defense", meta = (ClampMin = "0"))
+	int32 PreventNegativeEffectBlockCount = 0;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Effect")
 	TMap<FName, float> ScalarParameters;
 };

@@ -106,6 +106,23 @@ enum class EGambitItemEffectType : uint8
 };
 
 UENUM(BlueprintType)
+enum class EGambitNegativeEffectCategory : uint8
+{
+	None,
+	Generic,
+	GoldSteal,
+	GoldLoss,
+	ScorePenalty,
+	ScoreSteal,
+	DieValueReduction,
+	DieDestroyOrRemove,
+	ForcedReroll,
+	LockModification,
+	ShopBlock,
+	SharedPoolSabotage
+};
+
+UENUM(BlueprintType)
 enum class EGambitEffectConditionType : uint8
 {
 	None,
@@ -211,6 +228,128 @@ struct GRANDPAGAMBIT_API FGambitEffectConditionDefinition
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Condition")
 	bool bInvert = false;
+};
+
+USTRUCT(BlueprintType)
+struct GRANDPAGAMBIT_API FGambitNegativeEffectProtection
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	TArray<EGambitNegativeEffectCategory> ProtectedCategories;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	bool bProtectsAllCategories = false;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	bool bUnlimitedCharges = true;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	int32 RemainingCharges = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	FName SourceEffectId;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	FString SourceName;
+
+	bool HasRemainingCharges() const
+	{
+		return bUnlimitedCharges || RemainingCharges > 0;
+	}
+
+	bool CanPrevent(const TArray<EGambitNegativeEffectCategory>& NegativeCategories) const
+	{
+		if (!HasRemainingCharges())
+		{
+			return false;
+		}
+
+		if (bProtectsAllCategories)
+		{
+			return true;
+		}
+
+		for (const EGambitNegativeEffectCategory Category : NegativeCategories)
+		{
+			if (Category != EGambitNegativeEffectCategory::None && ProtectedCategories.Contains(Category))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool TryPrevent(const TArray<EGambitNegativeEffectCategory>& NegativeCategories)
+	{
+		if (!CanPrevent(NegativeCategories))
+		{
+			return false;
+		}
+
+		if (!bUnlimitedCharges)
+		{
+			RemainingCharges = FMath::Max(0, RemainingCharges - 1);
+		}
+
+		return true;
+	}
+};
+
+USTRUCT(BlueprintType)
+struct GRANDPAGAMBIT_API FGambitNegativeEffectProtectionState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Protection")
+	TArray<FGambitNegativeEffectProtection> Protections;
+
+	void AddProtection(
+		const TArray<EGambitNegativeEffectCategory>& ProtectedCategories,
+		const bool bProtectsAllCategories,
+		const int32 ChargeCount,
+		const FName SourceEffectId,
+		const FString& SourceName)
+	{
+		FGambitNegativeEffectProtection Protection;
+		Protection.ProtectedCategories = ProtectedCategories;
+		Protection.bProtectsAllCategories = bProtectsAllCategories;
+		Protection.bUnlimitedCharges = ChargeCount <= 0;
+		Protection.RemainingCharges = Protection.bUnlimitedCharges ? 0 : ChargeCount;
+		Protection.SourceEffectId = SourceEffectId;
+		Protection.SourceName = SourceName;
+		Protections.Add(Protection);
+	}
+
+	bool CanPrevent(const TArray<EGambitNegativeEffectCategory>& NegativeCategories) const
+	{
+		for (const FGambitNegativeEffectProtection& Protection : Protections)
+		{
+			if (Protection.CanPrevent(NegativeCategories))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool TryPrevent(
+		const TArray<EGambitNegativeEffectCategory>& NegativeCategories,
+		FGambitNegativeEffectProtection& OutProtection)
+	{
+		for (FGambitNegativeEffectProtection& Protection : Protections)
+		{
+			if (Protection.TryPrevent(NegativeCategories))
+			{
+				OutProtection = Protection;
+				return true;
+			}
+		}
+
+		return false;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -357,7 +496,7 @@ struct GRANDPAGAMBIT_API FGambitEffectExecutionContext
 	int32 LastAffectedDieValueAfter = INDEX_NONE;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")
-	bool bPreventNegativeEffects = false;
+	FGambitNegativeEffectProtectionState NegativeEffectProtection;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")
 	FRandomStream RandomStream;

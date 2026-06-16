@@ -137,6 +137,127 @@ namespace
 		return EffectDefinition && GambitEffectTargetRules::IsOpponentRule(EffectDefinition->TargetRuleId);
 	}
 
+	bool HasConcreteNegativeEffectCategory(const TArray<EGambitNegativeEffectCategory>& Categories)
+	{
+		return Categories.ContainsByPredicate([](const EGambitNegativeEffectCategory Category)
+		{
+			return IsValidEnumValue(Category) && Category != EGambitNegativeEffectCategory::None;
+		});
+	}
+
+	void ValidateNegativeEffectCategoryList(
+		const TArray<EGambitNegativeEffectCategory>& Categories,
+		const FString& CategoryLabel,
+		TArray<FGambitDataValidationIssue>& OutIssues)
+	{
+		for (int32 CategoryIndex = 0; CategoryIndex < Categories.Num(); ++CategoryIndex)
+		{
+			const EGambitNegativeEffectCategory Category = Categories[CategoryIndex];
+			const FString EntryLabel = FString::Printf(TEXT("%s[%d]"), *CategoryLabel, CategoryIndex);
+			if (!IsValidEnumValue(Category))
+			{
+				AddError(OutIssues, FString::Printf(TEXT("%s has an invalid negative effect category."), *EntryLabel));
+				continue;
+			}
+
+			if (Category == EGambitNegativeEffectCategory::None)
+			{
+				AddWarning(
+					OutIssues,
+					FString::Printf(
+						TEXT("%s uses category None; leave the category list empty for fallback/global behavior instead."),
+						*EntryLabel));
+			}
+		}
+	}
+
+	void ValidateNegativeEffectDefenseConfiguration(
+		const UGambitItemEffectDefinition* EffectDefinition,
+		const FString& EffectLabel,
+		TArray<FGambitDataValidationIssue>& OutIssues)
+	{
+		if (!EffectDefinition)
+		{
+			return;
+		}
+
+		ValidateNegativeEffectCategoryList(EffectDefinition->NegativeEffectCategories, FString::Printf(TEXT("%s NegativeEffectCategories"), *EffectLabel), OutIssues);
+		ValidateNegativeEffectCategoryList(EffectDefinition->PreventedNegativeEffectCategories, FString::Printf(TEXT("%s PreventedNegativeEffectCategories"), *EffectLabel), OutIssues);
+
+		const bool bIsDefense = EffectDefinition->EffectType == EGambitItemEffectType::PreventNegativeEffect;
+		if (EffectDefinition->bNegativeEffect && !HasConcreteNegativeEffectCategory(EffectDefinition->NegativeEffectCategories))
+		{
+			AddWarning(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s is marked bNegativeEffect but has no explicit negative category; resolver will use Generic fallback."),
+					*EffectLabel));
+		}
+
+		if (!EffectDefinition->bNegativeEffect && EffectDefinition->NegativeEffectCategories.Num() > 0)
+		{
+			AddWarning(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s declares NegativeEffectCategories but is not marked bNegativeEffect; the categories will be ignored."),
+					*EffectLabel));
+		}
+
+		if (bIsDefense)
+		{
+			if (EffectDefinition->bNegativeEffect)
+			{
+				AddWarning(
+					OutIssues,
+					FString::Printf(TEXT("%s is a PreventNegativeEffect defense but is also marked bNegativeEffect."), *EffectLabel));
+			}
+
+			if (EffectDefinition->NegativeEffectCategories.Num() > 0)
+			{
+				AddWarning(
+					OutIssues,
+					FString::Printf(
+						TEXT("%s is a defense; use PreventedNegativeEffectCategories instead of NegativeEffectCategories."),
+						*EffectLabel));
+			}
+
+			if (EffectDefinition->PreventedNegativeEffectCategories.Num() > 0
+				&& !HasConcreteNegativeEffectCategory(EffectDefinition->PreventedNegativeEffectCategories))
+			{
+				AddWarning(
+					OutIssues,
+					FString::Printf(
+						TEXT("%s has a typed defense filter with no concrete category; it will not add protection."),
+						*EffectLabel));
+			}
+
+			if (EffectDefinition->PreventNegativeEffectBlockCount < 0)
+			{
+				AddError(OutIssues, FString::Printf(TEXT("%s has a negative PreventNegativeEffectBlockCount."), *EffectLabel));
+			}
+		}
+		else
+		{
+			if (EffectDefinition->PreventedNegativeEffectCategories.Num() > 0)
+			{
+				AddWarning(
+					OutIssues,
+					FString::Printf(
+						TEXT("%s declares PreventedNegativeEffectCategories but is not a PreventNegativeEffect defense."),
+						*EffectLabel));
+			}
+
+			if (EffectDefinition->PreventNegativeEffectBlockCount > 0)
+			{
+				AddWarning(
+					OutIssues,
+					FString::Printf(
+						TEXT("%s declares PreventNegativeEffectBlockCount but is not a PreventNegativeEffect defense."),
+						*EffectLabel));
+			}
+		}
+	}
+
 	bool IsShopContextHook(const EGambitEffectHook Hook)
 	{
 		switch (Hook)
@@ -889,6 +1010,7 @@ void GambitDataValidation::ValidateEffectDefinition(
 				*FullEffectLabel));
 	}
 
+	ValidateNegativeEffectDefenseConfiguration(EffectDefinition, FullEffectLabel, OutIssues);
 	ValidateEffectParameters(EffectDefinition, FullEffectLabel, OutIssues);
 	ValidateEffectConditions(EffectDefinition, FullEffectLabel, OutIssues);
 }

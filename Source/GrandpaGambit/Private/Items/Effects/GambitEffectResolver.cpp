@@ -75,6 +75,42 @@ namespace
 		return DiceDefinition->GetResolvedDiceId().ToString();
 	}
 
+	FString NegativeEffectCategoryToString(const EGambitNegativeEffectCategory Category)
+	{
+		if (const UEnum* Enum = StaticEnum<EGambitNegativeEffectCategory>())
+		{
+			return Enum->GetNameStringByValue(static_cast<int64>(Category));
+		}
+
+		return TEXT("Unknown");
+	}
+
+	void AddUniqueValidNegativeEffectCategory(
+		TArray<EGambitNegativeEffectCategory>& Categories,
+		const EGambitNegativeEffectCategory Category)
+	{
+		if (Category != EGambitNegativeEffectCategory::None)
+		{
+			Categories.AddUnique(Category);
+		}
+	}
+
+	FString NegativeEffectCategoriesToString(const TArray<EGambitNegativeEffectCategory>& Categories)
+	{
+		if (Categories.Num() == 0)
+		{
+			return TEXT("None");
+		}
+
+		TArray<FString> CategoryNames;
+		for (const EGambitNegativeEffectCategory Category : Categories)
+		{
+			CategoryNames.Add(NegativeEffectCategoryToString(Category));
+		}
+
+		return FString::Join(CategoryNames, TEXT(","));
+	}
+
 	float ResolveScalar(const UGambitItemEffectDefinition* EffectDefinition, const FName ParameterName, const float Fallback)
 	{
 		if (!EffectDefinition)
@@ -98,6 +134,65 @@ namespace
 	int32 ResolveDurationRounds(const UGambitItemEffectDefinition* EffectDefinition)
 	{
 		return FMath::Max(0, ResolveIntScalar(EffectDefinition, TEXT("Rounds"), EffectDefinition ? EffectDefinition->DurationRounds : 0));
+	}
+
+	TArray<EGambitNegativeEffectCategory> ResolveNegativeEffectCategories(const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		TArray<EGambitNegativeEffectCategory> Categories;
+		if (!EffectDefinition || !EffectDefinition->bNegativeEffect)
+		{
+			return Categories;
+		}
+
+		for (const EGambitNegativeEffectCategory Category : EffectDefinition->NegativeEffectCategories)
+		{
+			AddUniqueValidNegativeEffectCategory(Categories, Category);
+		}
+
+		if (Categories.Num() == 0)
+		{
+			Categories.Add(EGambitNegativeEffectCategory::Generic);
+		}
+
+		return Categories;
+	}
+
+	TArray<EGambitNegativeEffectCategory> ResolvePreventedNegativeEffectCategories(const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		TArray<EGambitNegativeEffectCategory> Categories;
+		if (!EffectDefinition || EffectDefinition->EffectType != EGambitItemEffectType::PreventNegativeEffect)
+		{
+			return Categories;
+		}
+
+		for (const EGambitNegativeEffectCategory Category : EffectDefinition->PreventedNegativeEffectCategories)
+		{
+			AddUniqueValidNegativeEffectCategory(Categories, Category);
+		}
+
+		return Categories;
+	}
+
+	int32 ResolvePreventNegativeEffectBlockCount(const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		if (!EffectDefinition)
+		{
+			return 0;
+		}
+
+		const float* PreventCount = EffectDefinition->ScalarParameters.Find(TEXT("PreventCount"));
+		if (PreventCount)
+		{
+			return FMath::Max(0, FMath::RoundToInt(*PreventCount));
+		}
+
+		const float* BlockCount = EffectDefinition->ScalarParameters.Find(TEXT("BlockCount"));
+		if (BlockCount)
+		{
+			return FMath::Max(0, FMath::RoundToInt(*BlockCount));
+		}
+
+		return FMath::Max(0, EffectDefinition->PreventNegativeEffectBlockCount);
 	}
 
 	float ResolveMultiplier(const UGambitItemEffectDefinition* EffectDefinition)
@@ -1488,24 +1583,6 @@ bool UGambitEffectResolver::ExecuteEffectDefinition(UGambitItemEffectDefinition*
 		return false;
 	}
 
-	if (EffectDefinition->bNegativeEffect && Context.bPreventNegativeEffects)
-	{
-		Context.DebugEffectEvents.Add(MakeEffectDebugEvent(
-			Context,
-			EffectDefinition,
-			false,
-			true,
-			FString::Printf(TEXT("%s was prevented by active negative-effect protection"), *GetEffectName(EffectDefinition))));
-		UE_LOG(
-			LogGambit,
-			Log,
-			TEXT("EffectResolver: Hook=%s Effect=%s Type=%s prevented by PreventNegativeEffect"),
-			*EffectHookToString(Context.Hook),
-			*GetEffectName(EffectDefinition),
-			*EffectTypeToString(EffectDefinition->EffectType));
-		return false;
-	}
-
 	if (!AreConditionsMet(EffectDefinition, Context))
 	{
 		UE_LOG(
@@ -1516,6 +1593,44 @@ bool UGambitEffectResolver::ExecuteEffectDefinition(UGambitItemEffectDefinition*
 			*GetEffectName(EffectDefinition),
 			*EffectTypeToString(EffectDefinition->EffectType));
 		return false;
+	}
+
+	if (EffectDefinition->bNegativeEffect)
+	{
+		const TArray<EGambitNegativeEffectCategory> NegativeCategories = ResolveNegativeEffectCategories(EffectDefinition);
+		FGambitNegativeEffectProtection ConsumedProtection;
+		if (Context.NegativeEffectProtection.TryPrevent(NegativeCategories, ConsumedProtection))
+		{
+			const FString ProtectionSource = !ConsumedProtection.SourceName.IsEmpty()
+				? ConsumedProtection.SourceName
+				: ConsumedProtection.SourceEffectId.ToString();
+			const FString ChargeSummary = ConsumedProtection.bUnlimitedCharges
+				? FString(TEXT("unlimited charges"))
+				: FString::Printf(TEXT("%d charge(s) remaining"), ConsumedProtection.RemainingCharges);
+			Context.DebugEffectEvents.Add(MakeEffectDebugEvent(
+				Context,
+				EffectDefinition,
+				false,
+				true,
+				FString::Printf(
+					TEXT("%s [%s] was prevented by %s (%s)"),
+					*GetEffectName(EffectDefinition),
+					*NegativeEffectCategoriesToString(NegativeCategories),
+					*ProtectionSource,
+					*ChargeSummary)));
+			UE_LOG(
+				LogGambit,
+				Log,
+				TEXT("EffectResolver: Hook=%s Effect=%s Type=%s Categories=%s prevented by %s ChargesRemaining=%d Unlimited=%s"),
+				*EffectHookToString(Context.Hook),
+				*GetEffectName(EffectDefinition),
+				*EffectTypeToString(EffectDefinition->EffectType),
+				*NegativeEffectCategoriesToString(NegativeCategories),
+				*ProtectionSource,
+				ConsumedProtection.RemainingCharges,
+				ConsumedProtection.bUnlimitedCharges ? TEXT("true") : TEXT("false"));
+			return false;
+		}
 	}
 
 	const bool bTriggered = ApplyEffectDefinition(EffectDefinition, Context);
@@ -2344,8 +2459,22 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		return true;
 	}
 	case EGambitItemEffectType::PreventNegativeEffect:
-		Context.bPreventNegativeEffects = true;
+	{
+		const bool bProtectsAllCategories = EffectDefinition->PreventedNegativeEffectCategories.Num() == 0;
+		const TArray<EGambitNegativeEffectCategory> ProtectedCategories = ResolvePreventedNegativeEffectCategories(EffectDefinition);
+		if (!bProtectsAllCategories && ProtectedCategories.Num() == 0)
+		{
+			return false;
+		}
+
+		Context.NegativeEffectProtection.AddProtection(
+			ProtectedCategories,
+			bProtectsAllCategories,
+			ResolvePreventNegativeEffectBlockCount(EffectDefinition),
+			GetEffectSourceId(EffectDefinition),
+			GetEffectName(EffectDefinition));
 		return true;
+	}
 	case EGambitItemEffectType::DestroyOrRemoveDiceChance:
 	{
 		const float ChancePercent = ResolveScalar(EffectDefinition, TEXT("ChancePercent"), EffectDefinition->Amount > 0.0f ? EffectDefinition->Amount : 100.0f);

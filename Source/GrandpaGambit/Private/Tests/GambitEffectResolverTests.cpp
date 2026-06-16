@@ -73,6 +73,66 @@ namespace
 		return EffectDefinition;
 	}
 
+	UGambitItemEffectDefinition* MakePreventNegativeEffectDefinition(
+		UObject* Outer,
+		const EGambitEffectHook Hook,
+		const TArray<EGambitNegativeEffectCategory>& PreventedCategories)
+	{
+		UGambitItemEffectDefinition* EffectDefinition = MakeEffectDefinition(Outer, Hook, EGambitItemEffectType::PreventNegativeEffect);
+		EffectDefinition->EffectId = TEXT("effect.test.prevent_negative");
+		EffectDefinition->PreventedNegativeEffectCategories = PreventedCategories;
+		return EffectDefinition;
+	}
+
+	UGambitItemEffectDefinition* MakeStealGoldEffectDefinition(
+		UObject* Outer,
+		const bool bAddGoldStealCategory)
+	{
+		UGambitItemEffectDefinition* EffectDefinition = MakeEffectDefinition(Outer, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::StealGold);
+		EffectDefinition->EffectId = TEXT("effect.test.steal_gold");
+		EffectDefinition->Amount = 4.0f;
+		EffectDefinition->bNegativeEffect = true;
+		if (bAddGoldStealCategory)
+		{
+			EffectDefinition->NegativeEffectCategories.Add(EGambitNegativeEffectCategory::GoldSteal);
+		}
+		return EffectDefinition;
+	}
+
+	struct FGambitGoldStealProtectionTestContext
+	{
+		FGambitEffectExecutionContext EffectContext;
+		UGambitEconomyComponent* SourceEconomy = nullptr;
+		UGambitEconomyComponent* TargetEconomy = nullptr;
+		int32 SourceGoldBefore = 0;
+		int32 TargetGoldBefore = 0;
+	};
+
+	FGambitGoldStealProtectionTestContext MakeGoldStealProtectionTestContext()
+	{
+		FGambitGoldStealProtectionTestContext TestContext;
+		TestContext.SourceEconomy = NewObject<UGambitEconomyComponent>();
+		TestContext.TargetEconomy = NewObject<UGambitEconomyComponent>();
+		TestContext.SourceEconomy->InitializeForMatch();
+		TestContext.TargetEconomy->InitializeForMatch();
+		TestContext.SourceGoldBefore = TestContext.SourceEconomy->GetCurrentGold();
+		TestContext.TargetEconomy->AddGold(10);
+		TestContext.TargetGoldBefore = TestContext.TargetEconomy->GetCurrentGold();
+
+		TestContext.EffectContext.Hook = EGambitEffectHook::ConsumableUse;
+		TestContext.EffectContext.SourceEconomyComponent = TestContext.SourceEconomy;
+		TestContext.EffectContext.TargetEconomyComponent = TestContext.TargetEconomy;
+		return TestContext;
+	}
+
+	int32 CountPreventedDebugEvents(const FGambitEffectExecutionContext& Context)
+	{
+		return Context.DebugEffectEvents.FilterByPredicate([](const FGambitDebugEffectEvent& Event)
+		{
+			return Event.bPrevented;
+		}).Num();
+	}
+
 	UGambitItemDefinition* MakeShopItem(UObject* Outer, const TCHAR* ItemId, const int32 Cost)
 	{
 		UGambitItemDefinition* ItemDefinition = NewObject<UGambitItemDefinition>(Outer);
@@ -778,6 +838,139 @@ bool FGambitConsumableOpponentTargetEffectTest::RunTest(const FString& Parameter
 	TestEqual(TEXT("source gains 4 gold"), SourceEconomy->GetCurrentGold(), SourceGoldBefore + 4);
 	TestEqual(TEXT("steal gold records target loss and source gain"), Context.DebugGoldLines.Num(), 2);
 	TestTrue(TEXT("steal gold records a debug effect event"), Context.DebugEffectEvents.Num() > 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitNegativeEffectProtectionCategoriesTest,
+	"GrandpaGambit.Effects.NegativeProtection.Categories",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitNegativeEffectProtectionCategoriesTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+
+	{
+		FGambitGoldStealProtectionTestContext TestContext = MakeGoldStealProtectionTestContext();
+		UGambitItemEffectDefinition* GlobalDefense = MakePreventNegativeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			TArray<EGambitNegativeEffectCategory>());
+		UGambitItemEffectDefinition* GoldSteal = MakeStealGoldEffectDefinition(TestOuter, true);
+
+		TestTrue(TEXT("legacy global defense is applied"), Resolver->ExecuteEffectDefinition(GlobalDefense, TestContext.EffectContext));
+		TestFalse(TEXT("legacy global defense blocks gold steal"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
+		TestEqual(TEXT("global defense leaves target gold unchanged"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore);
+		TestEqual(TEXT("global defense leaves source gold unchanged"), TestContext.SourceEconomy->GetCurrentGold(), TestContext.SourceGoldBefore);
+		TestEqual(TEXT("global defense records one prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 1);
+	}
+
+	{
+		FGambitGoldStealProtectionTestContext TestContext = MakeGoldStealProtectionTestContext();
+		UGambitItemEffectDefinition* GoldStealDefense = MakePreventNegativeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::GoldSteal }));
+		UGambitItemEffectDefinition* GoldSteal = MakeStealGoldEffectDefinition(TestOuter, true);
+
+		TestTrue(TEXT("filtered GoldSteal defense is applied"), Resolver->ExecuteEffectDefinition(GoldStealDefense, TestContext.EffectContext));
+		TestFalse(TEXT("filtered GoldSteal defense blocks gold steal"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
+		TestEqual(TEXT("filtered defense leaves target gold unchanged"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore);
+		TestEqual(TEXT("filtered defense records one prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 1);
+	}
+
+	{
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::RoundEnd;
+		Context.SourceDice.Add(MakeTestDie(6));
+		Context.SourceDieHandIndex = 0;
+		Context.RandomStream.Initialize(123);
+
+		UGambitItemEffectDefinition* GoldStealDefense = MakePreventNegativeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::RoundEnd,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::GoldSteal }));
+		UGambitItemEffectDefinition* DestroyDie = MakeEffectDefinition(TestOuter, EGambitEffectHook::RoundEnd, EGambitItemEffectType::DestroyOrRemoveDiceChance);
+		DestroyDie->EffectId = TEXT("effect.test.destroy_die");
+		DestroyDie->Amount = 100.0f;
+		DestroyDie->bNegativeEffect = true;
+		DestroyDie->NegativeEffectCategories.Add(EGambitNegativeEffectCategory::DieDestroyOrRemove);
+
+		TestTrue(TEXT("filtered GoldSteal defense is applied before destroy"), Resolver->ExecuteEffectDefinition(GoldStealDefense, Context));
+		const int32 PreventedEventsBeforeDestroy = CountPreventedDebugEvents(Context);
+		TestTrue(TEXT("GoldSteal defense does not block die destroy"), Resolver->ExecuteEffectDefinition(DestroyDie, Context));
+		TestEqual(TEXT("die destroy removes source die"), Context.SourceDice.Num(), 0);
+		TestEqual(TEXT("die destroy did not add a prevented event"), CountPreventedDebugEvents(Context), PreventedEventsBeforeDestroy);
+	}
+
+	{
+		FGambitGoldStealProtectionTestContext TestContext = MakeGoldStealProtectionTestContext();
+		UGambitItemEffectDefinition* GenericDefense = MakePreventNegativeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::Generic }));
+		UGambitItemEffectDefinition* UncategorizedGoldSteal = MakeStealGoldEffectDefinition(TestOuter, false);
+
+		TestTrue(TEXT("Generic defense is applied"), Resolver->ExecuteEffectDefinition(GenericDefense, TestContext.EffectContext));
+		TestFalse(TEXT("Generic fallback blocks uncategorized negative effect"), Resolver->ExecuteEffectDefinition(UncategorizedGoldSteal, TestContext.EffectContext));
+		TestEqual(TEXT("fallback prevention leaves target gold unchanged"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore);
+		TestEqual(TEXT("fallback prevention records one prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 1);
+	}
+
+	{
+		FGambitGoldStealProtectionTestContext TestContext = MakeGoldStealProtectionTestContext();
+		UGambitItemEffectDefinition* GoldSteal = MakeStealGoldEffectDefinition(TestOuter, true);
+
+		TestTrue(TEXT("gold steal triggers without defense"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
+		TestEqual(TEXT("no defense lets target lose gold"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore - 4);
+		TestEqual(TEXT("no defense lets source gain gold"), TestContext.SourceEconomy->GetCurrentGold(), TestContext.SourceGoldBefore + 4);
+		TestEqual(TEXT("no defense records no prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 0);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitNegativeEffectProtectionValidationTest,
+	"GrandpaGambit.Effects.NegativeProtection.Validation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitNegativeEffectProtectionValidationTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UGambitItemEffectDefinition* UncategorizedNegativeEffect = MakeStealGoldEffectDefinition(GetTransientPackage(), false);
+	TArray<FGambitDataValidationIssue> UncategorizedIssues;
+	GambitDataValidation::ValidateEffectDefinition(UncategorizedNegativeEffect, TEXT("Test"), 0, UncategorizedIssues);
+	TestTrue(
+		TEXT("negative effect without explicit category warns about Generic fallback"),
+		HasValidationIssue(UncategorizedIssues, EGambitDataValidationSeverity::Warning, TEXT("Generic fallback")));
+
+	UGambitItemEffectDefinition* NoneFilteredDefense = MakePreventNegativeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::None }));
+	TArray<FGambitDataValidationIssue> NoneFilterIssues;
+	GambitDataValidation::ValidateEffectDefinition(NoneFilteredDefense, TEXT("Test"), 0, NoneFilterIssues);
+	TestTrue(
+		TEXT("defense filter using None warns"),
+		HasValidationIssue(NoneFilterIssues, EGambitDataValidationSeverity::Warning, TEXT("category None")));
+	TestTrue(
+		TEXT("defense with no concrete typed category warns"),
+		HasValidationIssue(NoneFilterIssues, EGambitDataValidationSeverity::Warning, TEXT("no concrete category")));
+
+	UGambitItemEffectDefinition* NonDefenseWithFilter = MakeEffectDefinition(GetTransientPackage(), EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddGold);
+	NonDefenseWithFilter->Amount = 1.0f;
+	NonDefenseWithFilter->PreventedNegativeEffectCategories.Add(EGambitNegativeEffectCategory::GoldSteal);
+	TArray<FGambitDataValidationIssue> NonDefenseIssues;
+	GambitDataValidation::ValidateEffectDefinition(NonDefenseWithFilter, TEXT("Test"), 0, NonDefenseIssues);
+	TestTrue(
+		TEXT("non-defense with prevention filter warns"),
+		HasValidationIssue(NonDefenseIssues, EGambitDataValidationSeverity::Warning, TEXT("not a PreventNegativeEffect defense")));
+
 	return true;
 }
 
