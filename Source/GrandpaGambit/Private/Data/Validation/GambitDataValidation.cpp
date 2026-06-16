@@ -10,6 +10,7 @@
 #include "Items/Effects/GambitEffectTargetRules.h"
 #include "Items/Effects/GambitItemEffect.h"
 #include "Items/Modules/GambitModuleDefinition.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 #include "Shop/Data/GambitShopLootTable.h"
 
 namespace
@@ -37,16 +38,6 @@ namespace
 	FString ObjectLabel(const UObject* Object)
 	{
 		return Object ? Object->GetPathName() : FString(TEXT("None"));
-	}
-
-	bool IsDataValidationNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
-	{
-		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
-			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
-			&& FMath::IsNearlyEqual(Modifier.Multiplier, 1.0f)
-			&& Modifier.ScoreCap <= 0.0f
-			&& Modifier.DiminishingThreshold <= 0.0f
-			&& FMath::IsNearlyEqual(Modifier.DiminishingFactor, 1.0f);
 	}
 
 	void AddError(TArray<FGambitDataValidationIssue>& OutIssues, const FString& Message)
@@ -523,7 +514,7 @@ namespace
 		switch (EffectDefinition->EffectType)
 		{
 		case EGambitItemEffectType::ScoreModifier:
-			if (IsDataValidationNeutralScoreModifier(EffectDefinition->ScoreModifier))
+			if (FGambitScoreModifierMath::IsNeutral(EffectDefinition->ScoreModifier))
 			{
 				AddError(OutIssues, FString::Printf(TEXT("%s is ScoreModifier but has no score modifier values."), *EffectLabel));
 			}
@@ -571,7 +562,7 @@ namespace
 			}
 			break;
 		case EGambitItemEffectType::AddTemporaryScoreModifier:
-			if (IsDataValidationNeutralScoreModifier(EffectDefinition->ScoreModifier)
+			if (FGambitScoreModifierMath::IsNeutral(EffectDefinition->ScoreModifier)
 				&& !HasConfiguredAmount(EffectDefinition)
 				&& !HasConfiguredMultiplier(EffectDefinition))
 			{

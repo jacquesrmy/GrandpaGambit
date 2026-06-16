@@ -1,61 +1,11 @@
 #include "Players/Components/GambitPlayerRoundStateComponent.h"
 
-namespace
-{
-	FGambitScoreModifierContext MergeScoreModifiers(
-		const FGambitScoreModifierContext& A,
-		const FGambitScoreModifierContext& B)
-	{
-		FGambitScoreModifierContext Result;
-		Result.AdditiveBonus = A.AdditiveBonus + B.AdditiveBonus;
-		Result.DiceContributionMultiplierBonus = A.DiceContributionMultiplierBonus + B.DiceContributionMultiplierBonus;
-		Result.Multiplier = A.Multiplier * B.Multiplier;
-
-		if (A.ScoreCap > 0.0f && B.ScoreCap > 0.0f)
-		{
-			Result.ScoreCap = FMath::Min(A.ScoreCap, B.ScoreCap);
-		}
-		else
-		{
-			Result.ScoreCap = FMath::Max(A.ScoreCap, B.ScoreCap);
-		}
-
-		if (A.DiminishingThreshold > 0.0f && B.DiminishingThreshold > 0.0f)
-		{
-			Result.DiminishingThreshold = FMath::Min(A.DiminishingThreshold, B.DiminishingThreshold);
-		}
-		else
-		{
-			Result.DiminishingThreshold = FMath::Max(A.DiminishingThreshold, B.DiminishingThreshold);
-		}
-
-		if (A.DiminishingFactor > 0.0f && B.DiminishingFactor > 0.0f)
-		{
-			Result.DiminishingFactor = FMath::Min(A.DiminishingFactor, B.DiminishingFactor);
-		}
-		else
-		{
-			Result.DiminishingFactor = (A.DiminishingFactor > 0.0f) ? A.DiminishingFactor : B.DiminishingFactor;
-		}
-
-		if (Result.Multiplier <= 0.0f)
-		{
-			Result.Multiplier = 1.0f;
-		}
-		if (Result.DiminishingFactor <= 0.0f)
-		{
-			Result.DiminishingFactor = 1.0f;
-		}
-
-		return Result;
-	}
-}
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 
 UGambitPlayerRoundStateComponent::UGambitPlayerRoundStateComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	RoundConsumableModifier.Multiplier = 1.0f;
-	RoundConsumableModifier.DiminishingFactor = 1.0f;
+	RoundConsumableModifier = FGambitScoreModifierMath::MakeNeutral();
 }
 
 void UGambitPlayerRoundStateComponent::InitializeForMatch()
@@ -73,9 +23,7 @@ void UGambitPlayerRoundStateComponent::ResetRoundState()
 	DebugShopLines.Reset();
 	NextDebugSequence = 1;
 
-	RoundConsumableModifier = FGambitScoreModifierContext();
-	RoundConsumableModifier.Multiplier = 1.0f;
-	RoundConsumableModifier.DiminishingFactor = 1.0f;
+	RoundConsumableModifier = FGambitScoreModifierMath::MakeNeutral();
 
 	OnRoundScoreChanged.Broadcast(CurrentRoundScore);
 }
@@ -89,7 +37,7 @@ void UGambitPlayerRoundStateComponent::ApplyRoundScore(const FGambitScoreBreakdo
 
 void UGambitPlayerRoundStateComponent::ApplyTemporaryScoreModifier(const FGambitScoreModifierContext& Modifier)
 {
-	RoundConsumableModifier = MergeScoreModifiers(RoundConsumableModifier, Modifier);
+	RoundConsumableModifier = FGambitScoreModifierMath::Merge(RoundConsumableModifier, Modifier);
 }
 
 void UGambitPlayerRoundStateComponent::AddDebugEffectEvent(const FGambitDebugEffectEvent& Event)

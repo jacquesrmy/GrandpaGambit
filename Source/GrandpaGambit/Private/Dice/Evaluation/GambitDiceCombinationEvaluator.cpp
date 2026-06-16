@@ -1,24 +1,9 @@
 #include "Dice/Evaluation/GambitDiceCombinationEvaluator.h"
 
+#include "Core/Settings/GambitGameBalanceSettings.h"
+
 namespace
 {
-	int32 GetBaseScoreForCombination(const EGambitCombinationType Combination)
-	{
-		switch (Combination)
-		{
-		case EGambitCombinationType::FiveOfAKind: return 70;
-		case EGambitCombinationType::StraightLarge: return 55;
-		case EGambitCombinationType::FourOfAKind: return 45;
-		case EGambitCombinationType::FullHouse: return 40;
-		case EGambitCombinationType::StraightSmall: return 30;
-		case EGambitCombinationType::ThreeOfAKind: return 25;
-		case EGambitCombinationType::TwoPair: return 18;
-		case EGambitCombinationType::Pair: return 12;
-		case EGambitCombinationType::HighDice: return 5;
-		default: return 0;
-		}
-	}
-
 	int32 GetMaxStraightLength(const TArray<int32>& UniqueSortedValues)
 	{
 		if (UniqueSortedValues.Num() == 0)
@@ -190,9 +175,10 @@ FGambitDiceCombinationResult UGambitDiceCombinationEvaluator::EvaluateDice(const
 	UniqueCombinationValues.Sort();
 	Result.MatchedValues = ExpandedCombinationValues;
 
+	const UGambitGameBalanceSettings* BalanceSettings = UGambitGameBalanceSettings::Get();
 	if (TotalCombinationContributions <= 0)
 	{
-		Result.BaseCombinationScore = GetBaseScoreForCombination(Result.Combination);
+		Result.BaseCombinationScore = BalanceSettings->GetBaseScoreForCombination(Result.Combination);
 		Result.RawScore = Result.BaseCombinationScore + Result.DiceSum;
 		return Result;
 	}
@@ -258,7 +244,7 @@ FGambitDiceCombinationResult UGambitDiceCombinationEvaluator::EvaluateDice(const
 		Result.Combination = EGambitCombinationType::HighDice;
 	}
 
-	Result.BaseCombinationScore = GetBaseScoreForCombination(Result.Combination);
+	Result.BaseCombinationScore = BalanceSettings->GetBaseScoreForCombination(Result.Combination);
 	switch (Result.Combination)
 	{
 	case EGambitCombinationType::FiveOfAKind:

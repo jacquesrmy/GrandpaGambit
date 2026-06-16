@@ -9,6 +9,7 @@
 #include "Players/Components/GambitEconomyComponent.h"
 #include "Players/Components/GambitInventoryComponent.h"
 #include "Players/Components/GambitPlayerRoundStateComponent.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 #include "Shop/Components/GambitShopComponent.h"
 
 namespace
@@ -177,18 +178,14 @@ FGambitScoreModifierContext AGambitPlayerState::BuildCombinedScoreModifier() con
 		return RoundStateComponent->BuildCombinedScoreModifier();
 	}
 
-	FGambitScoreModifierContext Modifier;
-	Modifier.Multiplier = 1.0f;
-	Modifier.DiminishingFactor = 1.0f;
-	return Modifier;
+	return FGambitScoreModifierMath::MakeNeutral();
 }
 
 FGambitScoreModifierContext AGambitPlayerState::GetTemporaryScoreModifier() const
 {
-	FGambitScoreModifierContext Modifier;
-	Modifier.Multiplier = 1.0f;
-	Modifier.DiminishingFactor = 1.0f;
-	return RoundStateComponent ? RoundStateComponent->GetTemporaryScoreModifier() : Modifier;
+	return RoundStateComponent
+		? RoundStateComponent->GetTemporaryScoreModifier()
+		: FGambitScoreModifierMath::MakeNeutral();
 }
 
 void AGambitPlayerState::RollAllDice(FRandomStream& RandomStream)

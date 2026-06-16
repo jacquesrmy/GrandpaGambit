@@ -5,6 +5,26 @@
 #include "Core/Types/GambitGameplayTypes.h"
 #include "GambitGameBalanceSettings.generated.h"
 
+USTRUCT(BlueprintType)
+struct GRANDPAGAMBIT_API FGambitCombinationScoreEntry
+{
+	GENERATED_BODY()
+
+	FGambitCombinationScoreEntry() = default;
+
+	FGambitCombinationScoreEntry(const EGambitCombinationType InCombination, const int32 InBaseScore)
+		: Combination(InCombination)
+		, BaseScore(InBaseScore)
+	{
+	}
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Scoring")
+	EGambitCombinationType Combination = EGambitCombinationType::None;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Scoring", meta = (ClampMin = "0"))
+	int32 BaseScore = 0;
+};
+
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Grandpa Gambit Balance"))
 class GRANDPAGAMBIT_API UGambitGameBalanceSettings : public UDeveloperSettings
 {
@@ -29,6 +49,11 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Settings")
 	int32 GetRoundGoldRewardFromScore(int32 RoundScore) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Settings")
+	int32 GetBaseScoreForCombination(EGambitCombinationType Combination) const;
+
+	void ValidateCombinationBaseScores(TArray<FString>& OutWarnings) const;
 
 	UPROPERTY(Config, EditDefaultsOnly, BlueprintReadOnly, Category = "Match", meta = (ClampMin = "2", ClampMax = "4"))
 	int32 MinLocalPlayers = 2;
@@ -83,6 +108,9 @@ public:
 
 	UPROPERTY(Config, EditDefaultsOnly, BlueprintReadOnly, Category = "Scoring", meta = (ClampMin = "0.0"))
 	float DefaultDiminishingFactor = 1.0f;
+
+	UPROPERTY(Config, EditDefaultsOnly, BlueprintReadOnly, Category = "Scoring")
+	TArray<FGambitCombinationScoreEntry> CombinationBaseScores;
 
 	UPROPERTY(Config, EditDefaultsOnly, BlueprintReadOnly, Category = "Ranking")
 	TArray<FGambitVictoryPointReward> VictoryPointTable;

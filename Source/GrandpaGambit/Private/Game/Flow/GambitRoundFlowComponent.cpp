@@ -25,6 +25,7 @@
 #include "Players/States/GambitPlayerState.h"
 #include "Ranking/Components/GambitRankingComponent.h"
 #include "Scoring/Calculators/GambitScoreCalculator.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 #include "Shop/Components/GambitShopComponent.h"
 
 namespace
@@ -1290,13 +1291,10 @@ FGambitScoreModifierContext UGambitRoundFlowComponent::BuildScoreModifierForReso
 		return EffectPipeline->BuildScoreModifierFromEffects(Request).ScoreModifier;
 	}
 
-	FGambitScoreModifierContext Modifier = PlayerState ? PlayerState->GetTemporaryScoreModifier() : FGambitScoreModifierContext();
-	if (Modifier.Multiplier <= 0.0f)
-	{
-		Modifier.Multiplier = 1.0f;
-	}
-	Modifier.DiminishingFactor = Modifier.DiminishingFactor <= 0.0f ? 1.0f : Modifier.DiminishingFactor;
-	return Modifier;
+	FGambitScoreModifierContext Modifier = PlayerState
+		? PlayerState->GetTemporaryScoreModifier()
+		: FGambitScoreModifierMath::MakeNeutral();
+	return FGambitScoreModifierMath::Normalize(Modifier);
 }
 
 int32 UGambitRoundFlowComponent::GetRerollCount(AGambitPlayerState* PlayerState) const

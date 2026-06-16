@@ -1,6 +1,7 @@
 #include "Scoring/Calculators/GambitScoreCalculator.h"
 
 #include "Core/Settings/GambitGameBalanceSettings.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 
 FGambitScoreBreakdown UGambitScoreCalculator::CalculateScore(
 	const FGambitDiceCombinationResult& CombinationResult,
@@ -48,49 +49,5 @@ FGambitScoreModifierContext UGambitScoreCalculator::MergeModifiers(
 	const FGambitScoreModifierContext& PersistentModifier,
 	const FGambitScoreModifierContext& RoundModifier) const
 {
-	FGambitScoreModifierContext Result;
-	Result.AdditiveBonus = PersistentModifier.AdditiveBonus + RoundModifier.AdditiveBonus;
-	Result.DiceContributionMultiplierBonus =
-		PersistentModifier.DiceContributionMultiplierBonus + RoundModifier.DiceContributionMultiplierBonus;
-	Result.Multiplier = PersistentModifier.Multiplier * RoundModifier.Multiplier;
-
-	if (PersistentModifier.ScoreCap > 0.0f && RoundModifier.ScoreCap > 0.0f)
-	{
-		Result.ScoreCap = FMath::Min(PersistentModifier.ScoreCap, RoundModifier.ScoreCap);
-	}
-	else
-	{
-		Result.ScoreCap = FMath::Max(PersistentModifier.ScoreCap, RoundModifier.ScoreCap);
-	}
-
-	if (PersistentModifier.DiminishingThreshold > 0.0f && RoundModifier.DiminishingThreshold > 0.0f)
-	{
-		Result.DiminishingThreshold = FMath::Min(PersistentModifier.DiminishingThreshold, RoundModifier.DiminishingThreshold);
-	}
-	else
-	{
-		Result.DiminishingThreshold = FMath::Max(PersistentModifier.DiminishingThreshold, RoundModifier.DiminishingThreshold);
-	}
-
-	if (PersistentModifier.DiminishingFactor > 0.0f && RoundModifier.DiminishingFactor > 0.0f)
-	{
-		Result.DiminishingFactor = FMath::Min(PersistentModifier.DiminishingFactor, RoundModifier.DiminishingFactor);
-	}
-	else
-	{
-		Result.DiminishingFactor = (PersistentModifier.DiminishingFactor > 0.0f)
-			? PersistentModifier.DiminishingFactor
-			: RoundModifier.DiminishingFactor;
-	}
-
-	if (Result.Multiplier <= 0.0f)
-	{
-		Result.Multiplier = 1.0f;
-	}
-	if (Result.DiminishingFactor <= 0.0f)
-	{
-		Result.DiminishingFactor = 1.0f;
-	}
-
-	return Result;
+	return FGambitScoreModifierMath::Merge(PersistentModifier, RoundModifier);
 }

@@ -4,6 +4,7 @@
 #include "Items/Effects/GambitEffectResolver.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 #include "Players/States/GambitPlayerState.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 #include "Shop/Components/GambitShopComponent.h"
 
 void UGambitRoundEffectPipeline::SetEffectResolver(UGambitEffectResolver* InEffectResolver)
@@ -101,12 +102,13 @@ void UGambitRoundEffectPipeline::CommitEffectContext(
 		RerollDelta += Context.RerollLimitDelta;
 	}
 
-	if (Context.SourcePlayer && HasTemporaryModifier(Context.TemporaryScoreModifierDelta))
+	if (Context.SourcePlayer && !FGambitScoreModifierMath::IsNeutral(Context.TemporaryScoreModifierDelta))
 	{
 		Context.SourcePlayer->ApplyTemporaryScoreModifier(Context.TemporaryScoreModifierDelta);
 	}
 
-	if (Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer && HasTemporaryModifier(Context.TargetTemporaryScoreModifierDelta))
+	if (Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer
+		&& !FGambitScoreModifierMath::IsNeutral(Context.TargetTemporaryScoreModifierDelta))
 	{
 		Context.TargetPlayer->ApplyTemporaryScoreModifier(Context.TargetTemporaryScoreModifierDelta);
 	}
@@ -178,7 +180,7 @@ FGambitRoundScoreModifierEffectResult UGambitRoundEffectPipeline::BuildScoreModi
 	FGambitScoreModifierContext Modifier = Request.ContextRequest.SourcePlayer
 		? Request.ContextRequest.SourcePlayer->GetTemporaryScoreModifier()
 		: FGambitScoreModifierContext();
-	Modifier = NormalizeScoreModifier(Modifier);
+	Modifier = FGambitScoreModifierMath::Normalize(Modifier);
 
 	FGambitEffectExecutionContext Context = MakeEffectContext(Request.ContextRequest);
 	Context.CurrentCombinationResult = Request.CombinationResult;
@@ -186,31 +188,7 @@ FGambitRoundScoreModifierEffectResult UGambitRoundEffectPipeline::BuildScoreModi
 	Result.TriggeredEffectCount = ExecuteActiveSourceEffects(Context);
 	CommitEffectContext(Context, Request.CommitRequest);
 
-	Result.ScoreModifier = UGambitEffectResolver::MergeScoreModifiers(Modifier, Context.ScoreModifierDelta);
+	Result.ScoreModifier = FGambitScoreModifierMath::Merge(Modifier, Context.ScoreModifierDelta);
 	Result.ExecutionContext = Context;
 	return Result;
-}
-
-bool UGambitRoundEffectPipeline::HasTemporaryModifier(const FGambitScoreModifierContext& Modifier)
-{
-	return !FMath::IsNearlyZero(Modifier.AdditiveBonus)
-		|| !FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
-		|| !FMath::IsNearlyEqual(Modifier.Multiplier, 1.0f)
-		|| Modifier.ScoreCap > 0.0f
-		|| Modifier.DiminishingThreshold > 0.0f
-		|| !FMath::IsNearlyEqual(Modifier.DiminishingFactor, 1.0f);
-}
-
-FGambitScoreModifierContext UGambitRoundEffectPipeline::NormalizeScoreModifier(FGambitScoreModifierContext Modifier)
-{
-	if (Modifier.Multiplier <= 0.0f)
-	{
-		Modifier.Multiplier = 1.0f;
-	}
-	if (Modifier.DiminishingFactor <= 0.0f)
-	{
-		Modifier.DiminishingFactor = 1.0f;
-	}
-
-	return Modifier;
 }

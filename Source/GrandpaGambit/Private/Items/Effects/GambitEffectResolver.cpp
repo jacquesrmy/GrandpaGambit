@@ -12,6 +12,7 @@
 #include "Players/Components/GambitInventoryComponent.h"
 #include "Players/States/GambitPlayerState.h"
 #include "Managers/SharedPool/GambitSharedPoolComponent.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 
 namespace
 {
@@ -1207,7 +1208,7 @@ namespace
 
 	void ApplyScoreModifier(FGambitScoreModifierContext& Target, const FGambitScoreModifierContext& Source)
 	{
-		Target = UGambitEffectResolver::MergeScoreModifiers(Target, Source);
+		Target = FGambitScoreModifierMath::Merge(Target, Source);
 	}
 
 	FGambitScoreModifierContext& ResolveScoreModifierDelta(
@@ -1251,16 +1252,6 @@ namespace
 		DieState.EffectiveValue = DieState.RawValue;
 		RefreshRuntimeScoreContribution(DieState);
 		return true;
-	}
-
-	bool IsEffectResolverNeutralScoreModifier(const FGambitScoreModifierContext& Modifier)
-	{
-		return FMath::IsNearlyZero(Modifier.AdditiveBonus)
-			&& FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
-			&& FMath::IsNearlyEqual(Modifier.Multiplier, 1.0f)
-			&& Modifier.ScoreCap <= 0.0f
-			&& Modifier.DiminishingThreshold <= 0.0f
-			&& FMath::IsNearlyEqual(Modifier.DiminishingFactor, 1.0f);
 	}
 
 	template <typename TEnum>
@@ -1667,48 +1658,7 @@ FGambitScoreModifierContext UGambitEffectResolver::MergeScoreModifiers(
 	const FGambitScoreModifierContext& A,
 	const FGambitScoreModifierContext& B)
 {
-	FGambitScoreModifierContext Result;
-	Result.AdditiveBonus = A.AdditiveBonus + B.AdditiveBonus;
-	Result.DiceContributionMultiplierBonus = A.DiceContributionMultiplierBonus + B.DiceContributionMultiplierBonus;
-	Result.Multiplier = A.Multiplier * B.Multiplier;
-
-	if (A.ScoreCap > 0.0f && B.ScoreCap > 0.0f)
-	{
-		Result.ScoreCap = FMath::Min(A.ScoreCap, B.ScoreCap);
-	}
-	else
-	{
-		Result.ScoreCap = FMath::Max(A.ScoreCap, B.ScoreCap);
-	}
-
-	if (A.DiminishingThreshold > 0.0f && B.DiminishingThreshold > 0.0f)
-	{
-		Result.DiminishingThreshold = FMath::Min(A.DiminishingThreshold, B.DiminishingThreshold);
-	}
-	else
-	{
-		Result.DiminishingThreshold = FMath::Max(A.DiminishingThreshold, B.DiminishingThreshold);
-	}
-
-	if (A.DiminishingFactor > 0.0f && B.DiminishingFactor > 0.0f)
-	{
-		Result.DiminishingFactor = FMath::Min(A.DiminishingFactor, B.DiminishingFactor);
-	}
-	else
-	{
-		Result.DiminishingFactor = A.DiminishingFactor > 0.0f ? A.DiminishingFactor : B.DiminishingFactor;
-	}
-
-	if (Result.Multiplier <= 0.0f)
-	{
-		Result.Multiplier = 1.0f;
-	}
-	if (Result.DiminishingFactor <= 0.0f)
-	{
-		Result.DiminishingFactor = 1.0f;
-	}
-
-	return Result;
+	return FGambitScoreModifierMath::Merge(A, B);
 }
 
 bool UGambitEffectResolver::AreConditionsMet(const UGambitItemEffectDefinition* EffectDefinition, FGambitEffectExecutionContext& Context) const

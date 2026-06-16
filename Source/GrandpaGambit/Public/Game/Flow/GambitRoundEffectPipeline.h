@@ -66,9 +66,6 @@ public:
 	FGambitRoundScoreModifierEffectResult BuildScoreModifierFromEffects(const FGambitRoundScoreModifierEffectRequest& Request) const;
 
 private:
-	static bool HasTemporaryModifier(const FGambitScoreModifierContext& Modifier);
-	static FGambitScoreModifierContext NormalizeScoreModifier(FGambitScoreModifierContext Modifier);
-
 	UPROPERTY(Transient)
 	TObjectPtr<UGambitEffectResolver> EffectResolver;
 };

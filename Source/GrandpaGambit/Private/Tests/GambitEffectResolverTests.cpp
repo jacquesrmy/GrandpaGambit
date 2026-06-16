@@ -3,6 +3,7 @@
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
 
+#include "Core/Settings/GambitGameBalanceSettings.h"
 #include "Data/Validation/GambitDataValidation.h"
 #include "Data/Assets/GambitItemEffectDefinition.h"
 #include "Dice/Data/GambitDiceDefinition.h"
@@ -19,6 +20,7 @@
 #include "Players/Components/GambitInventoryComponent.h"
 #include "Players/States/GambitPlayerState.h"
 #include "Scoring/Calculators/GambitScoreCalculator.h"
+#include "Scoring/Calculators/GambitScoreModifierMath.h"
 #include "Managers/SharedPool/GambitSharedPoolComponent.h"
 #include "Shop/Components/GambitShopComponent.h"
 #include "Shop/Data/GambitShopLootTable.h"
@@ -1852,6 +1854,183 @@ bool FGambitDiceCombinationContributionRulesTest::RunTest(const FString& Paramet
 	}));
 	TestEqual(TEXT("combination sum keeps negative zero and high values"), CursedResult.DiceSum, 18);
 	TestTrue(TEXT("combination matched values keep authored values sorted"), CursedResult.MatchedValues == TArray<int32>({ -3, 0, 9, 12 }));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitScoringDefaultCombinationScoresTest,
+	"GrandpaGambit.Scoring.DefaultCombinationScores",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitScoringDefaultCombinationScoresTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	const UGambitGameBalanceSettings* Settings = UGambitGameBalanceSettings::Get();
+	TestEqual(TEXT("default high dice base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::HighDice), 5);
+	TestEqual(TEXT("default pair base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::Pair), 12);
+	TestEqual(TEXT("default two pair base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::TwoPair), 18);
+	TestEqual(TEXT("default three of a kind base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::ThreeOfAKind), 25);
+	TestEqual(TEXT("default small straight base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::StraightSmall), 30);
+	TestEqual(TEXT("default full house base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::FullHouse), 40);
+	TestEqual(TEXT("default four of a kind base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::FourOfAKind), 45);
+	TestEqual(TEXT("default large straight base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::StraightLarge), 55);
+	TestEqual(TEXT("default five of a kind base score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::FiveOfAKind), 70);
+	TestEqual(TEXT("none combination stays scoreless"), Settings->GetBaseScoreForCombination(EGambitCombinationType::None), 0);
+
+	UGambitDiceCombinationEvaluator* Evaluator = NewObject<UGambitDiceCombinationEvaluator>();
+	auto TestEvaluatedBaseScore = [this, Evaluator](
+		const TCHAR* Label,
+		const TArray<FGambitDieRuntimeState>& Dice,
+		const int32 ExpectedBaseScore)
+	{
+		const FGambitDiceCombinationResult Result = Evaluator->EvaluateDice(Dice);
+		TestEqual(Label, Result.BaseCombinationScore, ExpectedBaseScore);
+	};
+
+	TestEvaluatedBaseScore(TEXT("evaluator keeps high dice default base score"), {
+		MakeTestDie(1, 1, true, true, 0),
+		MakeTestDie(3, 1, true, true, 1),
+		MakeTestDie(5, 1, true, true, 2),
+		MakeTestDie(6, 1, true, true, 3)
+	}, 5);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps pair default base score"), {
+		MakeTestDie(2, 1, true, true, 0),
+		MakeTestDie(2, 1, true, true, 1),
+		MakeTestDie(4, 1, true, true, 2),
+		MakeTestDie(6, 1, true, true, 3)
+	}, 12);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps two pair default base score"), {
+		MakeTestDie(2, 1, true, true, 0),
+		MakeTestDie(2, 1, true, true, 1),
+		MakeTestDie(5, 1, true, true, 2),
+		MakeTestDie(5, 1, true, true, 3)
+	}, 18);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps three of a kind default base score"), {
+		MakeTestDie(4, 1, true, true, 0),
+		MakeTestDie(4, 1, true, true, 1),
+		MakeTestDie(4, 1, true, true, 2),
+		MakeTestDie(2, 1, true, true, 3),
+		MakeTestDie(5, 1, true, true, 4)
+	}, 25);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps small straight default base score"), {
+		MakeTestDie(1, 1, true, true, 0),
+		MakeTestDie(2, 1, true, true, 1),
+		MakeTestDie(3, 1, true, true, 2),
+		MakeTestDie(4, 1, true, true, 3),
+		MakeTestDie(6, 1, true, true, 4)
+	}, 30);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps full house default base score"), {
+		MakeTestDie(3, 1, true, true, 0),
+		MakeTestDie(3, 1, true, true, 1),
+		MakeTestDie(3, 1, true, true, 2),
+		MakeTestDie(5, 1, true, true, 3),
+		MakeTestDie(5, 1, true, true, 4)
+	}, 40);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps four of a kind default base score"), {
+		MakeTestDie(6, 1, true, true, 0),
+		MakeTestDie(6, 1, true, true, 1),
+		MakeTestDie(6, 1, true, true, 2),
+		MakeTestDie(6, 1, true, true, 3),
+		MakeTestDie(2, 1, true, true, 4)
+	}, 45);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps large straight default base score"), {
+		MakeTestDie(1, 1, true, true, 0),
+		MakeTestDie(2, 1, true, true, 1),
+		MakeTestDie(3, 1, true, true, 2),
+		MakeTestDie(4, 1, true, true, 3)
+	}, 55);
+	TestEvaluatedBaseScore(TEXT("evaluator keeps five of a kind default base score"), {
+		MakeTestDie(6, 1, true, true, 0),
+		MakeTestDie(6, 1, true, true, 1),
+		MakeTestDie(6, 1, true, true, 2),
+		MakeTestDie(6, 1, true, true, 3),
+		MakeTestDie(6, 1, true, true, 4)
+	}, 70);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitScoringCombinationScoreFallbackTest,
+	"GrandpaGambit.Scoring.CombinationScoreFallback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitScoringCombinationScoreFallbackTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UGambitGameBalanceSettings* Settings = NewObject<UGambitGameBalanceSettings>();
+	Settings->CombinationBaseScores.Reset();
+	TestEqual(TEXT("empty combination score table falls back to default pair score"), Settings->GetBaseScoreForCombination(EGambitCombinationType::Pair), 12);
+
+	Settings->CombinationBaseScores.Add({ EGambitCombinationType::Pair, 99 });
+	TestEqual(TEXT("configured combination score overrides default"), Settings->GetBaseScoreForCombination(EGambitCombinationType::Pair), 99);
+	TestEqual(TEXT("partial combination score table falls back for missing full house"), Settings->GetBaseScoreForCombination(EGambitCombinationType::FullHouse), 40);
+
+	Settings->CombinationBaseScores.Add({ EGambitCombinationType::TwoPair, -10 });
+	TestEqual(TEXT("negative configured combination score falls back to default"), Settings->GetBaseScoreForCombination(EGambitCombinationType::TwoPair), 18);
+
+	TArray<FString> Warnings;
+	Settings->ValidateCombinationBaseScores(Warnings);
+	TestTrue(TEXT("partial score table reports warnings"), Warnings.Num() > 0);
+	TestTrue(TEXT("negative score entry is reported"), Warnings.ContainsByPredicate([](const FString& Warning)
+	{
+		return Warning.Contains(TEXT("negative score"));
+	}));
+	TestTrue(TEXT("missing score entry is reported"), Warnings.ContainsByPredicate([](const FString& Warning)
+	{
+		return Warning.Contains(TEXT("missing"));
+	}));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitScoringScoreModifierMathTest,
+	"GrandpaGambit.Scoring.ScoreModifierMath",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitScoringScoreModifierMathTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitScoreModifierContext A;
+	A.AdditiveBonus = 10.0f;
+	A.DiceContributionMultiplierBonus = 2.0f;
+	A.Multiplier = 1.5f;
+	A.ScoreCap = 100.0f;
+	A.DiminishingThreshold = 200.0f;
+	A.DiminishingFactor = 0.8f;
+
+	FGambitScoreModifierContext B;
+	B.AdditiveBonus = -3.0f;
+	B.DiceContributionMultiplierBonus = 5.0f;
+	B.Multiplier = 2.0f;
+	B.ScoreCap = 80.0f;
+	B.DiminishingThreshold = 150.0f;
+	B.DiminishingFactor = 0.6f;
+
+	const FGambitScoreModifierContext Merged = FGambitScoreModifierMath::Merge(A, B);
+	TestEqual(TEXT("score modifier additive bonuses add"), Merged.AdditiveBonus, 7.0f);
+	TestEqual(TEXT("score modifier dice contribution bonuses add"), Merged.DiceContributionMultiplierBonus, 7.0f);
+	TestEqual(TEXT("score modifier multipliers multiply"), Merged.Multiplier, 3.0f);
+	TestEqual(TEXT("score modifier uses lower positive cap"), Merged.ScoreCap, 80.0f);
+	TestEqual(TEXT("score modifier uses lower positive diminishing threshold"), Merged.DiminishingThreshold, 150.0f);
+	TestEqual(TEXT("score modifier uses lower positive diminishing factor"), Merged.DiminishingFactor, 0.6f);
+
+	FGambitScoreModifierContext InvalidMultiplier;
+	InvalidMultiplier.Multiplier = -2.0f;
+	InvalidMultiplier.DiminishingFactor = -1.0f;
+	const FGambitScoreModifierContext NormalizedMerge = FGambitScoreModifierMath::Merge(InvalidMultiplier, FGambitScoreModifierMath::MakeNeutral());
+	TestEqual(TEXT("non-positive merged multiplier normalizes to neutral"), NormalizedMerge.Multiplier, 1.0f);
+	TestEqual(TEXT("non-positive merged diminishing factor normalizes to neutral"), NormalizedMerge.DiminishingFactor, 1.0f);
+
+	UGambitScoreCalculator* ScoreCalculator = NewObject<UGambitScoreCalculator>();
+	const FGambitScoreModifierContext CalculatorMerged = ScoreCalculator->MergeModifiers(A, B);
+	const FGambitScoreModifierContext ResolverMerged = UGambitEffectResolver::MergeScoreModifiers(A, B);
+	TestEqual(TEXT("score calculator merge delegates to score modifier math"), CalculatorMerged.ScoreCap, Merged.ScoreCap);
+	TestEqual(TEXT("effect resolver merge wrapper delegates to score modifier math"), ResolverMerged.Multiplier, Merged.Multiplier);
+
 	return true;
 }
 
