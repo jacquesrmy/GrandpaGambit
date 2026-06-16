@@ -9,6 +9,7 @@
 #include "Data/Assets/GambitItemEffectDefinition.h"
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Dice/Evaluation/GambitDiceCombinationEvaluator.h"
+#include "Game/Flow/GambitRoundEffectPipeline.h"
 #include "Game/States/GambitGameState.h"
 #include "GameFramework/GameModeBase.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
@@ -400,6 +401,11 @@ void UGambitRoundFlowComponent::BeginPlay()
 	{
 		EffectResolver = NewObject<UGambitEffectResolver>(this);
 	}
+	if (!EffectPipeline)
+	{
+		EffectPipeline = NewObject<UGambitRoundEffectPipeline>(this);
+	}
+	EffectPipeline->SetEffectResolver(EffectResolver);
 }
 
 void UGambitRoundFlowComponent::StartMatchFlow()
@@ -464,10 +470,8 @@ void UGambitRoundFlowComponent::SetPlayerReady(AGambitPlayerState* PlayerState, 
 
 	if (GameState && GameState->GetCurrentPhase() == EGambitRoundPhase::Shop && bReady)
 	{
-		FGambitEffectExecutionContext ShopSkippedContext = MakeEffectContext(EGambitEffectHook::ShopSkipped, PlayerState);
-		ExecuteActiveModuleEffects(ShopSkippedContext);
-		ExecuteActiveDiceEffects(ShopSkippedContext);
-		CommitEffectContext(ShopSkippedContext);
+		FGambitEffectExecutionContext ShopSkippedContext = CreateEffectContext(EGambitEffectHook::ShopSkipped, PlayerState);
+		ExecuteActiveEffectsAndCommit(ShopSkippedContext);
 		PlayerState->SkipShop(GameState->GetSharedPoolComponent());
 	UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopSkipped"), *BuildRoundFlowPlayerLabel(PlayerState, Players));
 	}
@@ -510,10 +514,8 @@ bool UGambitRoundFlowComponent::RequestReroll(AGambitPlayerState* PlayerState)
 
 	if (GameState && CurrentPhase == EGambitRoundPhase::SelectionReroll && PlayerState)
 	{
-		FGambitEffectExecutionContext PreRerollContext = MakeEffectContext(EGambitEffectHook::PreReroll, PlayerState);
-		ExecuteActiveModuleEffects(PreRerollContext);
-		ExecuteActiveDiceEffects(PreRerollContext);
-		CommitEffectContext(PreRerollContext);
+		FGambitEffectExecutionContext PreRerollContext = CreateEffectContext(EGambitEffectHook::PreReroll, PlayerState);
+		ExecuteActiveEffectsAndCommit(PreRerollContext);
 		EffectiveRerollLimit = GetEffectiveRerollLimit(PlayerState);
 	}
 
@@ -527,11 +529,9 @@ bool UGambitRoundFlowComponent::RequestReroll(AGambitPlayerState* PlayerState)
 			IncrementRerollCount(PlayerState);
 			bSuccess = true;
 
-			FGambitEffectExecutionContext PostRerollContext = MakeEffectContext(EGambitEffectHook::PostReroll, PlayerState);
+			FGambitEffectExecutionContext PostRerollContext = CreateEffectContext(EGambitEffectHook::PostReroll, PlayerState);
 			PostRerollContext.RerollDeltas = RerollDeltas;
-			ExecuteActiveModuleEffects(PostRerollContext);
-			ExecuteActiveDiceEffects(PostRerollContext);
-			CommitEffectContext(PostRerollContext);
+			ExecuteActiveEffectsAndCommit(PostRerollContext);
 			EffectiveRerollLimit = GetEffectiveRerollLimit(PlayerState);
 		}
 	}
@@ -600,7 +600,7 @@ bool UGambitRoundFlowComponent::RequestUseConsumableOnTargetSelectedDie(
 			{
 				if (PlayerState->ConsumeConsumableDefinitionAtSlot(SlotIndex, ConsumableDefinition) && ConsumableDefinition)
 				{
-					FGambitEffectExecutionContext Context = MakeEffectContext(EGambitEffectHook::ConsumableUse, PlayerState, TargetPlayerState ? TargetPlayerState : PlayerState);
+					FGambitEffectExecutionContext Context = CreateEffectContext(EGambitEffectHook::ConsumableUse, PlayerState, TargetPlayerState ? TargetPlayerState : PlayerState);
 					if (bTargetsOpponent)
 					{
 						Context.TargetDieHandIndex = SelectedDieIndex;
@@ -610,8 +610,11 @@ bool UGambitRoundFlowComponent::RequestUseConsumableOnTargetSelectedDie(
 						Context.SourceDieHandIndex = SelectedDieIndex;
 						Context.TargetDieHandIndex = SelectedDieIndex;
 					}
-					ExecuteItemEffects(ConsumableDefinition, Context);
-					CommitEffectContext(Context);
+					if (EffectPipeline)
+					{
+						EffectPipeline->ExecuteItemEffects(ConsumableDefinition, Context);
+						EffectPipeline->CommitEffectContext(Context, BuildEffectCommitRequest());
+					}
 					bSuccess = true;
 				}
 			}
@@ -656,27 +659,21 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 		UGambitSharedPoolComponent* SharedPoolComponent = GameState->GetSharedPoolComponent();
 		FGambitShopPurchaseContext PurchaseContext = PlayerState->BuildShopPurchaseContext(OfferId, SharedPoolComponent);
 
-		FGambitEffectExecutionContext PrePriceContext = MakeEffectContext(EGambitEffectHook::PrePriceResolve, PlayerState);
+		FGambitEffectExecutionContext PrePriceContext = CreateEffectContext(EGambitEffectHook::PrePriceResolve, PlayerState);
 		PrePriceContext.ShopPurchase = PurchaseContext;
-		ExecuteActiveModuleEffects(PrePriceContext);
-		ExecuteActiveDiceEffects(PrePriceContext);
-		CommitEffectContext(PrePriceContext);
+		ExecuteActiveEffectsAndCommit(PrePriceContext);
 		PurchaseContext = PrePriceContext.ShopPurchase;
 		PlayerState->ResolveShopPurchasePrice(PurchaseContext);
 
-		FGambitEffectExecutionContext PostPriceContext = MakeEffectContext(EGambitEffectHook::PostPriceResolve, PlayerState);
+		FGambitEffectExecutionContext PostPriceContext = CreateEffectContext(EGambitEffectHook::PostPriceResolve, PlayerState);
 		PostPriceContext.ShopPurchase = PurchaseContext;
-		ExecuteActiveModuleEffects(PostPriceContext);
-		ExecuteActiveDiceEffects(PostPriceContext);
-		CommitEffectContext(PostPriceContext);
+		ExecuteActiveEffectsAndCommit(PostPriceContext);
 		PurchaseContext = PostPriceContext.ShopPurchase;
 		PlayerState->ResolveShopPurchasePrice(PurchaseContext);
 
-		FGambitEffectExecutionContext PrePurchaseContext = MakeEffectContext(EGambitEffectHook::PrePurchase, PlayerState);
+		FGambitEffectExecutionContext PrePurchaseContext = CreateEffectContext(EGambitEffectHook::PrePurchase, PlayerState);
 		PrePurchaseContext.ShopPurchase = PurchaseContext;
-		ExecuteActiveModuleEffects(PrePurchaseContext);
-		ExecuteActiveDiceEffects(PrePurchaseContext);
-		CommitEffectContext(PrePurchaseContext);
+		ExecuteActiveEffectsAndCommit(PrePurchaseContext);
 		PurchaseContext = PrePurchaseContext.ShopPurchase;
 
 		const int32 GoldBeforePurchase = PlayerState->GetCurrentGold();
@@ -697,15 +694,23 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 			PurchaseGoldLine.Summary = FString::Printf(TEXT("Purchase spend for %s: %d gold"), *PurchaseGoldLine.SourceName, PurchaseContext.ResolvedPrice);
 			PlayerState->AddDebugGoldLine(PurchaseGoldLine);
 
-			FGambitEffectExecutionContext PostPurchaseContext = MakeEffectContext(EGambitEffectHook::PostPurchase, PlayerState);
+			FGambitEffectExecutionContext PostPurchaseContext = CreateEffectContext(EGambitEffectHook::PostPurchase, PlayerState);
 			PostPurchaseContext.ShopPurchase = PurchaseContext;
-			ExecuteActiveModuleEffects(PostPurchaseContext);
-			ExecuteActiveDiceEffects(PostPurchaseContext);
+			if (EffectPipeline)
+			{
+				EffectPipeline->ExecuteActiveSourceEffects(PostPurchaseContext);
+			}
 			if (!Cast<UGambitModuleDefinition>(PurchaseContext.ItemDefinition.Get()))
 			{
-				ExecuteItemEffects(PurchaseContext.ItemDefinition.Get(), PostPurchaseContext);
+				if (EffectPipeline)
+				{
+					EffectPipeline->ExecuteItemEffects(PurchaseContext.ItemDefinition.Get(), PostPurchaseContext);
+				}
 			}
-			CommitEffectContext(PostPurchaseContext);
+			if (EffectPipeline)
+			{
+				EffectPipeline->CommitEffectContext(PostPurchaseContext, BuildEffectCommitRequest());
+			}
 			PurchaseContext = PostPurchaseContext.ShopPurchase;
 			const int32 GoldBeforePostPurchase = PlayerState->GetCurrentGold();
 			PlayerState->ApplyPostPurchaseAdjustments(PurchaseContext);
@@ -858,10 +863,8 @@ void UGambitRoundFlowComponent::StartNextRound()
 	UE_LOG(LogGambit, Log, TEXT("RoundFlow: === ROUND %d START ==="), GameState->GetCurrentRoundIndex());
 	for (AGambitPlayerState* PlayerState : Players)
 	{
-		FGambitEffectExecutionContext Context = MakeEffectContext(EGambitEffectHook::RoundStart, PlayerState);
-		ExecuteActiveModuleEffects(Context);
-		ExecuteActiveDiceEffects(Context);
-		CommitEffectContext(Context);
+		FGambitEffectExecutionContext Context = CreateEffectContext(EGambitEffectHook::RoundStart, PlayerState);
+		ExecuteActiveEffectsAndCommit(Context);
 		LogPlayerRoundSnapshot(PlayerState, Players);
 	}
 
@@ -876,17 +879,13 @@ void UGambitRoundFlowComponent::EnterRollPhase()
 	{
 		if (PlayerState)
 		{
-			FGambitEffectExecutionContext PreRollContext = MakeEffectContext(EGambitEffectHook::PreRoll, PlayerState);
-			ExecuteActiveModuleEffects(PreRollContext);
-			ExecuteActiveDiceEffects(PreRollContext);
-			CommitEffectContext(PreRollContext);
+			FGambitEffectExecutionContext PreRollContext = CreateEffectContext(EGambitEffectHook::PreRoll, PlayerState);
+			ExecuteActiveEffectsAndCommit(PreRollContext);
 
 			PlayerState->RollAllDice(MatchRandomStream);
 
-			FGambitEffectExecutionContext PostRollContext = MakeEffectContext(EGambitEffectHook::PostRoll, PlayerState);
-			ExecuteActiveModuleEffects(PostRollContext);
-			ExecuteActiveDiceEffects(PostRollContext);
-			CommitEffectContext(PostRollContext);
+			FGambitEffectExecutionContext PostRollContext = CreateEffectContext(EGambitEffectHook::PostRoll, PlayerState);
+			ExecuteActiveEffectsAndCommit(PostRollContext);
 
 			UE_LOG(
 				LogGambit,
@@ -929,35 +928,27 @@ void UGambitRoundFlowComponent::EnterResolutionPhase()
 			continue;
 		}
 
-		FGambitEffectExecutionContext PreCombinationContext = MakeEffectContext(EGambitEffectHook::PreCombinationEvaluation, PlayerState);
-		ExecuteActiveModuleEffects(PreCombinationContext);
-		ExecuteActiveDiceEffects(PreCombinationContext);
-		CommitEffectContext(PreCombinationContext);
+		FGambitEffectExecutionContext PreCombinationContext = CreateEffectContext(EGambitEffectHook::PreCombinationEvaluation, PlayerState);
+		ExecuteActiveEffectsAndCommit(PreCombinationContext);
 
 		const FGambitDiceCombinationResult CombinationResult = DiceEvaluator->EvaluateDice(PlayerState->GetDiceStatesRef());
 
-		FGambitEffectExecutionContext PostCombinationContext = MakeEffectContext(EGambitEffectHook::PostCombinationEvaluation, PlayerState);
+		FGambitEffectExecutionContext PostCombinationContext = CreateEffectContext(EGambitEffectHook::PostCombinationEvaluation, PlayerState);
 		PostCombinationContext.CurrentCombinationResult = CombinationResult;
-		ExecuteActiveModuleEffects(PostCombinationContext);
-		ExecuteActiveDiceEffects(PostCombinationContext);
-		CommitEffectContext(PostCombinationContext);
+		ExecuteActiveEffectsAndCommit(PostCombinationContext);
 
-		FGambitEffectExecutionContext PreScoreContext = MakeEffectContext(EGambitEffectHook::PreScoreCalculation, PlayerState);
+		FGambitEffectExecutionContext PreScoreContext = CreateEffectContext(EGambitEffectHook::PreScoreCalculation, PlayerState);
 		PreScoreContext.CurrentCombinationResult = CombinationResult;
-		ExecuteActiveModuleEffects(PreScoreContext);
-		ExecuteActiveDiceEffects(PreScoreContext);
-		CommitEffectContext(PreScoreContext);
+		ExecuteActiveEffectsAndCommit(PreScoreContext);
 
-		const FGambitScoreModifierContext Modifier = BuildScoreModifierThroughEffects(PlayerState, CombinationResult);
+		const FGambitScoreModifierContext Modifier = BuildScoreModifierForResolution(PlayerState, CombinationResult);
 		FGambitScoreBreakdown ScoreBreakdown = ScoreCalculator->CalculateScore(CombinationResult, Modifier);
 
-		FGambitEffectExecutionContext PostScoreContext = MakeEffectContext(EGambitEffectHook::PostScoreCalculation, PlayerState);
+		FGambitEffectExecutionContext PostScoreContext = CreateEffectContext(EGambitEffectHook::PostScoreCalculation, PlayerState);
 		PostScoreContext.CurrentCombinationResult = CombinationResult;
 		PostScoreContext.CurrentScoreModifier = Modifier;
 		PostScoreContext.CurrentScoreBreakdown = ScoreBreakdown;
-		ExecuteActiveModuleEffects(PostScoreContext);
-		ExecuteActiveDiceEffects(PostScoreContext);
-		CommitEffectContext(PostScoreContext);
+		ExecuteActiveEffectsAndCommit(PostScoreContext);
 		ScoreBreakdown = PostScoreContext.CurrentScoreBreakdown;
 
 		PlayerState->ApplyRoundScore(ScoreBreakdown);
@@ -994,13 +985,11 @@ void UGambitRoundFlowComponent::EnterRewardPhase()
 
 		const int32 BaseGoldReward = ComputeBaseGoldReward(PlayerState);
 		const int32 Interest = PlayerState->ApplyRoundGoldReward(BaseGoldReward);
-		FGambitEffectExecutionContext RewardContext = MakeEffectContext(EGambitEffectHook::Reward, PlayerState);
+		FGambitEffectExecutionContext RewardContext = CreateEffectContext(EGambitEffectHook::Reward, PlayerState);
 		RewardContext.CurrentScoreBreakdown = PlayerState->GetLastScoreBreakdown();
 		RewardContext.BaseGoldReward = BaseGoldReward;
 		RewardContext.InterestGoldReward = Interest;
-		ExecuteActiveModuleEffects(RewardContext);
-		ExecuteActiveDiceEffects(RewardContext);
-		CommitEffectContext(RewardContext);
+		ExecuteActiveEffectsAndCommit(RewardContext);
 		UE_LOG(
 			LogGambit,
 			Log,
@@ -1034,12 +1023,10 @@ void UGambitRoundFlowComponent::EnterRankingPhase()
 	{
 		if (AGambitPlayerState* RankedPlayer = Cast<AGambitPlayerState>(Entry.PlayerState))
 		{
-			FGambitEffectExecutionContext RankingContext = MakeEffectContext(EGambitEffectHook::Ranking, RankedPlayer);
+			FGambitEffectExecutionContext RankingContext = CreateEffectContext(EGambitEffectHook::Ranking, RankedPlayer);
 			RankingContext.SourceRank = Entry.Rank;
 			RankingContext.CurrentScoreBreakdown = RankedPlayer->GetLastScoreBreakdown();
-			ExecuteActiveModuleEffects(RankingContext);
-			ExecuteActiveDiceEffects(RankingContext);
-			CommitEffectContext(RankingContext);
+			ExecuteActiveEffectsAndCommit(RankingContext);
 		}
 	}
 	RankingComponent->ApplyVictoryPoints(Ranking);
@@ -1081,21 +1068,17 @@ void UGambitRoundFlowComponent::EnterShopPhase()
 				? PlayerState->GetShopComponent()->GetConfiguredOfferCount()
 				: UGambitGameBalanceSettings::Get()->ShopOfferCount;
 
-			FGambitEffectExecutionContext PreShopGenerateContext = MakeEffectContext(EGambitEffectHook::PreShopGenerate, PlayerState);
+			FGambitEffectExecutionContext PreShopGenerateContext = CreateEffectContext(EGambitEffectHook::PreShopGenerate, PlayerState);
 			PreShopGenerateContext.ShopOfferCount = BaseOfferCount;
-			ExecuteActiveModuleEffects(PreShopGenerateContext);
-			ExecuteActiveDiceEffects(PreShopGenerateContext);
-			CommitEffectContext(PreShopGenerateContext);
+			ExecuteActiveEffectsAndCommit(PreShopGenerateContext);
 
 			const int32 OfferCount = FMath::Max(0, PreShopGenerateContext.ShopOfferCount + PreShopGenerateContext.ShopOfferCountDelta);
 			PlayerState->RefreshShopOffersWithCount(MatchRandomStream, GameState->GetSharedPoolComponent(), OfferCount);
 
-			FGambitEffectExecutionContext PostShopGenerateContext = MakeEffectContext(EGambitEffectHook::PostShopGenerate, PlayerState);
+			FGambitEffectExecutionContext PostShopGenerateContext = CreateEffectContext(EGambitEffectHook::PostShopGenerate, PlayerState);
 			PostShopGenerateContext.ShopOfferCount = OfferCount;
 			PostShopGenerateContext.GeneratedShopOffers = PlayerState->GetCurrentShopOffers();
-			ExecuteActiveModuleEffects(PostShopGenerateContext);
-			ExecuteActiveDiceEffects(PostShopGenerateContext);
-			CommitEffectContext(PostShopGenerateContext);
+			ExecuteActiveEffectsAndCommit(PostShopGenerateContext);
 			if (UGambitShopComponent* ShopComponent = PlayerState->GetShopComponent())
 			{
 				ShopComponent->SetCurrentOffers(PostShopGenerateContext.GeneratedShopOffers);
@@ -1130,11 +1113,9 @@ void UGambitRoundFlowComponent::EnterRoundEndPhase()
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
 	for (AGambitPlayerState* PlayerState : Players)
 	{
-		FGambitEffectExecutionContext RoundEndContext = MakeEffectContext(EGambitEffectHook::RoundEnd, PlayerState);
+		FGambitEffectExecutionContext RoundEndContext = CreateEffectContext(EGambitEffectHook::RoundEnd, PlayerState);
 		RoundEndContext.CurrentScoreBreakdown = PlayerState ? PlayerState->GetLastScoreBreakdown() : FGambitScoreBreakdown();
-		ExecuteActiveModuleEffects(RoundEndContext);
-		ExecuteActiveDiceEffects(RoundEndContext);
-		CommitEffectContext(RoundEndContext);
+		ExecuteActiveEffectsAndCommit(RoundEndContext);
 
 		const int32 DestroyedDiceCount = PlayerState->CommitDestroyedDiceAfterRound();
 		if (DestroyedDiceCount > 0)
@@ -1242,190 +1223,80 @@ void UGambitRoundFlowComponent::ResetReadiness()
 	}
 }
 
-FGambitEffectExecutionContext UGambitRoundFlowComponent::MakeEffectContext(
+FGambitRoundEffectContextRequest UGambitRoundFlowComponent::BuildEffectContextRequest(
 	const EGambitEffectHook Hook,
 	AGambitPlayerState* SourcePlayer,
 	AGambitPlayerState* TargetPlayer) const
 {
-	FGambitEffectExecutionContext Context;
 	const AGambitGameState* GameState = GetGambitGameState();
-	Context.Hook = Hook;
-	Context.CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
-	Context.SourcePlayer = SourcePlayer;
-	Context.TargetPlayer = TargetPlayer ? TargetPlayer : SourcePlayer;
-	Context.SharedPoolComponent = GameState ? GameState->GetSharedPoolComponent() : nullptr;
-	Context.RandomStream = MatchRandomStream;
-	Context.RerollsUsed = GetRerollCount(SourcePlayer);
-	Context.RerollLimit = GetEffectiveRerollLimit(SourcePlayer);
-	Context.SourceRank = GetRankForPlayer(SourcePlayer);
-	Context.TargetRank = GetRankForPlayer(Context.TargetPlayer.Get());
-	Context.MatchPlayerCount = GetAllPlayers().Num();
-	Context.FirstRerolledDieHandIndexThisRound = GetFirstRerolledDieHandIndex(SourcePlayer);
-	Context.MaxRerollCountForAnyDieThisRound = GetMaxRerollCountForAnyDie(SourcePlayer);
+	AGambitPlayerState* EffectiveTarget = TargetPlayer ? TargetPlayer : SourcePlayer;
 
-	for (AGambitPlayerState* PlayerState : GetAllPlayers())
-	{
-		if (!PlayerState)
-		{
-			continue;
-		}
-
-		Context.MatchPlayerStates.Add(PlayerState);
-		if (PlayerState->GetEconomyComponent())
-		{
-			Context.MatchEconomyComponents.Add(PlayerState->GetEconomyComponent());
-		}
-	}
-
-	if (SourcePlayer)
-	{
-		Context.SourceDiceComponent = SourcePlayer->GetDiceComponent();
-		Context.SourceEconomyComponent = SourcePlayer->GetEconomyComponent();
-		Context.SourceInventoryComponent = SourcePlayer->GetInventoryComponent();
-		Context.SourceShopComponent = SourcePlayer->GetShopComponent();
-		Context.SourceDice = SourcePlayer->GetDiceStates();
-		Context.CurrentScoreBreakdown = SourcePlayer->GetLastScoreBreakdown();
-		Context.CurrentScoreModifier = SourcePlayer->GetTemporaryScoreModifier();
-		if (Context.SourceShopComponent)
-		{
-			Context.GeneratedShopOffers = Context.SourceShopComponent->GetCurrentOffers();
-			Context.ShopPurchase.PurchasesMadeBefore = Context.SourceShopComponent->GetPurchasesMadeThisShop();
-		}
-	}
-
-	if (AGambitPlayerState* EffectiveTarget = Context.TargetPlayer.Get())
-	{
-		Context.TargetDiceComponent = EffectiveTarget->GetDiceComponent();
-		Context.TargetEconomyComponent = EffectiveTarget->GetEconomyComponent();
-		Context.TargetInventoryComponent = EffectiveTarget->GetInventoryComponent();
-		Context.TargetShopComponent = EffectiveTarget->GetShopComponent();
-		Context.TargetDice = EffectiveTarget->GetDiceStates();
-	}
-
-	return Context;
+	FGambitRoundEffectContextRequest Request;
+	Request.Hook = Hook;
+	Request.CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	Request.SourcePlayer = SourcePlayer;
+	Request.TargetPlayer = TargetPlayer ? TargetPlayer : SourcePlayer;
+	Request.SharedPoolComponent = GameState ? GameState->GetSharedPoolComponent() : nullptr;
+	Request.MatchPlayers = GetAllPlayers();
+	Request.RandomStream = MatchRandomStream;
+	Request.RerollsUsed = GetRerollCount(SourcePlayer);
+	Request.RerollLimit = GetEffectiveRerollLimit(SourcePlayer);
+	Request.SourceRank = GetRankForPlayer(SourcePlayer);
+	Request.TargetRank = GetRankForPlayer(EffectiveTarget);
+	Request.FirstRerolledDieHandIndexThisRound = GetFirstRerolledDieHandIndex(SourcePlayer);
+	Request.MaxRerollCountForAnyDieThisRound = GetMaxRerollCountForAnyDie(SourcePlayer);
+	return Request;
 }
 
-void UGambitRoundFlowComponent::CommitEffectContext(const FGambitEffectExecutionContext& Context)
+FGambitRoundEffectCommitRequest UGambitRoundFlowComponent::BuildEffectCommitRequest()
 {
-	const auto HasTemporaryModifier = [](const FGambitScoreModifierContext& Modifier)
-	{
-		return !FMath::IsNearlyZero(Modifier.AdditiveBonus)
-			|| !FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus)
-			|| !FMath::IsNearlyEqual(Modifier.Multiplier, 1.0f)
-			|| Modifier.ScoreCap > 0.0f
-			|| Modifier.DiminishingThreshold > 0.0f
-			|| !FMath::IsNearlyEqual(Modifier.DiminishingFactor, 1.0f);
-	};
-
-	MatchRandomStream = Context.RandomStream;
-
-	if (Context.SourcePlayer)
-	{
-		Context.SourcePlayer->AppendDebugEffectEvents(Context.DebugEffectEvents);
-		Context.SourcePlayer->AppendDebugScoreLines(Context.DebugScoreLines);
-		Context.SourcePlayer->AppendDebugGoldLines(Context.DebugGoldLines);
-		Context.SourcePlayer->AppendDebugShopLines(Context.DebugShopLines);
-	}
-
-	if (Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer)
-	{
-		Context.TargetPlayer->AppendDebugEffectEvents(Context.DebugEffectEvents);
-		Context.TargetPlayer->AppendDebugScoreLines(Context.DebugScoreLines);
-		Context.TargetPlayer->AppendDebugGoldLines(Context.DebugGoldLines);
-		Context.TargetPlayer->AppendDebugShopLines(Context.DebugShopLines);
-	}
-
-	if (Context.SourcePlayer && Context.RerollLimitDelta != 0)
-	{
-		int32& RerollDelta = RerollLimitDeltaByPlayer.FindOrAdd(Context.SourcePlayer);
-		RerollDelta += Context.RerollLimitDelta;
-	}
-
-	if (Context.SourcePlayer && HasTemporaryModifier(Context.TemporaryScoreModifierDelta))
-	{
-		Context.SourcePlayer->ApplyTemporaryScoreModifier(Context.TemporaryScoreModifierDelta);
-	}
-
-	if (Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer && HasTemporaryModifier(Context.TargetTemporaryScoreModifierDelta))
-	{
-		Context.TargetPlayer->ApplyTemporaryScoreModifier(Context.TargetTemporaryScoreModifierDelta);
-	}
+	FGambitRoundEffectCommitRequest Request;
+	Request.MatchRandomStream = &MatchRandomStream;
+	Request.RerollLimitDeltaByPlayer = &RerollLimitDeltaByPlayer;
+	return Request;
 }
 
-int32 UGambitRoundFlowComponent::ExecuteActiveModuleEffects(FGambitEffectExecutionContext& Context) const
+FGambitEffectExecutionContext UGambitRoundFlowComponent::CreateEffectContext(
+	const EGambitEffectHook Hook,
+	AGambitPlayerState* SourcePlayer,
+	AGambitPlayerState* TargetPlayer) const
 {
-	int32 TriggeredCount = 0;
-	if (!Context.SourcePlayer)
-	{
-		return TriggeredCount;
-	}
-
-	for (const TObjectPtr<UGambitModuleDefinition>& ModuleDefinition : Context.SourcePlayer->GetActiveModulesRef())
-	{
-		TriggeredCount += ExecuteItemEffects(ModuleDefinition.Get(), Context);
-	}
-
-	return TriggeredCount;
+	return EffectPipeline
+		? EffectPipeline->MakeEffectContext(BuildEffectContextRequest(Hook, SourcePlayer, TargetPlayer))
+		: FGambitEffectExecutionContext();
 }
 
-int32 UGambitRoundFlowComponent::ExecuteActiveDiceEffects(FGambitEffectExecutionContext& Context) const
+void UGambitRoundFlowComponent::ExecuteActiveEffectsAndCommit(FGambitEffectExecutionContext& Context)
 {
-	int32 TriggeredCount = 0;
-	if (!Context.SourcePlayer || !EffectResolver)
+	if (!EffectPipeline)
 	{
-		return TriggeredCount;
+		return;
 	}
 
-	const TArray<FGambitDieRuntimeState> DiceSnapshot = Context.SourcePlayer->GetDiceStates();
-	for (const FGambitDieRuntimeState& DieState : DiceSnapshot)
-	{
-		UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get();
-		if (!DiceDefinition)
-		{
-			continue;
-		}
-
-		Context.SourceDiceDefinition = DiceDefinition;
-		Context.SourceDieInstanceId = DieState.InstanceId;
-		Context.SourceDieHandIndex = DieState.HandIndex;
-		TriggeredCount += EffectResolver->ExecuteDiceEffects(DiceDefinition, Context);
-	}
-
-	Context.SourceDiceDefinition = nullptr;
-	Context.SourceDieInstanceId = INDEX_NONE;
-	Context.SourceDieHandIndex = INDEX_NONE;
-	return TriggeredCount;
+	EffectPipeline->ExecuteActiveSourceEffects(Context);
+	EffectPipeline->CommitEffectContext(Context, BuildEffectCommitRequest());
 }
 
-int32 UGambitRoundFlowComponent::ExecuteItemEffects(
-	UGambitItemDefinition* ItemDefinition,
-	FGambitEffectExecutionContext& Context) const
-{
-	return EffectResolver ? EffectResolver->ExecuteItemEffects(ItemDefinition, Context) : 0;
-}
-
-FGambitScoreModifierContext UGambitRoundFlowComponent::BuildScoreModifierThroughEffects(
+FGambitScoreModifierContext UGambitRoundFlowComponent::BuildScoreModifierForResolution(
 	AGambitPlayerState* PlayerState,
 	const FGambitDiceCombinationResult& CombinationResult)
 {
+	if (EffectPipeline)
+	{
+		FGambitRoundScoreModifierEffectRequest Request;
+		Request.ContextRequest = BuildEffectContextRequest(EGambitEffectHook::ScoreModifier, PlayerState);
+		Request.CommitRequest = BuildEffectCommitRequest();
+		Request.CombinationResult = CombinationResult;
+		return EffectPipeline->BuildScoreModifierFromEffects(Request).ScoreModifier;
+	}
+
 	FGambitScoreModifierContext Modifier = PlayerState ? PlayerState->GetTemporaryScoreModifier() : FGambitScoreModifierContext();
 	if (Modifier.Multiplier <= 0.0f)
 	{
 		Modifier.Multiplier = 1.0f;
 	}
-	if (Modifier.DiminishingFactor <= 0.0f)
-	{
-		Modifier.DiminishingFactor = 1.0f;
-	}
-
-	FGambitEffectExecutionContext Context = MakeEffectContext(EGambitEffectHook::ScoreModifier, PlayerState);
-	Context.CurrentCombinationResult = CombinationResult;
-	Context.CurrentScoreModifier = Modifier;
-	ExecuteActiveModuleEffects(Context);
-	ExecuteActiveDiceEffects(Context);
-	CommitEffectContext(Context);
-
-	return UGambitEffectResolver::MergeScoreModifiers(Modifier, Context.ScoreModifierDelta);
+	Modifier.DiminishingFactor = Modifier.DiminishingFactor <= 0.0f ? 1.0f : Modifier.DiminishingFactor;
+	return Modifier;
 }
 
 int32 UGambitRoundFlowComponent::GetRerollCount(AGambitPlayerState* PlayerState) const

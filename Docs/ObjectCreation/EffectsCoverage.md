@@ -12,6 +12,12 @@ Hooks utiles déjà disponibles :
 - Boutique : `PreShopGenerate`, `PostShopGenerate`, `PrePriceResolve`, `PostPriceResolve`, `PrePurchase`, `PostPurchase`, `ShopSkipped`
 - Consommables : `ConsumableUse`
 
+## Effect execution ownership
+
+- `UGambitRoundFlowComponent` owns phase timing and decides when a hook should run.
+- `UGambitRoundEffectPipeline` builds round effect contexts, runs active module/dice/item effects, commits debug output and temporary deltas.
+- `UGambitEffectResolver` remains the atomic effect resolver; it applies one item/dice effect payload to the provided context.
+
 Effect types directement utiles :
 
 - Score : `ScoreModifier`, `AddScoreFlat`, `MultiplyScore`, `AddTemporaryScoreModifier`

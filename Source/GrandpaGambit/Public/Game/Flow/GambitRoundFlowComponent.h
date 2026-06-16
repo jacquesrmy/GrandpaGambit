@@ -12,8 +12,11 @@ class AGambitPlayerState;
 class UGambitDiceEvaluatorContract;
 class UGambitEffectResolver;
 class UGambitItemDefinition;
+class UGambitRoundEffectPipeline;
 class UGambitScoreCalculatorContract;
 struct FGambitEffectExecutionContext;
+struct FGambitRoundEffectCommitRequest;
+struct FGambitRoundEffectContextRequest;
 
 UCLASS(ClassGroup = (Gambit), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
 class GRANDPAGAMBIT_API UGambitRoundFlowComponent : public UActorComponent
@@ -81,12 +84,11 @@ private:
 	bool AreAllPlayersReady() const;
 	void ResetReadiness();
 
-	FGambitEffectExecutionContext MakeEffectContext(EGambitEffectHook Hook, AGambitPlayerState* SourcePlayer, AGambitPlayerState* TargetPlayer = nullptr) const;
-	void CommitEffectContext(const FGambitEffectExecutionContext& Context);
-	int32 ExecuteActiveModuleEffects(FGambitEffectExecutionContext& Context) const;
-	int32 ExecuteActiveDiceEffects(FGambitEffectExecutionContext& Context) const;
-	int32 ExecuteItemEffects(UGambitItemDefinition* ItemDefinition, FGambitEffectExecutionContext& Context) const;
-	FGambitScoreModifierContext BuildScoreModifierThroughEffects(
+	FGambitRoundEffectContextRequest BuildEffectContextRequest(EGambitEffectHook Hook, AGambitPlayerState* SourcePlayer, AGambitPlayerState* TargetPlayer = nullptr) const;
+	FGambitRoundEffectCommitRequest BuildEffectCommitRequest();
+	FGambitEffectExecutionContext CreateEffectContext(EGambitEffectHook Hook, AGambitPlayerState* SourcePlayer, AGambitPlayerState* TargetPlayer = nullptr) const;
+	void ExecuteActiveEffectsAndCommit(FGambitEffectExecutionContext& Context);
+	FGambitScoreModifierContext BuildScoreModifierForResolution(
 		AGambitPlayerState* PlayerState,
 		const FGambitDiceCombinationResult& CombinationResult);
 
@@ -122,6 +124,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UGambitEffectResolver> EffectResolver;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UGambitRoundEffectPipeline> EffectPipeline;
 
 	UPROPERTY(VisibleAnywhere, Category = "Gambit|Round Flow")
 	FRandomStream MatchRandomStream;
