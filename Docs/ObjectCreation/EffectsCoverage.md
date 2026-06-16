@@ -17,6 +17,7 @@ Hooks utiles déjà disponibles :
 - `UGambitRoundFlowComponent` owns phase timing and decides when a hook should run.
 - `UGambitRoundEffectPipeline` builds round effect contexts, runs active module/dice/item effects, commits debug output and temporary deltas.
 - `UGambitEffectResolver` remains the atomic effect resolver; it applies one item/dice effect payload to the provided context.
+- Inside the resolver, private domain helpers apply score, dice, economy, shop, shared pool, defense, and utility effects. The public resolver entry points and target-rule resolution remain the integration boundary.
 
 Effect types directement utiles :
 

@@ -2063,8 +2063,76 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	const int32 Amount = ResolveContextualAmountAsInt(EffectDefinition, Context, Target);
 	switch (EffectDefinition->EffectType)
 	{
+	case EGambitItemEffectType::ScoreModifier:
+	case EGambitItemEffectType::AddScoreFlat:
+	case EGambitItemEffectType::MultiplyScore:
+	case EGambitItemEffectType::MultiplyDiceContribution:
+	case EGambitItemEffectType::AddTemporaryScoreModifier:
+	case EGambitItemEffectType::StealScore:
+		return ApplyScoreEffect(EffectDefinition, Target, Amount, Context);
+	case EGambitItemEffectType::ModifyDieValue:
+	case EGambitItemEffectType::SetDieValue:
+	case EGambitItemEffectType::LockDie:
+	case EGambitItemEffectType::RerollDie:
+	case EGambitItemEffectType::AddReroll:
+	case EGambitItemEffectType::ModifyRerollLimit:
+	case EGambitItemEffectType::DestroyOrRemoveDiceChance:
+	case EGambitItemEffectType::TransformDiceForRound:
+	case EGambitItemEffectType::AddTemporaryDie:
+	case EGambitItemEffectType::SetDieScoreContributionValue:
+	case EGambitItemEffectType::SetDieComboContributionCount:
+	case EGambitItemEffectType::SetDieCountsForScoreSum:
+	case EGambitItemEffectType::SetDieCountsForCombinations:
+	case EGambitItemEffectType::SetDieCanBeRerolled:
+	case EGambitItemEffectType::SetDieCanBeLocked:
+	case EGambitItemEffectType::MarkDieDestroyedAfterRound:
+	case EGambitItemEffectType::AddDieRuntimeTags:
+	case EGambitItemEffectType::RemoveDieRuntimeTags:
+		return ApplyDiceEffect(EffectDefinition, Target, Amount, Context);
+	case EGambitItemEffectType::AddGold:
+	case EGambitItemEffectType::SpendGold:
+	case EGambitItemEffectType::StealGold:
+	case EGambitItemEffectType::ModifyDebtLimit:
+	case EGambitItemEffectType::ModifyMaxGold:
+	case EGambitItemEffectType::ModifyInterestInterval:
+	case EGambitItemEffectType::ModifyMaxInterest:
+	case EGambitItemEffectType::ModifyInterestBonus:
+	case EGambitItemEffectType::AddRecurringGoldIncome:
+	case EGambitItemEffectType::SellItem:
+	case EGambitItemEffectType::SellDie:
+		return ApplyEconomyEffect(EffectDefinition, Target, Amount, Context);
+	case EGambitItemEffectType::ModifyShopOfferCount:
+	case EGambitItemEffectType::AddShopDiscountPercent:
+	case EGambitItemEffectType::AddShopSurchargePercent:
+	case EGambitItemEffectType::AddShopFlatPriceDelta:
+	case EGambitItemEffectType::MakeShopOfferFree:
+	case EGambitItemEffectType::AddShopCashbackPercent:
+	case EGambitItemEffectType::AddPurchaseGoldDelta:
+	case EGambitItemEffectType::BlockShopPurchase:
+		return ApplyShopEffect(EffectDefinition, Target, Amount, Context);
+	case EGambitItemEffectType::AddSharedPoolStock:
+	case EGambitItemEffectType::SetSharedPoolPurchaseLimit:
+	case EGambitItemEffectType::SetSharedPoolItemUnavailable:
+		return ApplySharedPoolEffect(EffectDefinition, Amount, Context);
+	case EGambitItemEffectType::PreventNegativeEffect:
+		return ApplyDefenseEffect(EffectDefinition, Context);
+	case EGambitItemEffectType::GrantConsumable:
+	case EGambitItemEffectType::CopyLastTriggeredEffect:
+		return ApplyUtilityEffect(EffectDefinition, Target, Context);
 	case EGambitItemEffectType::None:
+	default:
 		return false;
+	}
+}
+
+bool UGambitEffectResolver::ApplyScoreEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	const EGambitEffectTarget Target,
+	const int32 Amount,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
 	case EGambitItemEffectType::ScoreModifier:
 		ApplyScoreModifier(ResolveScoreModifierDelta(Context, Target), EffectDefinition->ScoreModifier);
 		AddScoreModifierDebugLine(Context, EffectDefinition->ScoreModifier, GetEffectName(EffectDefinition));
@@ -2139,50 +2207,105 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			FString::Printf(TEXT("%s changes dice contribution by %+0.2f"), *GetEffectName(EffectDefinition), Bonus)));
 		return true;
 	}
-	case EGambitItemEffectType::AddGold:
+	case EGambitItemEffectType::AddTemporaryScoreModifier:
 	{
 		FGambitEffectTargetResolveResult TargetResolveResult;
 		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
-		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
-		if (EconomyComponent)
+		if (!ResolvedTarget)
 		{
-			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
-			const int32 GoldAfter = EconomyComponent->AddGold(Amount);
-			Context.DebugGoldLines.Add(MakeGoldDebugLine(
+			return false;
+		}
+
+		FGambitScoreModifierContext& TargetModifier = ResolvedTarget->TargetSide == EGambitEffectTarget::Target
+			? Context.TargetTemporaryScoreModifierDelta
+			: Context.TemporaryScoreModifierDelta;
+		FGambitScoreModifierContext DebugModifier = EffectDefinition->ScoreModifier;
+		ApplyScoreModifier(TargetModifier, EffectDefinition->ScoreModifier);
+		if (Amount != 0)
+		{
+			TargetModifier.AdditiveBonus += static_cast<float>(Amount);
+			DebugModifier.AdditiveBonus += static_cast<float>(Amount);
+		}
+		const float TemporaryMultiplier = ResolveContextualMultiplier(EffectDefinition, Context, ResolvedTarget->TargetSide);
+		if (!FMath::IsNearlyEqual(TemporaryMultiplier, 1.0f))
+		{
+			TargetModifier.Multiplier *= TemporaryMultiplier;
+			DebugModifier.Multiplier *= TemporaryMultiplier;
+		}
+		AddScoreModifierDebugLine(Context, DebugModifier, FString::Printf(TEXT("%s temporary modifier"), *GetEffectName(EffectDefinition)));
+		return true;
+	}
+	case EGambitItemEffectType::StealScore:
+	{
+		FGambitEffectTargetResolveResult SourceResolveResult;
+		const FGambitResolvedEffectTarget* SourceResolvedTarget = ResolveContextSideForRuntimeMutation(Context, EGambitEffectTarget::Source, SourceResolveResult);
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* TargetResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, EGambitEffectTarget::Target, TargetResolveResult);
+		AGambitPlayerState* SourcePlayer = SourceResolvedTarget ? SourceResolvedTarget->Player.Get() : nullptr;
+		AGambitPlayerState* TargetPlayer = TargetResolvedTarget ? TargetResolvedTarget->Player.Get() : nullptr;
+		if (!SourcePlayer || !TargetPlayer || SourcePlayer == TargetPlayer)
+		{
+			return false;
+		}
+
+		FGambitScoreBreakdown TargetBreakdown = TargetPlayer->GetLastScoreBreakdown();
+		const int32 ActualAmount = FMath::Min(FMath::Max(0, Amount), TargetBreakdown.FinalScore);
+		if (ActualAmount <= 0)
+		{
+			return false;
+		}
+
+		TargetBreakdown.FinalScore -= ActualAmount;
+		TargetBreakdown.ScoreAfterCap = FMath::Max(0.0f, TargetBreakdown.ScoreAfterCap - static_cast<float>(ActualAmount));
+		TargetPlayer->ApplyRoundScore(TargetBreakdown);
+
+		if (Target == EGambitEffectTarget::Source || SourcePlayer == Context.SourcePlayer)
+		{
+			const float ScoreBefore = Context.CurrentScoreBreakdown.FinalScore;
+			ApplyFlatScoreToBreakdown(Context.CurrentScoreBreakdown, static_cast<float>(ActualAmount));
+			Context.DebugScoreLines.Add(MakeScoreDebugLine(
 				Context,
-				EGambitDebugGoldLineType::Effect,
-				Amount,
-				GoldBefore,
-				GoldAfter,
-				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
-			return true;
+				EGambitDebugScoreLineType::Additive,
+				GetEffectName(EffectDefinition),
+				static_cast<float>(ActualAmount),
+				0.0f,
+				1.0f,
+				ScoreBefore,
+				Context.CurrentScoreBreakdown.FinalScore,
+				FString::Printf(TEXT("%s steals %d score"), *GetEffectName(EffectDefinition), ActualAmount)));
 		}
-		return false;
-	}
-	case EGambitItemEffectType::SpendGold:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
-		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
-		if (EconomyComponent)
+		else
 		{
-			const int32 Cost = FMath::Max(0, Amount);
-			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
-			const bool bSpent = EconomyComponent->SpendGold(Cost);
-			if (bSpent)
-			{
-				Context.DebugGoldLines.Add(MakeGoldDebugLine(
-					Context,
-					EGambitDebugGoldLineType::Effect,
-					-Cost,
-					GoldBefore,
-					EconomyComponent->GetCurrentGold(),
-					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
-			}
-			return bSpent;
+			FGambitScoreBreakdown SourceBreakdown = SourcePlayer->GetLastScoreBreakdown();
+			const float ScoreBefore = SourceBreakdown.FinalScore;
+			ApplyFlatScoreToBreakdown(SourceBreakdown, static_cast<float>(ActualAmount));
+			SourcePlayer->ApplyRoundScore(SourceBreakdown);
+			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+				Context,
+				EGambitDebugScoreLineType::Additive,
+				GetEffectName(EffectDefinition),
+				static_cast<float>(ActualAmount),
+				0.0f,
+				1.0f,
+				ScoreBefore,
+				SourceBreakdown.FinalScore,
+				FString::Printf(TEXT("%s steals %d score"), *GetEffectName(EffectDefinition), ActualAmount)));
 		}
+		return true;
+	}
+	default:
 		return false;
 	}
+}
+
+bool UGambitEffectResolver::ApplyDiceEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	const EGambitEffectTarget Target,
+	const int32 Amount,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
 	case EGambitItemEffectType::ModifyDieValue:
 	{
 		FGambitEffectTargetResolveResult TargetResolveResult;
@@ -2312,169 +2435,6 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 	case EGambitItemEffectType::ModifyRerollLimit:
 		Context.RerollLimitDelta += Amount;
 		return true;
-	case EGambitItemEffectType::GrantConsumable:
-	{
-		UGambitConsumableDefinition* ConsumableDefinition = EffectDefinition->GrantedConsumableDefinition.Get();
-		if (!ConsumableDefinition)
-		{
-			ConsumableDefinition = Context.GrantedConsumable.Get();
-		}
-
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
-		UGambitInventoryComponent* InventoryComponent = ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
-		if (InventoryComponent)
-		{
-			const bool bAdded = InventoryComponent->AddConsumable(ConsumableDefinition);
-			if (bAdded)
-			{
-				Context.GrantedConsumable = ConsumableDefinition;
-			}
-			return bAdded;
-		}
-		return false;
-	}
-	case EGambitItemEffectType::AddTemporaryScoreModifier:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
-		if (!ResolvedTarget)
-		{
-			return false;
-		}
-
-		FGambitScoreModifierContext& TargetModifier = ResolvedTarget->TargetSide == EGambitEffectTarget::Target
-			? Context.TargetTemporaryScoreModifierDelta
-			: Context.TemporaryScoreModifierDelta;
-		FGambitScoreModifierContext DebugModifier = EffectDefinition->ScoreModifier;
-		ApplyScoreModifier(TargetModifier, EffectDefinition->ScoreModifier);
-		if (Amount != 0)
-		{
-			TargetModifier.AdditiveBonus += static_cast<float>(Amount);
-			DebugModifier.AdditiveBonus += static_cast<float>(Amount);
-		}
-		const float TemporaryMultiplier = ResolveContextualMultiplier(EffectDefinition, Context, ResolvedTarget->TargetSide);
-		if (!FMath::IsNearlyEqual(TemporaryMultiplier, 1.0f))
-		{
-			TargetModifier.Multiplier *= TemporaryMultiplier;
-			DebugModifier.Multiplier *= TemporaryMultiplier;
-		}
-		AddScoreModifierDebugLine(Context, DebugModifier, FString::Printf(TEXT("%s temporary modifier"), *GetEffectName(EffectDefinition)));
-		return true;
-	}
-	case EGambitItemEffectType::StealScore:
-	{
-		FGambitEffectTargetResolveResult SourceResolveResult;
-		const FGambitResolvedEffectTarget* SourceResolvedTarget = ResolveContextSideForRuntimeMutation(Context, EGambitEffectTarget::Source, SourceResolveResult);
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		const FGambitResolvedEffectTarget* TargetResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, EGambitEffectTarget::Target, TargetResolveResult);
-		AGambitPlayerState* SourcePlayer = SourceResolvedTarget ? SourceResolvedTarget->Player.Get() : nullptr;
-		AGambitPlayerState* TargetPlayer = TargetResolvedTarget ? TargetResolvedTarget->Player.Get() : nullptr;
-		if (!SourcePlayer || !TargetPlayer || SourcePlayer == TargetPlayer)
-		{
-			return false;
-		}
-
-		FGambitScoreBreakdown TargetBreakdown = TargetPlayer->GetLastScoreBreakdown();
-		const int32 ActualAmount = FMath::Min(FMath::Max(0, Amount), TargetBreakdown.FinalScore);
-		if (ActualAmount <= 0)
-		{
-			return false;
-		}
-
-		TargetBreakdown.FinalScore -= ActualAmount;
-		TargetBreakdown.ScoreAfterCap = FMath::Max(0.0f, TargetBreakdown.ScoreAfterCap - static_cast<float>(ActualAmount));
-		TargetPlayer->ApplyRoundScore(TargetBreakdown);
-
-		if (Target == EGambitEffectTarget::Source || SourcePlayer == Context.SourcePlayer)
-		{
-			const float ScoreBefore = Context.CurrentScoreBreakdown.FinalScore;
-			ApplyFlatScoreToBreakdown(Context.CurrentScoreBreakdown, static_cast<float>(ActualAmount));
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
-				Context,
-				EGambitDebugScoreLineType::Additive,
-				GetEffectName(EffectDefinition),
-				static_cast<float>(ActualAmount),
-				0.0f,
-				1.0f,
-				ScoreBefore,
-				Context.CurrentScoreBreakdown.FinalScore,
-				FString::Printf(TEXT("%s steals %d score"), *GetEffectName(EffectDefinition), ActualAmount)));
-		}
-		else
-		{
-			FGambitScoreBreakdown SourceBreakdown = SourcePlayer->GetLastScoreBreakdown();
-			const float ScoreBefore = SourceBreakdown.FinalScore;
-			ApplyFlatScoreToBreakdown(SourceBreakdown, static_cast<float>(ActualAmount));
-			SourcePlayer->ApplyRoundScore(SourceBreakdown);
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
-				Context,
-				EGambitDebugScoreLineType::Additive,
-				GetEffectName(EffectDefinition),
-				static_cast<float>(ActualAmount),
-				0.0f,
-				1.0f,
-				ScoreBefore,
-				SourceBreakdown.FinalScore,
-				FString::Printf(TEXT("%s steals %d score"), *GetEffectName(EffectDefinition), ActualAmount)));
-		}
-		return true;
-	}
-	case EGambitItemEffectType::StealGold:
-	{
-		FGambitEffectTargetResolveResult SourceResolveResult;
-		const FGambitResolvedEffectTarget* SourceResolvedTarget = ResolveContextSideForRuntimeMutation(Context, EGambitEffectTarget::Source, SourceResolveResult);
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		const FGambitResolvedEffectTarget* TargetResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, EGambitEffectTarget::Target, TargetResolveResult);
-		UGambitEconomyComponent* SourceEconomy = SourceResolvedTarget ? SourceResolvedTarget->EconomyComponent.Get() : nullptr;
-		UGambitEconomyComponent* TargetEconomy = TargetResolvedTarget ? TargetResolvedTarget->EconomyComponent.Get() : nullptr;
-		if (!SourceEconomy || !TargetEconomy || SourceEconomy == TargetEconomy)
-		{
-			return false;
-		}
-
-		const int32 ActualAmount = FMath::Min(FMath::Max(0, Amount), TargetEconomy->GetCurrentGold());
-		if (ActualAmount <= 0 || !TargetEconomy->SpendGold(ActualAmount))
-		{
-			return false;
-		}
-
-		Context.DebugGoldLines.Add(MakeGoldDebugLine(
-			Context,
-			EGambitDebugGoldLineType::Effect,
-			-ActualAmount,
-			TargetEconomy->GetCurrentGold() + ActualAmount,
-			TargetEconomy->GetCurrentGold(),
-			FString::Printf(TEXT("%s steals %d gold from target"), *GetEffectName(EffectDefinition), ActualAmount)));
-
-		const int32 SourceGoldBefore = SourceEconomy->GetCurrentGold();
-		SourceEconomy->AddGold(ActualAmount);
-		Context.DebugGoldLines.Add(MakeGoldDebugLine(
-			Context,
-			EGambitDebugGoldLineType::Effect,
-			ActualAmount,
-			SourceGoldBefore,
-			SourceEconomy->GetCurrentGold(),
-			FString::Printf(TEXT("%s gains %d stolen gold"), *GetEffectName(EffectDefinition), ActualAmount)));
-		return true;
-	}
-	case EGambitItemEffectType::PreventNegativeEffect:
-	{
-		const bool bProtectsAllCategories = EffectDefinition->PreventedNegativeEffectCategories.Num() == 0;
-		const TArray<EGambitNegativeEffectCategory> ProtectedCategories = ResolvePreventedNegativeEffectCategories(EffectDefinition);
-		if (!bProtectsAllCategories && ProtectedCategories.Num() == 0)
-		{
-			return false;
-		}
-
-		Context.NegativeEffectProtection.AddProtection(
-			ProtectedCategories,
-			bProtectsAllCategories,
-			ResolvePreventNegativeEffectBlockCount(EffectDefinition),
-			GetEffectSourceId(EffectDefinition),
-			GetEffectName(EffectDefinition));
-		return true;
-	}
 	case EGambitItemEffectType::DestroyOrRemoveDiceChance:
 	{
 		const float ChancePercent = ResolveScalar(EffectDefinition, TEXT("ChancePercent"), EffectDefinition->Amount > 0.0f ? EffectDefinition->Amount : 100.0f);
@@ -2724,119 +2684,99 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
-	case EGambitItemEffectType::ModifyShopOfferCount:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		Context.ShopOfferCountDelta += Amount;
-		return true;
+	default:
+		return false;
 	}
-	case EGambitItemEffectType::AddShopDiscountPercent:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		Context.ShopPurchase.DiscountPercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
-		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop discount applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.DiscountPercent);
-		return true;
-	}
-	case EGambitItemEffectType::AddShopSurchargePercent:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		Context.ShopPurchase.SurchargePercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
-		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop surcharge applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.SurchargePercent);
-		return true;
-	}
-	case EGambitItemEffectType::AddShopFlatPriceDelta:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		Context.ShopPurchase.FlatPriceDelta += Amount;
-		return true;
-	}
-	case EGambitItemEffectType::MakeShopOfferFree:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		if (Context.Hook == EGambitEffectHook::PostShopGenerate)
-		{
-			if (Context.GeneratedShopOffers.Num() == 0)
-			{
-				return false;
-			}
+}
 
-			TArray<int32> PricedOfferIndexes;
-			for (int32 OfferIndex = 0; OfferIndex < Context.GeneratedShopOffers.Num(); ++OfferIndex)
-			{
-				if (!Context.GeneratedShopOffers[OfferIndex].bFree)
-				{
-					PricedOfferIndexes.Add(OfferIndex);
-				}
-			}
-			if (PricedOfferIndexes.Num() == 0)
-			{
-				return false;
-			}
-
-			const int32 ChosenOfferIndex = PricedOfferIndexes[Context.RandomStream.RandRange(0, PricedOfferIndexes.Num() - 1)];
-			FGambitShopOffer& Offer = Context.GeneratedShopOffers[ChosenOfferIndex];
-			Offer.bFree = true;
-			Offer.FreeReason = GetEffectName(EffectDefinition);
-			Offer.Price = 0;
-			UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop generated offer made free OfferId=%d Reason=%s"), Offer.OfferId, *Offer.FreeReason);
+bool UGambitEffectResolver::ApplyEconomyEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	const EGambitEffectTarget Target,
+	const int32 Amount,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
+	case EGambitItemEffectType::AddGold:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
+		{
+			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
+			const int32 GoldAfter = EconomyComponent->AddGold(Amount);
+			Context.DebugGoldLines.Add(MakeGoldDebugLine(
+				Context,
+				EGambitDebugGoldLineType::Effect,
+				Amount,
+				GoldBefore,
+				GoldAfter,
+				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
 			return true;
 		}
+		return false;
+	}
+	case EGambitItemEffectType::SpendGold:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitEconomyComponent* EconomyComponent = ResolvedTarget ? ResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (EconomyComponent)
+		{
+			const int32 Cost = FMath::Max(0, Amount);
+			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
+			const bool bSpent = EconomyComponent->SpendGold(Cost);
+			if (bSpent)
+			{
+				Context.DebugGoldLines.Add(MakeGoldDebugLine(
+					Context,
+					EGambitDebugGoldLineType::Effect,
+					-Cost,
+					GoldBefore,
+					EconomyComponent->GetCurrentGold(),
+					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
+			}
+			return bSpent;
+		}
+		return false;
+	}
+	case EGambitItemEffectType::StealGold:
+	{
+		FGambitEffectTargetResolveResult SourceResolveResult;
+		const FGambitResolvedEffectTarget* SourceResolvedTarget = ResolveContextSideForRuntimeMutation(Context, EGambitEffectTarget::Source, SourceResolveResult);
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* TargetResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, EGambitEffectTarget::Target, TargetResolveResult);
+		UGambitEconomyComponent* SourceEconomy = SourceResolvedTarget ? SourceResolvedTarget->EconomyComponent.Get() : nullptr;
+		UGambitEconomyComponent* TargetEconomy = TargetResolvedTarget ? TargetResolvedTarget->EconomyComponent.Get() : nullptr;
+		if (!SourceEconomy || !TargetEconomy || SourceEconomy == TargetEconomy)
+		{
+			return false;
+		}
 
-		Context.ShopPurchase.bFree = true;
-		Context.ShopPurchase.FreeReason = GetEffectName(EffectDefinition);
-		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop offer made free Reason=%s"), *Context.ShopPurchase.FreeReason);
-		return true;
-	}
-	case EGambitItemEffectType::AddShopCashbackPercent:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		const int32 ActualAmount = FMath::Min(FMath::Max(0, Amount), TargetEconomy->GetCurrentGold());
+		if (ActualAmount <= 0 || !TargetEconomy->SpendGold(ActualAmount))
 		{
 			return false;
 		}
-		Context.ShopPurchase.CashbackPercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
-		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Cashback applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.CashbackPercent);
-		return true;
-	}
-	case EGambitItemEffectType::AddPurchaseGoldDelta:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		Context.ShopPurchase.GoldDeltaOnPurchase += Amount;
-		return true;
-	}
-	case EGambitItemEffectType::BlockShopPurchase:
-	{
-		FGambitEffectTargetResolveResult TargetResolveResult;
-		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
-		{
-			return false;
-		}
-		Context.ShopPurchase.bBlockedByEffect = true;
-		Context.ShopPurchase.FailureReason = GetEffectName(EffectDefinition);
+
+		Context.DebugGoldLines.Add(MakeGoldDebugLine(
+			Context,
+			EGambitDebugGoldLineType::Effect,
+			-ActualAmount,
+			TargetEconomy->GetCurrentGold() + ActualAmount,
+			TargetEconomy->GetCurrentGold(),
+			FString::Printf(TEXT("%s steals %d gold from target"), *GetEffectName(EffectDefinition), ActualAmount)));
+
+		const int32 SourceGoldBefore = SourceEconomy->GetCurrentGold();
+		SourceEconomy->AddGold(ActualAmount);
+		Context.DebugGoldLines.Add(MakeGoldDebugLine(
+			Context,
+			EGambitDebugGoldLineType::Effect,
+			ActualAmount,
+			SourceGoldBefore,
+			SourceEconomy->GetCurrentGold(),
+			FString::Printf(TEXT("%s gains %d stolen gold"), *GetEffectName(EffectDefinition), ActualAmount)));
 		return true;
 	}
 	case EGambitItemEffectType::ModifyDebtLimit:
@@ -2967,6 +2907,146 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 		}
 		return false;
 	}
+	default:
+		return false;
+	}
+}
+
+bool UGambitEffectResolver::ApplyShopEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	const EGambitEffectTarget Target,
+	const int32 Amount,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
+	case EGambitItemEffectType::ModifyShopOfferCount:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopOfferCountDelta += Amount;
+		return true;
+	}
+	case EGambitItemEffectType::AddShopDiscountPercent:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopPurchase.DiscountPercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
+		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop discount applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.DiscountPercent);
+		return true;
+	}
+	case EGambitItemEffectType::AddShopSurchargePercent:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopPurchase.SurchargePercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
+		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop surcharge applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.SurchargePercent);
+		return true;
+	}
+	case EGambitItemEffectType::AddShopFlatPriceDelta:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopPurchase.FlatPriceDelta += Amount;
+		return true;
+	}
+	case EGambitItemEffectType::MakeShopOfferFree:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		if (Context.Hook == EGambitEffectHook::PostShopGenerate)
+		{
+			if (Context.GeneratedShopOffers.Num() == 0)
+			{
+				return false;
+			}
+
+			TArray<int32> PricedOfferIndexes;
+			for (int32 OfferIndex = 0; OfferIndex < Context.GeneratedShopOffers.Num(); ++OfferIndex)
+			{
+				if (!Context.GeneratedShopOffers[OfferIndex].bFree)
+				{
+					PricedOfferIndexes.Add(OfferIndex);
+				}
+			}
+			if (PricedOfferIndexes.Num() == 0)
+			{
+				return false;
+			}
+
+			const int32 ChosenOfferIndex = PricedOfferIndexes[Context.RandomStream.RandRange(0, PricedOfferIndexes.Num() - 1)];
+			FGambitShopOffer& Offer = Context.GeneratedShopOffers[ChosenOfferIndex];
+			Offer.bFree = true;
+			Offer.FreeReason = GetEffectName(EffectDefinition);
+			Offer.Price = 0;
+			UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop generated offer made free OfferId=%d Reason=%s"), Offer.OfferId, *Offer.FreeReason);
+			return true;
+		}
+
+		Context.ShopPurchase.bFree = true;
+		Context.ShopPurchase.FreeReason = GetEffectName(EffectDefinition);
+		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Shop offer made free Reason=%s"), *Context.ShopPurchase.FreeReason);
+		return true;
+	}
+	case EGambitItemEffectType::AddShopCashbackPercent:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopPurchase.CashbackPercent += ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount);
+		UE_LOG(LogGambit, Log, TEXT("EffectResolver: Cashback applied Percent=%.2f Total=%.2f"), ResolveScalar(EffectDefinition, TEXT("Percent"), EffectDefinition->Amount), Context.ShopPurchase.CashbackPercent);
+		return true;
+	}
+	case EGambitItemEffectType::AddPurchaseGoldDelta:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopPurchase.GoldDeltaOnPurchase += Amount;
+		return true;
+	}
+	case EGambitItemEffectType::BlockShopPurchase:
+	{
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		if (!ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult))
+		{
+			return false;
+		}
+		Context.ShopPurchase.bBlockedByEffect = true;
+		Context.ShopPurchase.FailureReason = GetEffectName(EffectDefinition);
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+bool UGambitEffectResolver::ApplySharedPoolEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	const int32 Amount,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
 	case EGambitItemEffectType::AddSharedPoolStock:
 		if (Context.SharedPoolComponent)
 		{
@@ -2997,6 +3077,68 @@ bool UGambitEffectResolver::ApplyEffectToTarget(
 			}
 		}
 		return false;
+	default:
+		return false;
+	}
+}
+
+bool UGambitEffectResolver::ApplyDefenseEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
+	case EGambitItemEffectType::PreventNegativeEffect:
+	{
+		const bool bProtectsAllCategories = EffectDefinition->PreventedNegativeEffectCategories.Num() == 0;
+		const TArray<EGambitNegativeEffectCategory> ProtectedCategories = ResolvePreventedNegativeEffectCategories(EffectDefinition);
+		if (!bProtectsAllCategories && ProtectedCategories.Num() == 0)
+		{
+			return false;
+		}
+
+		Context.NegativeEffectProtection.AddProtection(
+			ProtectedCategories,
+			bProtectsAllCategories,
+			ResolvePreventNegativeEffectBlockCount(EffectDefinition),
+			GetEffectSourceId(EffectDefinition),
+			GetEffectName(EffectDefinition));
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+bool UGambitEffectResolver::ApplyUtilityEffect(
+	UGambitItemEffectDefinition* EffectDefinition,
+	const EGambitEffectTarget Target,
+	FGambitEffectExecutionContext& Context) const
+{
+	switch (EffectDefinition->EffectType)
+	{
+	case EGambitItemEffectType::GrantConsumable:
+	{
+		UGambitConsumableDefinition* ConsumableDefinition = EffectDefinition->GrantedConsumableDefinition.Get();
+		if (!ConsumableDefinition)
+		{
+			ConsumableDefinition = Context.GrantedConsumable.Get();
+		}
+
+		FGambitEffectTargetResolveResult TargetResolveResult;
+		const FGambitResolvedEffectTarget* ResolvedTarget = ResolveEffectTargetForRuntimeMutation(EffectDefinition, Context, Target, TargetResolveResult);
+		UGambitInventoryComponent* InventoryComponent = ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
+		if (InventoryComponent)
+		{
+			const bool bAdded = InventoryComponent->AddConsumable(ConsumableDefinition);
+			if (bAdded)
+			{
+				Context.GrantedConsumable = ConsumableDefinition;
+			}
+			return bAdded;
+		}
+		return false;
+	}
 	case EGambitItemEffectType::CopyLastTriggeredEffect:
 		return false;
 	default:

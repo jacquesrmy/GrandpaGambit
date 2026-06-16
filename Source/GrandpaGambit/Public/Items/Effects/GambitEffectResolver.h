@@ -34,6 +34,13 @@ private:
 	bool IsConditionMet(const FGambitEffectConditionDefinition& Condition, FGambitEffectExecutionContext& Context) const;
 	bool ApplyEffectDefinition(UGambitItemEffectDefinition* EffectDefinition, FGambitEffectExecutionContext& Context) const;
 	bool ApplyEffectToTarget(UGambitItemEffectDefinition* EffectDefinition, EGambitEffectTarget Target, FGambitEffectExecutionContext& Context) const;
+	bool ApplyScoreEffect(UGambitItemEffectDefinition* EffectDefinition, EGambitEffectTarget Target, int32 Amount, FGambitEffectExecutionContext& Context) const;
+	bool ApplyDiceEffect(UGambitItemEffectDefinition* EffectDefinition, EGambitEffectTarget Target, int32 Amount, FGambitEffectExecutionContext& Context) const;
+	bool ApplyEconomyEffect(UGambitItemEffectDefinition* EffectDefinition, EGambitEffectTarget Target, int32 Amount, FGambitEffectExecutionContext& Context) const;
+	bool ApplyShopEffect(UGambitItemEffectDefinition* EffectDefinition, EGambitEffectTarget Target, int32 Amount, FGambitEffectExecutionContext& Context) const;
+	bool ApplySharedPoolEffect(UGambitItemEffectDefinition* EffectDefinition, int32 Amount, FGambitEffectExecutionContext& Context) const;
+	bool ApplyDefenseEffect(UGambitItemEffectDefinition* EffectDefinition, FGambitEffectExecutionContext& Context) const;
+	bool ApplyUtilityEffect(UGambitItemEffectDefinition* EffectDefinition, EGambitEffectTarget Target, FGambitEffectExecutionContext& Context) const;
 
 	static bool CompareInt(int32 Left, EGambitEffectComparison Comparison, int32 Right);
 	static bool CompareRarity(EGambitItemRarity Left, EGambitEffectComparison Comparison, EGambitItemRarity Right);
