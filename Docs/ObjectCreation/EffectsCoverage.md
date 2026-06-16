@@ -51,6 +51,53 @@ Configuration rules:
 - `PreventNegativeEffectBlockCount = 0` means unlimited blocks within the current effect context; values above 0 consume one charge per blocked effect.
 - Do not put `None` inside either category array. Leave the array empty for fallback/global behavior.
 
+## Target rules available
+
+`TargetRuleId` remains a stable `FName` field for existing DataAssets. Empty `TargetRuleId` keeps legacy source/target routing from `Target`.
+
+Player rules:
+
+- `target.opponent`: explicit target player, must be different from the source.
+- `all_opponents`: every match player except the source. Multi-target.
+- `leading_player`: highest victory points, then highest current round score, then stable match order.
+- `richest_player`: highest current gold, ties use stable match order.
+- `poorest_player`: lowest current gold, ties use stable match order.
+- `lowest_score_player`: lowest current round score, ties use stable match order.
+- `left_opponent`: previous player in stable match order, excluding self.
+- `right_opponent`: next player in stable match order, excluding self.
+- `opposite_player`: player at index +2 in exactly four-player stable match order.
+- `random_opponent`: random opponent from stable match order using the effect context random stream.
+
+Die rules:
+
+- `selected_die`: selected die on the requested source/target side.
+- `source.selected_die`
+- `target.selected_die`
+- `first_rerolled_die`
+- `first_rerolled_die_this_round`
+- `source.random_die`
+- `source.best_die`
+- `source.lowest_die`
+- `source.all_dice`: all source dice. Multi-target at dice-index level.
+- `target.random_die`
+- `target.best_die`
+- `target.lowest_die`
+- `target.all_dice`: all target dice. Multi-target at dice-index level.
+
+Known limits:
+
+- Table position currently uses the stable `AGambitGameState::PlayerArray` order, copied into the effect context by round flow. This is a gameplay-order fallback until explicit table seats exist.
+- `opposite_player` is valid only with exactly four players.
+- `best_die` and `lowest_die` use `EffectiveValue`; ties use the lower hand index.
+- Multi-player rules are resolved by `GambitEffectTargetResolver`. Effect types that persist target-side temporary context should be rechecked before using them as true multi-player effects.
+
+Examples:
+
+- Offensive consumable: `EffectType = StealGold`, `Target = Target`, `TargetRuleId = target.opponent`, `NegativeEffectCategories = GoldSteal`.
+- Multi-opponent pressure: `EffectType = SpendGold`, `Target = Target`, `TargetRuleId = all_opponents`.
+- Defense: `EffectType = PreventNegativeEffect`, `Target = Source`, empty `TargetRuleId`; fill `PreventedNegativeEffectCategories` for typed defense or leave it empty for legacy global defense.
+- Die manipulation: `EffectType = ModifyDieValue`, `TargetRuleId = source.best_die` or `target.lowest_die`.
+
 Ajouts B2 finalises :
 
 - Score : `MultiplyDiceContribution` ajoute un bonus de contribution par de dans le breakdown, sans multiplier le score final.
@@ -77,14 +124,14 @@ Ces ajouts sont petits et très rentables :
 - Conditions de score brut : raw score threshold before modifiers.
 - Compteurs dynamiques restants : per threshold crossed et compteurs hors inventaire B2.
 - Reroll delta tracking : value increased, value decreased, no value changed, first/last rerolled die.
-- Target rules de base : selected die, source die, all own dice, random own die, best own die.
+- Target rules de base : covered by `selected_die`, `source.*` die rules and `target.*` die rules; remaining work is explicit UI for player-selected opponent dice.
 - Breakdown combo enrichi restant : les indexes et le flag all-dice-used existent; il reste surtout le feedback UI.
 
 ## À ajouter pour les objets B6
 
 Ces ajouts concernent surtout l'interaction locale :
 
-- Target rules adverses : leading player, richest player, all opponents, left player, right player, opposite player, selected opponent die.
+- Target rules adverses : selected opponent die only remains; player order rules now exist as `TargetRuleId` values.
 - Typage des effets négatifs : steal gold, steal score, reduce die, destroy die, block shop, force reroll.
 - Event history : steal event, gold gained event, consumable used event, effect triggered event.
 - Previous round snapshots : previous rank, previous winner, win streak, previous score.
@@ -101,27 +148,10 @@ Ces systèmes sont de vrais chantiers, pas de simples DataAssets :
 - Pipeline de multiplicateurs avec caps, annulation, modification du prochain multiplicateur et explication dans le breakdown.
 - Moteur d'effets aléatoires/copiés avec garde anti-boucle.
 
-## TargetRule recommandé
+## TargetRule authoring
 
-Utiliser des `TargetRuleId` stables, même avant que tous les resolvers existent :
+Use only IDs returned by `UGambitItemEffectDefinition::GetTargetRuleIdOptions()`. Validation reports unknown IDs as errors and reports conservative warnings for obvious mismatches, such as a die rule on an effect type that does not directly mutate dice.
 
-- `target.self`
-- `target.selected_die`
-- `target.source_die`
-- `target.all_own_dice`
-- `target.random_own_die`
-- `target.best_own_die`
-- `target.target_opponent`
-- `target.selected_opponent_die`
-- `target.leading_player`
-- `target.richest_player`
-- `target.all_opponents`
-- `target.left_player`
-- `target.right_player`
-- `target.opposite_player`
-- `target.shared_pool_item`
-- `target.shop_offer`
-- `target.all_players`
 
 ## EffectTypeId recommandé pour custom effects
 

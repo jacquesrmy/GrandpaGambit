@@ -163,6 +163,44 @@ namespace
 			return Issue.Severity == Severity && Issue.Message.Contains(MessageFragment);
 		});
 	}
+
+	TArray<AGambitPlayerState*> SpawnTestPlayers(UWorld* World, const int32 PlayerCount)
+	{
+		TArray<AGambitPlayerState*> Players;
+		if (!World)
+		{
+			return Players;
+		}
+
+		Players.Reserve(PlayerCount);
+		for (int32 PlayerIndex = 0; PlayerIndex < PlayerCount; ++PlayerIndex)
+		{
+			Players.Add(World->SpawnActor<AGambitPlayerState>());
+		}
+		return Players;
+	}
+
+	void AddMatchPlayers(FGambitEffectExecutionContext& Context, const TArray<AGambitPlayerState*>& Players)
+	{
+		for (AGambitPlayerState* Player : Players)
+		{
+			Context.MatchPlayerStates.Add(Player);
+		}
+		Context.MatchPlayerCount = Players.Num();
+	}
+
+	void ApplyTestRoundScore(AGambitPlayerState* Player, const int32 Score)
+	{
+		if (!Player)
+		{
+			return;
+		}
+
+		FGambitScoreBreakdown ScoreBreakdown;
+		ScoreBreakdown.RawScore = Score;
+		ScoreBreakdown.FinalScore = static_cast<float>(Score);
+		Player->ApplyRoundScore(ScoreBreakdown);
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -200,13 +238,27 @@ bool FGambitEffectTargetRulesRecognitionTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("unknown target rule is not known"), GambitEffectTargetRules::IsKnownRule(TEXT("unknown.target_rule")));
 
 	const TArray<FName> KnownRuleIds = GambitEffectTargetRules::GetKnownRuleIds();
-	TestEqual(TEXT("known authoring rules count"), KnownRuleIds.Num(), 6);
+	TestEqual(TEXT("known authoring rules count"), KnownRuleIds.Num(), 23);
 	TestTrue(TEXT("known rules include selected_die"), KnownRuleIds.Contains(GambitEffectTargetRules::SelectedDie));
 	TestTrue(TEXT("known rules include source.selected_die"), KnownRuleIds.Contains(GambitEffectTargetRules::SourceSelectedDie));
 	TestTrue(TEXT("known rules include target.selected_die"), KnownRuleIds.Contains(GambitEffectTargetRules::TargetSelectedDie));
 	TestTrue(TEXT("known rules include first_rerolled_die"), KnownRuleIds.Contains(GambitEffectTargetRules::FirstRerolledDie));
 	TestTrue(TEXT("known rules include first_rerolled_die_this_round"), KnownRuleIds.Contains(GambitEffectTargetRules::FirstRerolledDieThisRound));
 	TestTrue(TEXT("known rules include target.opponent"), KnownRuleIds.Contains(GambitEffectTargetRules::TargetOpponent));
+	TestTrue(TEXT("known rules include all_opponents"), KnownRuleIds.Contains(GambitEffectTargetRules::AllOpponents));
+	TestTrue(TEXT("known rules include leading_player"), KnownRuleIds.Contains(GambitEffectTargetRules::LeadingPlayer));
+	TestTrue(TEXT("known rules include richest_player"), KnownRuleIds.Contains(GambitEffectTargetRules::RichestPlayer));
+	TestTrue(TEXT("known rules include source.best_die"), KnownRuleIds.Contains(GambitEffectTargetRules::SourceBestDie));
+	TestTrue(TEXT("known rules include target.all_dice"), KnownRuleIds.Contains(GambitEffectTargetRules::TargetAllDice));
+
+	GambitEffectTargetRules::FRuleMetadata AllOpponentsMetadata;
+	TestTrue(TEXT("all_opponents metadata exists"), GambitEffectTargetRules::GetRuleMetadata(GambitEffectTargetRules::AllOpponents, AllOpponentsMetadata));
+	TestTrue(TEXT("all_opponents is a player rule"), GambitEffectTargetRules::IsPlayerRule(GambitEffectTargetRules::AllOpponents));
+	TestTrue(TEXT("all_opponents is multi-target"), GambitEffectTargetRules::IsMultiTargetRule(GambitEffectTargetRules::AllOpponents));
+	TestEqual(TEXT("all_opponents metadata category is MultiTarget"), AllOpponentsMetadata.Category, GambitEffectTargetRules::ERuleCategory::MultiTarget);
+	TestTrue(TEXT("target.best_die requires dice"), GambitEffectTargetRules::RequiresDice(GambitEffectTargetRules::TargetBestDie));
+	TestTrue(TEXT("target.best_die is a die rule"), GambitEffectTargetRules::IsDieRule(GambitEffectTargetRules::TargetBestDie));
+	TestTrue(TEXT("target.best_die requires an explicit target player"), GambitEffectTargetRules::RequiresExplicitTargetPlayer(GambitEffectTargetRules::TargetBestDie));
 
 	const TArray<FName> AuthorableRuleIds = GambitEffectTargetRules::GetAuthorableRuleIds();
 	TestTrue(TEXT("authorable rules include empty None option"), AuthorableRuleIds.Contains(NAME_None));
@@ -383,6 +435,12 @@ bool FGambitEffectTargetResolverResolveTargetsTest::RunTest(const FString& Param
 	TestFalse(TEXT("target.opponent fails without valid target player"), MissingOpponentResult.bSuccess);
 	TestFalse(TEXT("target.opponent failure reason is readable"), MissingOpponentResult.FailureReason.IsEmpty());
 
+	FGambitEffectExecutionContext SelfOpponentContext = Context;
+	SelfOpponentContext.TargetPlayer = SourcePlayer;
+	const FGambitEffectTargetResolveResult SelfOpponentResult = GambitEffectTargetResolver::ResolveEffectTargets(OpponentEffect, SelfOpponentContext);
+	TestFalse(TEXT("target.opponent refuses SourcePlayer as target"), SelfOpponentResult.bSuccess);
+	TestTrue(TEXT("target.opponent self failure reason mentions SourcePlayer"), SelfOpponentResult.FailureReason.Contains(TEXT("SourcePlayer")));
+
 	const FGambitEffectTargetResolveResult OpponentResult = GambitEffectTargetResolver::ResolveEffectTargets(OpponentEffect, Context);
 	TestTrue(TEXT("target.opponent succeeds with different target player"), OpponentResult.bSuccess);
 	TestEqual(TEXT("target.opponent resolves target side"), OpponentResult.Targets[0].TargetSide, EGambitEffectTarget::Target);
@@ -397,6 +455,160 @@ bool FGambitEffectTargetResolverResolveTargetsTest::RunTest(const FString& Param
 	const FGambitEffectTargetResolveResult UnknownRuleResult = GambitEffectTargetResolver::ResolveEffectTargets(UnknownRuleEffect, Context);
 	TestFalse(TEXT("unknown TargetRuleId fails cleanly"), UnknownRuleResult.bSuccess);
 	TestTrue(TEXT("unknown TargetRuleId failure reason mentions unknown"), UnknownRuleResult.FailureReason.Contains(TEXT("Unknown")));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitEffectTargetResolverV2RulesTest,
+	"GrandpaGambit.Effects.TargetResolver.V2Rules",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitEffectTargetResolverV2RulesTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	const TArray<AGambitPlayerState*> Players = SpawnTestPlayers(TestWorld, 4);
+	if (!TestEqual(TEXT("four test players are created"), Players.Num(), 4))
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	for (int32 PlayerIndex = 0; PlayerIndex < Players.Num(); ++PlayerIndex)
+	{
+		if (!TestNotNull(FString::Printf(TEXT("player %d is created"), PlayerIndex), Players[PlayerIndex]))
+		{
+			TestWorld->DestroyWorld(false);
+			return false;
+		}
+	}
+
+	UGambitItemEffectDefinition* AllOpponentsEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	AllOpponentsEffect->Target = EGambitEffectTarget::Target;
+	AllOpponentsEffect->TargetRuleId = GambitEffectTargetRules::AllOpponents;
+
+	for (int32 PlayerCount = 2; PlayerCount <= 4; ++PlayerCount)
+	{
+		TArray<AGambitPlayerState*> MatchPlayers;
+		for (int32 PlayerIndex = 0; PlayerIndex < PlayerCount; ++PlayerIndex)
+		{
+			MatchPlayers.Add(Players[PlayerIndex]);
+		}
+
+		FGambitEffectExecutionContext Context;
+		Context.SourcePlayer = MatchPlayers[0];
+		Context.TargetPlayer = MatchPlayers.Num() > 1 ? MatchPlayers[1] : nullptr;
+		AddMatchPlayers(Context, MatchPlayers);
+
+		const FGambitEffectTargetResolveResult Result = GambitEffectTargetResolver::ResolveEffectTargets(AllOpponentsEffect, Context);
+		TestTrue(FString::Printf(TEXT("all_opponents resolves for %d players"), PlayerCount), Result.bSuccess);
+		TestEqual(FString::Printf(TEXT("all_opponents returns every opponent for %d players"), PlayerCount), Result.Targets.Num(), PlayerCount - 1);
+		for (const FGambitResolvedEffectTarget& Target : Result.Targets)
+		{
+			TestTrue(TEXT("all_opponents never returns source"), Target.Player.Get() != Context.SourcePlayer.Get());
+		}
+		for (int32 PlayerIndex = 1; PlayerIndex < PlayerCount; ++PlayerIndex)
+		{
+			TestTrue(
+				FString::Printf(TEXT("all_opponents includes player %d"), PlayerIndex),
+				Result.Targets.ContainsByPredicate([ExpectedPlayer = Players[PlayerIndex]](const FGambitResolvedEffectTarget& Target)
+				{
+					return Target.Player.Get() == ExpectedPlayer;
+				}));
+		}
+	}
+
+	Players[1]->AddVictoryPoints(5);
+	Players[2]->AddVictoryPoints(5);
+	Players[3]->AddVictoryPoints(3);
+	ApplyTestRoundScore(Players[1], 20);
+	ApplyTestRoundScore(Players[2], 40);
+	ApplyTestRoundScore(Players[3], 80);
+
+	FGambitEffectExecutionContext PlayerRuleContext;
+	PlayerRuleContext.SourcePlayer = Players[0];
+	PlayerRuleContext.TargetPlayer = Players[1];
+	AddMatchPlayers(PlayerRuleContext, Players);
+
+	UGambitItemEffectDefinition* LeadingPlayerEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	LeadingPlayerEffect->Target = EGambitEffectTarget::Target;
+	LeadingPlayerEffect->TargetRuleId = GambitEffectTargetRules::LeadingPlayer;
+
+	const FGambitEffectTargetResolveResult LeadingResult = GambitEffectTargetResolver::ResolveEffectTargets(LeadingPlayerEffect, PlayerRuleContext);
+	TestTrue(TEXT("leading_player resolves successfully"), LeadingResult.bSuccess);
+	TestTrue(TEXT("leading_player uses VP then current score tie-break"), LeadingResult.Targets.IsValidIndex(0) && LeadingResult.Targets[0].Player.Get() == Players[2]);
+
+	Players[1]->AddGold(12);
+	Players[2]->AddGold(30);
+	Players[3]->AddGold(20);
+
+	UGambitItemEffectDefinition* RichestPlayerEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::AddGold);
+	RichestPlayerEffect->Target = EGambitEffectTarget::Target;
+	RichestPlayerEffect->TargetRuleId = GambitEffectTargetRules::RichestPlayer;
+
+	const FGambitEffectTargetResolveResult RichestResult = GambitEffectTargetResolver::ResolveEffectTargets(RichestPlayerEffect, PlayerRuleContext);
+	TestTrue(TEXT("richest_player resolves successfully"), RichestResult.bSuccess);
+	TestTrue(TEXT("richest_player selects the player with most gold"), RichestResult.Targets.IsValidIndex(0) && RichestResult.Targets[0].Player.Get() == Players[2]);
+
+	FGambitEffectExecutionContext DiceContext;
+	DiceContext.SourcePlayer = Players[0];
+	DiceContext.TargetPlayer = Players[1];
+	DiceContext.SourceDice = {
+		MakeTestDie(4, 1, true, true, 0),
+		MakeTestDie(8, 1, true, true, 1),
+		MakeTestDie(2, 1, true, true, 2),
+	};
+
+	UGambitItemEffectDefinition* SourceBestDieEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	SourceBestDieEffect->TargetRuleId = GambitEffectTargetRules::SourceBestDie;
+
+	const FGambitEffectTargetResolveResult BestDieResult = GambitEffectTargetResolver::ResolveEffectTargets(SourceBestDieEffect, DiceContext);
+	TestTrue(TEXT("source.best_die resolves successfully"), BestDieResult.bSuccess);
+	TestTrue(TEXT("source.best_die resolves an index"), BestDieResult.Targets.IsValidIndex(0) && BestDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0));
+	if (BestDieResult.Targets.IsValidIndex(0) && BestDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0))
+	{
+		TestEqual(TEXT("source.best_die selects highest value die"), BestDieResult.Targets[0].DiceHandIndexes[0], 1);
+	}
+
+	UGambitItemEffectDefinition* SourceLowestDieEffect = MakeEffectDefinition(
+		GetTransientPackage(),
+		EGambitEffectHook::ConsumableUse,
+		EGambitItemEffectType::ModifyDieValue);
+	SourceLowestDieEffect->TargetRuleId = GambitEffectTargetRules::SourceLowestDie;
+
+	const FGambitEffectTargetResolveResult LowestDieResult = GambitEffectTargetResolver::ResolveEffectTargets(SourceLowestDieEffect, DiceContext);
+	TestTrue(TEXT("source.lowest_die resolves successfully"), LowestDieResult.bSuccess);
+	TestTrue(TEXT("source.lowest_die resolves an index"), LowestDieResult.Targets.IsValidIndex(0) && LowestDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0));
+	if (LowestDieResult.Targets.IsValidIndex(0) && LowestDieResult.Targets[0].DiceHandIndexes.IsValidIndex(0))
+	{
+		TestEqual(TEXT("source.lowest_die selects lowest value die"), LowestDieResult.Targets[0].DiceHandIndexes[0], 2);
+	}
+
+	FGambitEffectExecutionContext EmptyDiceContext = DiceContext;
+	EmptyDiceContext.SourceDice.Reset();
+	const FGambitEffectTargetResolveResult EmptyDiceResult = GambitEffectTargetResolver::ResolveEffectTargets(SourceBestDieEffect, EmptyDiceContext);
+	TestFalse(TEXT("die target rule fails without valid dice"), EmptyDiceResult.bSuccess);
+	TestTrue(TEXT("die target rule failure reason is readable"), EmptyDiceResult.FailureReason.Contains(TEXT("requires dice")));
 
 	TestWorld->DestroyWorld(false);
 	return true;

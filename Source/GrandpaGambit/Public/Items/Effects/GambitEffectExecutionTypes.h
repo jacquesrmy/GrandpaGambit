@@ -415,6 +415,9 @@ struct GRANDPAGAMBIT_API FGambitEffectExecutionContext
 	TObjectPtr<UGambitSharedPoolComponent> SharedPoolComponent = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")
+	TArray<TObjectPtr<AGambitPlayerState>> MatchPlayerStates;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect")
 	TArray<TObjectPtr<UGambitEconomyComponent>> MatchEconomyComponents;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")

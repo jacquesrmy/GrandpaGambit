@@ -1265,7 +1265,13 @@ FGambitEffectExecutionContext UGambitRoundFlowComponent::MakeEffectContext(
 
 	for (AGambitPlayerState* PlayerState : GetAllPlayers())
 	{
-		if (PlayerState && PlayerState->GetEconomyComponent())
+		if (!PlayerState)
+		{
+			continue;
+		}
+
+		Context.MatchPlayerStates.Add(PlayerState);
+		if (PlayerState->GetEconomyComponent())
 		{
 			Context.MatchEconomyComponents.Add(PlayerState->GetEconomyComponent());
 		}

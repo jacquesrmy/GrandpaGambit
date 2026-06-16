@@ -1,6 +1,8 @@
 #include "Items/Effects/GambitEffectTargetResolver.h"
 
 #include "Data/Assets/GambitItemEffectDefinition.h"
+#include "Engine/World.h"
+#include "Game/States/GambitGameState.h"
 #include "Items/Effects/GambitEffectTargetRules.h"
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/Components/GambitEconomyComponent.h"
@@ -25,15 +27,57 @@ namespace
 			: EGambitEffectTarget::Source;
 	}
 
+	bool IsSourceDieRule(const FName TargetRuleId)
+	{
+		return TargetRuleId == GambitEffectTargetRules::SourceSelectedDie
+			|| TargetRuleId == GambitEffectTargetRules::SourceRandomDie
+			|| TargetRuleId == GambitEffectTargetRules::SourceBestDie
+			|| TargetRuleId == GambitEffectTargetRules::SourceLowestDie
+			|| TargetRuleId == GambitEffectTargetRules::SourceAllDice;
+	}
+
+	bool IsTargetDieRule(const FName TargetRuleId)
+	{
+		return TargetRuleId == GambitEffectTargetRules::TargetSelectedDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetRandomDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetBestDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetLowestDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetAllDice;
+	}
+
+	bool IsRandomDieRule(const FName TargetRuleId)
+	{
+		return TargetRuleId == GambitEffectTargetRules::SourceRandomDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetRandomDie;
+	}
+
+	bool IsBestDieRule(const FName TargetRuleId)
+	{
+		return TargetRuleId == GambitEffectTargetRules::SourceBestDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetBestDie;
+	}
+
+	bool IsLowestDieRule(const FName TargetRuleId)
+	{
+		return TargetRuleId == GambitEffectTargetRules::SourceLowestDie
+			|| TargetRuleId == GambitEffectTargetRules::TargetLowestDie;
+	}
+
+	bool IsAllDiceRule(const FName TargetRuleId)
+	{
+		return TargetRuleId == GambitEffectTargetRules::SourceAllDice
+			|| TargetRuleId == GambitEffectTargetRules::TargetAllDice;
+	}
+
 	EGambitEffectTarget ResolveTargetSideForRule(const FName TargetRuleId, const EGambitEffectTarget RequestedTarget)
 	{
-		if (TargetRuleId == GambitEffectTargetRules::SourceSelectedDie)
+		if (IsSourceDieRule(TargetRuleId))
 		{
 			return EGambitEffectTarget::Source;
 		}
 
-		if (TargetRuleId == GambitEffectTargetRules::TargetSelectedDie
-			|| GambitEffectTargetRules::IsOpponentRule(TargetRuleId))
+		if (IsTargetDieRule(TargetRuleId)
+			|| GambitEffectTargetRules::IsPlayerRule(TargetRuleId))
 		{
 			return EGambitEffectTarget::Target;
 		}
@@ -114,10 +158,98 @@ namespace
 		return nullptr;
 	}
 
-	const TArray<FGambitDieRuntimeState>& ResolveTargetResolverDiceSnapshot(
+	UGambitDiceComponent* ResolveDiceComponentForPlayer(
 		const FGambitEffectExecutionContext& Context,
+		const AGambitPlayerState* Player,
 		const EGambitEffectTarget TargetSide)
 	{
+		if (Player && Player == Context.SourcePlayer.Get() && Context.SourceDiceComponent)
+		{
+			return Context.SourceDiceComponent.Get();
+		}
+
+		if (Player && Player == Context.TargetPlayer.Get() && Context.TargetDiceComponent)
+		{
+			return Context.TargetDiceComponent.Get();
+		}
+
+		return Player ? Player->GetDiceComponent() : ResolveTargetResolverDiceComponent(Context, TargetSide);
+	}
+
+	UGambitEconomyComponent* ResolveEconomyComponentForPlayer(
+		const FGambitEffectExecutionContext& Context,
+		const AGambitPlayerState* Player,
+		const EGambitEffectTarget TargetSide)
+	{
+		if (Player && Player == Context.SourcePlayer.Get() && Context.SourceEconomyComponent)
+		{
+			return Context.SourceEconomyComponent.Get();
+		}
+
+		if (Player && Player == Context.TargetPlayer.Get() && Context.TargetEconomyComponent)
+		{
+			return Context.TargetEconomyComponent.Get();
+		}
+
+		return Player ? Player->GetEconomyComponent() : ResolveTargetResolverEconomyComponent(Context, TargetSide);
+	}
+
+	UGambitInventoryComponent* ResolveInventoryComponentForPlayer(
+		const FGambitEffectExecutionContext& Context,
+		const AGambitPlayerState* Player,
+		const EGambitEffectTarget TargetSide)
+	{
+		if (Player && Player == Context.SourcePlayer.Get() && Context.SourceInventoryComponent)
+		{
+			return Context.SourceInventoryComponent.Get();
+		}
+
+		if (Player && Player == Context.TargetPlayer.Get() && Context.TargetInventoryComponent)
+		{
+			return Context.TargetInventoryComponent.Get();
+		}
+
+		return Player ? Player->GetInventoryComponent() : ResolveTargetResolverInventoryComponent(Context, TargetSide);
+	}
+
+	UGambitShopComponent* ResolveShopComponentForPlayer(
+		const FGambitEffectExecutionContext& Context,
+		const AGambitPlayerState* Player,
+		const EGambitEffectTarget TargetSide)
+	{
+		if (Player && Player == Context.SourcePlayer.Get() && Context.SourceShopComponent)
+		{
+			return Context.SourceShopComponent.Get();
+		}
+
+		if (Player && Player == Context.TargetPlayer.Get() && Context.TargetShopComponent)
+		{
+			return Context.TargetShopComponent.Get();
+		}
+
+		return Player ? Player->GetShopComponent() : ResolveTargetResolverShopComponent(Context, TargetSide);
+	}
+
+	TArray<FGambitDieRuntimeState> ResolveDiceSnapshotForPlayer(
+		const FGambitEffectExecutionContext& Context,
+		const AGambitPlayerState* Player,
+		const EGambitEffectTarget TargetSide)
+	{
+		if (Player && Player == Context.SourcePlayer.Get())
+		{
+			return Context.SourceDice;
+		}
+
+		if (Player && Player == Context.TargetPlayer.Get())
+		{
+			return Context.TargetDice;
+		}
+
+		if (Player)
+		{
+			return Player->GetDiceStates();
+		}
+
 		return TargetSide == EGambitEffectTarget::Target ? Context.TargetDice : Context.SourceDice;
 	}
 
@@ -157,8 +289,36 @@ namespace
 		return EffectDefinition
 			&& (EffectDefinition->bAffectAllDice
 				|| HasExplicitDieIndex(EffectDefinition)
-				|| GambitEffectTargetRules::IsSelectedDieRule(EffectDefinition->TargetRuleId)
+				|| GambitEffectTargetRules::IsDieRule(EffectDefinition->TargetRuleId)
 				|| GambitEffectTargetRules::IsFirstRerolledDieRule(EffectDefinition->TargetRuleId));
+	}
+
+	int32 FindBestDieIndex(const TArray<FGambitDieRuntimeState>& DiceStates, const bool bLowest)
+	{
+		int32 BestIndex = INDEX_NONE;
+		for (int32 Index = 0; Index < DiceStates.Num(); ++Index)
+		{
+			if (BestIndex == INDEX_NONE)
+			{
+				BestIndex = Index;
+				continue;
+			}
+
+			const FGambitDieRuntimeState& Candidate = DiceStates[Index];
+			const FGambitDieRuntimeState& CurrentBest = DiceStates[BestIndex];
+			const bool bBetterValue = bLowest
+				? Candidate.EffectiveValue < CurrentBest.EffectiveValue
+				: Candidate.EffectiveValue > CurrentBest.EffectiveValue;
+			const bool bTieWithLowerHandIndex = Candidate.EffectiveValue == CurrentBest.EffectiveValue
+				&& Candidate.HandIndex < CurrentBest.HandIndex;
+
+			if (bBetterValue || bTieWithLowerHandIndex)
+			{
+				BestIndex = Index;
+			}
+		}
+
+		return BestIndex;
 	}
 
 	bool BuildAffectedDieIndexes(
@@ -169,18 +329,21 @@ namespace
 		TArray<int32>& OutIndexes,
 		FString& OutFailureReason)
 	{
+		const FName TargetRuleId = EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None;
 		if (DiceStates.Num() == 0)
 		{
 			if (RequiresDiceIndexes(EffectDefinition))
 			{
-				OutFailureReason = TEXT("No dice states available for target rule.");
+				OutFailureReason = FString::Printf(
+					TEXT("TargetRuleId '%s' requires dice but no dice states are available."),
+					*TargetRuleId.ToString());
 				return false;
 			}
 
 			return true;
 		}
 
-		if (EffectDefinition && EffectDefinition->bAffectAllDice)
+		if ((EffectDefinition && EffectDefinition->bAffectAllDice) || IsAllDiceRule(TargetRuleId))
 		{
 			OutIndexes.Reserve(DiceStates.Num());
 			for (int32 Index = 0; Index < DiceStates.Num(); ++Index)
@@ -190,9 +353,9 @@ namespace
 			return true;
 		}
 
-		if (EffectDefinition && GambitEffectTargetRules::IsSelectedDieRule(EffectDefinition->TargetRuleId))
+		if (EffectDefinition && GambitEffectTargetRules::IsSelectedDieRule(TargetRuleId))
 		{
-			const int32 SelectedDieIndex = GambitEffectTargetResolver::ResolveSelectedDieHandIndex(Context, TargetSide, EffectDefinition->TargetRuleId);
+			const int32 SelectedDieIndex = GambitEffectTargetResolver::ResolveSelectedDieHandIndex(Context, TargetSide, TargetRuleId);
 			if (!DiceStates.IsValidIndex(SelectedDieIndex))
 			{
 				OutFailureReason = FString::Printf(TEXT("Selected die index %d is invalid."), SelectedDieIndex);
@@ -203,7 +366,7 @@ namespace
 			return true;
 		}
 
-		if (EffectDefinition && GambitEffectTargetRules::IsFirstRerolledDieRule(EffectDefinition->TargetRuleId))
+		if (EffectDefinition && GambitEffectTargetRules::IsFirstRerolledDieRule(TargetRuleId))
 		{
 			const int32 FirstRerolledDieIndex = Context.FirstRerolledDieHandIndexThisRound;
 			if (!DiceStates.IsValidIndex(FirstRerolledDieIndex))
@@ -213,6 +376,26 @@ namespace
 			}
 
 			OutIndexes.Add(FirstRerolledDieIndex);
+			return true;
+		}
+
+		if (IsRandomDieRule(TargetRuleId))
+		{
+			FRandomStream RandomStream = Context.RandomStream;
+			OutIndexes.Add(RandomStream.RandRange(0, DiceStates.Num() - 1));
+			return true;
+		}
+
+		if (IsBestDieRule(TargetRuleId) || IsLowestDieRule(TargetRuleId))
+		{
+			const int32 BestIndex = FindBestDieIndex(DiceStates, IsLowestDieRule(TargetRuleId));
+			if (!DiceStates.IsValidIndex(BestIndex))
+			{
+				OutFailureReason = FString::Printf(TEXT("TargetRuleId '%s' could not select a valid die."), *TargetRuleId.ToString());
+				return false;
+			}
+
+			OutIndexes.Add(BestIndex);
 			return true;
 		}
 
@@ -238,6 +421,283 @@ namespace
 		return DiceStates.Num() > 0 || RequiresDiceIndexes(EffectDefinition);
 	}
 
+	void AddUniquePlayer(TArray<AGambitPlayerState*>& Players, AGambitPlayerState* Player)
+	{
+		if (Player)
+		{
+			Players.AddUnique(Player);
+		}
+	}
+
+	void AddPlayersFromWorld(TArray<AGambitPlayerState*>& Players, const AGambitPlayerState* AnchorPlayer)
+	{
+		const UWorld* World = AnchorPlayer ? AnchorPlayer->GetWorld() : nullptr;
+		const AGambitGameState* GameState = World ? World->GetGameState<AGambitGameState>() : nullptr;
+		if (!GameState)
+		{
+			return;
+		}
+
+		for (AGambitPlayerState* PlayerState : GameState->GetGambitPlayerStates())
+		{
+			AddUniquePlayer(Players, PlayerState);
+		}
+	}
+
+	TArray<AGambitPlayerState*> BuildStablePlayerOrder(const FGambitEffectExecutionContext& Context)
+	{
+		TArray<AGambitPlayerState*> Players;
+		for (const TObjectPtr<AGambitPlayerState>& PlayerState : Context.MatchPlayerStates)
+		{
+			AddUniquePlayer(Players, PlayerState.Get());
+		}
+
+		AddPlayersFromWorld(Players, Context.SourcePlayer.Get());
+		AddPlayersFromWorld(Players, Context.TargetPlayer.Get());
+		AddUniquePlayer(Players, Context.SourcePlayer.Get());
+		AddUniquePlayer(Players, Context.TargetPlayer.Get());
+		return Players;
+	}
+
+	TArray<AGambitPlayerState*> BuildOpponents(const FGambitEffectExecutionContext& Context, FString& OutFailureReason)
+	{
+		TArray<AGambitPlayerState*> Opponents;
+		AGambitPlayerState* SourcePlayer = Context.SourcePlayer.Get();
+		if (!SourcePlayer)
+		{
+			OutFailureReason = TEXT("Opponent target rule requires SourcePlayer.");
+			return Opponents;
+		}
+
+		for (AGambitPlayerState* PlayerState : BuildStablePlayerOrder(Context))
+		{
+			if (PlayerState && PlayerState != SourcePlayer)
+			{
+				Opponents.AddUnique(PlayerState);
+			}
+		}
+
+		if (Opponents.Num() == 0)
+		{
+			OutFailureReason = TEXT("Opponent target rule found no player different from SourcePlayer.");
+		}
+		return Opponents;
+	}
+
+	int32 FindPlayerIndex(const TArray<AGambitPlayerState*>& Players, const AGambitPlayerState* Player)
+	{
+		for (int32 Index = 0; Index < Players.Num(); ++Index)
+		{
+			if (Players[Index] == Player)
+			{
+				return Index;
+			}
+		}
+
+		return INDEX_NONE;
+	}
+
+	AGambitPlayerState* SelectLeadingPlayer(const TArray<AGambitPlayerState*>& Players)
+	{
+		AGambitPlayerState* BestPlayer = nullptr;
+		for (AGambitPlayerState* Player : Players)
+		{
+			if (!Player)
+			{
+				continue;
+			}
+
+			if (!BestPlayer
+				|| Player->GetTotalVictoryPoints() > BestPlayer->GetTotalVictoryPoints()
+				|| (Player->GetTotalVictoryPoints() == BestPlayer->GetTotalVictoryPoints()
+					&& Player->GetCurrentRoundScore() > BestPlayer->GetCurrentRoundScore()))
+			{
+				BestPlayer = Player;
+			}
+		}
+
+		return BestPlayer;
+	}
+
+	AGambitPlayerState* SelectGoldPlayer(const TArray<AGambitPlayerState*>& Players, const bool bPoorest)
+	{
+		AGambitPlayerState* BestPlayer = nullptr;
+		for (AGambitPlayerState* Player : Players)
+		{
+			if (!Player)
+			{
+				continue;
+			}
+
+			if (!BestPlayer
+				|| (bPoorest && Player->GetCurrentGold() < BestPlayer->GetCurrentGold())
+				|| (!bPoorest && Player->GetCurrentGold() > BestPlayer->GetCurrentGold()))
+			{
+				BestPlayer = Player;
+			}
+		}
+
+		return BestPlayer;
+	}
+
+	AGambitPlayerState* SelectLowestScorePlayer(const TArray<AGambitPlayerState*>& Players)
+	{
+		AGambitPlayerState* BestPlayer = nullptr;
+		for (AGambitPlayerState* Player : Players)
+		{
+			if (!Player)
+			{
+				continue;
+			}
+
+			if (!BestPlayer || Player->GetCurrentRoundScore() < BestPlayer->GetCurrentRoundScore())
+			{
+				BestPlayer = Player;
+			}
+		}
+
+		return BestPlayer;
+	}
+
+	FGambitResolvedEffectTarget MakeResolvedTargetForPlayer(
+		const FGambitEffectExecutionContext& Context,
+		AGambitPlayerState* Player,
+		const EGambitEffectTarget TargetSide,
+		const FName TargetRuleId,
+		const TArray<int32>& DiceHandIndexes)
+	{
+		const EGambitEffectTarget ResolvedSide = Player && Player == Context.SourcePlayer.Get()
+			? EGambitEffectTarget::Source
+			: TargetSide;
+
+		FGambitResolvedEffectTarget ResolvedTarget;
+		ResolvedTarget.TargetSide = ResolvedSide;
+		ResolvedTarget.Player = Player ? Player : ResolveTargetResolverPlayer(Context, TargetSide);
+		ResolvedTarget.DiceComponent = ResolveDiceComponentForPlayer(Context, Player, TargetSide);
+		ResolvedTarget.EconomyComponent = ResolveEconomyComponentForPlayer(Context, Player, TargetSide);
+		ResolvedTarget.InventoryComponent = ResolveInventoryComponentForPlayer(Context, Player, TargetSide);
+		ResolvedTarget.ShopComponent = ResolveShopComponentForPlayer(Context, Player, TargetSide);
+		ResolvedTarget.DiceHandIndexes = DiceHandIndexes;
+		ResolvedTarget.TargetRuleId = TargetRuleId;
+		return ResolvedTarget;
+	}
+
+	FGambitEffectTargetResolveResult ResolvePlayerRuleTargets(
+		const UGambitItemEffectDefinition* EffectDefinition,
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget RequestedTarget)
+	{
+		const FName TargetRuleId = EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None;
+		const EGambitEffectTarget TargetSide = ResolveTargetSideForRule(TargetRuleId, RequestedTarget);
+		TArray<AGambitPlayerState*> TargetPlayers;
+		FString FailureReason;
+
+		if (TargetRuleId == GambitEffectTargetRules::TargetOpponent)
+		{
+			AGambitPlayerState* SourcePlayer = Context.SourcePlayer.Get();
+			AGambitPlayerState* TargetPlayer = Context.TargetPlayer.Get();
+			if (!TargetPlayer || TargetPlayer == SourcePlayer)
+			{
+				return MakeFailure(TargetRuleId, TEXT("target.opponent requires a valid TargetPlayer different from SourcePlayer."));
+			}
+
+			TargetPlayers.Add(TargetPlayer);
+		}
+		else if (TargetRuleId == GambitEffectTargetRules::AllOpponents)
+		{
+			TargetPlayers = BuildOpponents(Context, FailureReason);
+		}
+		else if (TargetRuleId == GambitEffectTargetRules::RandomOpponent)
+		{
+			const TArray<AGambitPlayerState*> Opponents = BuildOpponents(Context, FailureReason);
+			if (Opponents.Num() > 0)
+			{
+				FRandomStream RandomStream = Context.RandomStream;
+				TargetPlayers.Add(Opponents[RandomStream.RandRange(0, Opponents.Num() - 1)]);
+			}
+		}
+		else if (TargetRuleId == GambitEffectTargetRules::LeftOpponent
+			|| TargetRuleId == GambitEffectTargetRules::RightOpponent
+			|| TargetRuleId == GambitEffectTargetRules::OppositePlayer)
+		{
+			const TArray<AGambitPlayerState*> Players = BuildStablePlayerOrder(Context);
+			AGambitPlayerState* SourcePlayer = Context.SourcePlayer.Get();
+			const int32 SourceIndex = FindPlayerIndex(Players, SourcePlayer);
+			if (!SourcePlayer || SourceIndex == INDEX_NONE)
+			{
+				FailureReason = FString::Printf(TEXT("TargetRuleId '%s' requires SourcePlayer in stable match player order."), *TargetRuleId.ToString());
+			}
+			else if (TargetRuleId == GambitEffectTargetRules::OppositePlayer)
+			{
+				if (Players.Num() != 4)
+				{
+					FailureReason = TEXT("opposite_player requires exactly four players in stable match player order.");
+				}
+				else
+				{
+					TargetPlayers.Add(Players[(SourceIndex + 2) % Players.Num()]);
+				}
+			}
+			else if (Players.Num() < 2)
+			{
+				FailureReason = FString::Printf(TEXT("TargetRuleId '%s' requires at least two players."), *TargetRuleId.ToString());
+			}
+			else
+			{
+				const int32 Direction = TargetRuleId == GambitEffectTargetRules::LeftOpponent ? -1 : 1;
+				const int32 TargetIndex = (SourceIndex + Direction + Players.Num()) % Players.Num();
+				if (Players.IsValidIndex(TargetIndex) && Players[TargetIndex] != SourcePlayer)
+				{
+					TargetPlayers.Add(Players[TargetIndex]);
+				}
+			}
+		}
+		else
+		{
+			const TArray<AGambitPlayerState*> Players = BuildStablePlayerOrder(Context);
+			if (Players.Num() == 0)
+			{
+				FailureReason = FString::Printf(TEXT("TargetRuleId '%s' requires at least one player."), *TargetRuleId.ToString());
+			}
+			else if (TargetRuleId == GambitEffectTargetRules::LeadingPlayer)
+			{
+				TargetPlayers.Add(SelectLeadingPlayer(Players));
+			}
+			else if (TargetRuleId == GambitEffectTargetRules::RichestPlayer)
+			{
+				TargetPlayers.Add(SelectGoldPlayer(Players, false));
+			}
+			else if (TargetRuleId == GambitEffectTargetRules::PoorestPlayer)
+			{
+				TargetPlayers.Add(SelectGoldPlayer(Players, true));
+			}
+			else if (TargetRuleId == GambitEffectTargetRules::LowestScorePlayer)
+			{
+				TargetPlayers.Add(SelectLowestScorePlayer(Players));
+			}
+		}
+
+		TargetPlayers.Remove(nullptr);
+		if (TargetPlayers.Num() == 0)
+		{
+			return MakeFailure(
+				TargetRuleId,
+				FailureReason.IsEmpty()
+					? FString::Printf(TEXT("TargetRuleId '%s' resolved no valid player target."), *TargetRuleId.ToString())
+					: FailureReason);
+		}
+
+		FGambitEffectTargetResolveResult Result;
+		Result.bSuccess = true;
+		Result.TargetRuleId = TargetRuleId;
+		for (AGambitPlayerState* TargetPlayer : TargetPlayers)
+		{
+			const TArray<int32> EmptyDiceIndexes;
+			Result.Targets.Add(MakeResolvedTargetForPlayer(Context, TargetPlayer, TargetSide, TargetRuleId, EmptyDiceIndexes));
+		}
+		return Result;
+	}
+
 	FGambitEffectTargetResolveResult ResolveSingleTarget(
 		const UGambitItemEffectDefinition* EffectDefinition,
 		const FGambitEffectExecutionContext& Context,
@@ -256,33 +716,20 @@ namespace
 				FString::Printf(TEXT("Unknown TargetRuleId '%s'."), *TargetRuleId.ToString()));
 		}
 
-		const EGambitEffectTarget TargetSide = ResolveTargetSideForRule(TargetRuleId, RequestedTarget);
-		if (GambitEffectTargetRules::IsOpponentRule(TargetRuleId))
+		if (GambitEffectTargetRules::IsPlayerRule(TargetRuleId))
 		{
-			AGambitPlayerState* SourcePlayer = Context.SourcePlayer.Get();
-			AGambitPlayerState* TargetPlayer = Context.TargetPlayer.Get();
-			if (!TargetPlayer || TargetPlayer == SourcePlayer)
-			{
-				return MakeFailure(
-					TargetRuleId,
-					TEXT("target.opponent requires a valid TargetPlayer different from SourcePlayer."));
-			}
+			return ResolvePlayerRuleTargets(EffectDefinition, Context, RequestedTarget);
 		}
 
-		FGambitResolvedEffectTarget ResolvedTarget;
-		ResolvedTarget.TargetSide = TargetSide;
-		ResolvedTarget.Player = ResolveTargetResolverPlayer(Context, TargetSide);
-		ResolvedTarget.DiceComponent = ResolveTargetResolverDiceComponent(Context, TargetSide);
-		ResolvedTarget.EconomyComponent = ResolveTargetResolverEconomyComponent(Context, TargetSide);
-		ResolvedTarget.InventoryComponent = ResolveTargetResolverInventoryComponent(Context, TargetSide);
-		ResolvedTarget.ShopComponent = ResolveTargetResolverShopComponent(Context, TargetSide);
-		ResolvedTarget.TargetRuleId = TargetRuleId;
+		const EGambitEffectTarget TargetSide = ResolveTargetSideForRule(TargetRuleId, RequestedTarget);
+		AGambitPlayerState* TargetPlayer = ResolveTargetResolverPlayer(Context, TargetSide);
+		const TArray<FGambitDieRuntimeState> DiceStates = ResolveDiceSnapshotForPlayer(Context, TargetPlayer, TargetSide);
 
-		const TArray<FGambitDieRuntimeState>& DiceStates = ResolveTargetResolverDiceSnapshot(Context, TargetSide);
+		TArray<int32> DiceHandIndexes;
 		if (ShouldResolveDiceIndexes(EffectDefinition, DiceStates))
 		{
 			FString FailureReason;
-			if (!BuildAffectedDieIndexes(EffectDefinition, Context, TargetSide, DiceStates, ResolvedTarget.DiceHandIndexes, FailureReason))
+			if (!BuildAffectedDieIndexes(EffectDefinition, Context, TargetSide, DiceStates, DiceHandIndexes, FailureReason))
 			{
 				return MakeFailure(TargetRuleId, FailureReason);
 			}
@@ -291,7 +738,7 @@ namespace
 		FGambitEffectTargetResolveResult Result;
 		Result.bSuccess = true;
 		Result.TargetRuleId = TargetRuleId;
-		Result.Targets.Add(ResolvedTarget);
+		Result.Targets.Add(MakeResolvedTargetForPlayer(Context, TargetPlayer, TargetSide, TargetRuleId, DiceHandIndexes));
 		return Result;
 	}
 
@@ -322,6 +769,12 @@ namespace GambitEffectTargetResolver
 		if (!EffectDefinition)
 		{
 			return MakeFailure(NAME_None, TEXT("EffectDefinition is null."));
+		}
+
+		if (!EffectDefinition->TargetRuleId.IsNone()
+			&& GambitEffectTargetRules::IsPlayerRule(EffectDefinition->TargetRuleId))
+		{
+			return ResolveSingleTarget(EffectDefinition, Context, EffectDefinition->Target);
 		}
 
 		FGambitEffectTargetResolveResult Result;
@@ -359,20 +812,13 @@ namespace GambitEffectTargetResolver
 		const EGambitEffectTarget RequestedTarget)
 	{
 		const EGambitEffectTarget TargetSide = NormalizeTargetSide(RequestedTarget);
-
-		FGambitResolvedEffectTarget ResolvedTarget;
-		ResolvedTarget.TargetSide = TargetSide;
-		ResolvedTarget.Player = ResolveTargetResolverPlayer(Context, TargetSide);
-		ResolvedTarget.DiceComponent = ResolveTargetResolverDiceComponent(Context, TargetSide);
-		ResolvedTarget.EconomyComponent = ResolveTargetResolverEconomyComponent(Context, TargetSide);
-		ResolvedTarget.InventoryComponent = ResolveTargetResolverInventoryComponent(Context, TargetSide);
-		ResolvedTarget.ShopComponent = ResolveTargetResolverShopComponent(Context, TargetSide);
-		ResolvedTarget.TargetRuleId = NAME_None;
+		AGambitPlayerState* TargetPlayer = ResolveTargetResolverPlayer(Context, TargetSide);
 
 		FGambitEffectTargetResolveResult Result;
 		Result.bSuccess = true;
 		Result.TargetRuleId = NAME_None;
-		Result.Targets.Add(ResolvedTarget);
+		const TArray<int32> EmptyDiceIndexes;
+		Result.Targets.Add(MakeResolvedTargetForPlayer(Context, TargetPlayer, TargetSide, NAME_None, EmptyDiceIndexes));
 		return Result;
 	}
 

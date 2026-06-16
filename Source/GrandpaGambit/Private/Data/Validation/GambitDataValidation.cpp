@@ -137,6 +137,82 @@ namespace
 		return EffectDefinition && GambitEffectTargetRules::IsOpponentRule(EffectDefinition->TargetRuleId);
 	}
 
+	bool EffectTypeIsClearlySingleTarget(const EGambitItemEffectType EffectType)
+	{
+		switch (EffectType)
+		{
+		case EGambitItemEffectType::GrantConsumable:
+		case EGambitItemEffectType::PreventNegativeEffect:
+		case EGambitItemEffectType::SellItem:
+		case EGambitItemEffectType::SellDie:
+		case EGambitItemEffectType::CopyLastTriggeredEffect:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	bool EffectTypeCanUseDieTargetRule(const EGambitItemEffectType EffectType)
+	{
+		switch (EffectType)
+		{
+		case EGambitItemEffectType::ModifyDieValue:
+		case EGambitItemEffectType::SetDieValue:
+		case EGambitItemEffectType::LockDie:
+		case EGambitItemEffectType::RerollDie:
+		case EGambitItemEffectType::MultiplyDiceContribution:
+		case EGambitItemEffectType::DestroyOrRemoveDiceChance:
+		case EGambitItemEffectType::TransformDiceForRound:
+		case EGambitItemEffectType::SetDieScoreContributionValue:
+		case EGambitItemEffectType::SetDieComboContributionCount:
+		case EGambitItemEffectType::SetDieCountsForScoreSum:
+		case EGambitItemEffectType::SetDieCountsForCombinations:
+		case EGambitItemEffectType::SetDieCanBeRerolled:
+		case EGambitItemEffectType::SetDieCanBeLocked:
+		case EGambitItemEffectType::MarkDieDestroyedAfterRound:
+		case EGambitItemEffectType::AddDieRuntimeTags:
+		case EGambitItemEffectType::RemoveDieRuntimeTags:
+		case EGambitItemEffectType::SellDie:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	void ValidateTargetRuleCompatibility(
+		const UGambitItemEffectDefinition* EffectDefinition,
+		const FString& EffectLabel,
+		TArray<FGambitDataValidationIssue>& OutIssues)
+	{
+		if (!EffectDefinition || EffectDefinition->TargetRuleId.IsNone() || !GambitEffectTargetRules::IsKnownRule(EffectDefinition->TargetRuleId))
+		{
+			return;
+		}
+
+		if (GambitEffectTargetRules::IsMultiTargetRule(EffectDefinition->TargetRuleId)
+			&& EffectTypeIsClearlySingleTarget(EffectDefinition->EffectType))
+		{
+			AddWarning(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s uses multi-target TargetRuleId %s with a clearly single-target effect type."),
+					*EffectLabel,
+					*EffectDefinition->TargetRuleId.ToString()));
+		}
+
+		if (GambitEffectTargetRules::IsDieRule(EffectDefinition->TargetRuleId)
+			&& !EffectTypeCanUseDieTargetRule(EffectDefinition->EffectType))
+		{
+			AddWarning(
+				OutIssues,
+				FString::Printf(
+					TEXT("%s uses die TargetRuleId %s but effect type %s does not directly mutate dice."),
+					*EffectLabel,
+					*EffectDefinition->TargetRuleId.ToString(),
+					*GambitDataValidation::EffectTypeToString(EffectDefinition->EffectType)));
+		}
+	}
+
 	bool HasConcreteNegativeEffectCategory(const TArray<EGambitNegativeEffectCategory>& Categories)
 	{
 		return Categories.ContainsByPredicate([](const EGambitNegativeEffectCategory Category)
@@ -1010,6 +1086,7 @@ void GambitDataValidation::ValidateEffectDefinition(
 				*FullEffectLabel));
 	}
 
+	ValidateTargetRuleCompatibility(EffectDefinition, FullEffectLabel, OutIssues);
 	ValidateNegativeEffectDefenseConfiguration(EffectDefinition, FullEffectLabel, OutIssues);
 	ValidateEffectParameters(EffectDefinition, FullEffectLabel, OutIssues);
 	ValidateEffectConditions(EffectDefinition, FullEffectLabel, OutIssues);
