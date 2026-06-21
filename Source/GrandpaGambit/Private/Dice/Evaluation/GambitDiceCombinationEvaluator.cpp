@@ -36,7 +36,10 @@ namespace
 		for (int32 DieIndex = 0; DieIndex < DiceStates.Num() && Indexes.Num() < WantedCount; ++DieIndex)
 		{
 			const FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
-			if (DieState.bCountsForCombinations && DieState.ComboContributionCount > 0 && DieState.EffectiveValue == Value)
+			if (!DieState.bRemovedFromRound
+				&& DieState.bCountsForCombinations
+				&& DieState.ComboContributionCount > 0
+				&& DieState.EffectiveValue == Value)
 			{
 				Indexes.Add(DieIndex);
 			}
@@ -145,6 +148,11 @@ FGambitDiceCombinationResult UGambitDiceCombinationEvaluator::EvaluateDice(const
 
 	for (const FGambitDieRuntimeState& DieState : DiceStates)
 	{
+		if (DieState.bRemovedFromRound)
+		{
+			continue;
+		}
+
 		if (DieState.bCountsForScoreSum)
 		{
 			Result.DiceSum += DieState.ScoreContributionValue;
@@ -301,7 +309,9 @@ FGambitDiceCombinationResult UGambitDiceCombinationEvaluator::EvaluateDice(const
 	case EGambitCombinationType::HighDice:
 		for (int32 DieIndex = 0; DieIndex < DiceStates.Num(); ++DieIndex)
 		{
-			if (DiceStates[DieIndex].bCountsForCombinations && DiceStates[DieIndex].ComboContributionCount > 0)
+			if (!DiceStates[DieIndex].bRemovedFromRound
+				&& DiceStates[DieIndex].bCountsForCombinations
+				&& DiceStates[DieIndex].ComboContributionCount > 0)
 			{
 				Result.MatchedDieIndexes.Add(DieIndex);
 			}
@@ -315,7 +325,7 @@ FGambitDiceCombinationResult UGambitDiceCombinationEvaluator::EvaluateDice(const
 	int32 ComboEligibleDieCount = 0;
 	for (const FGambitDieRuntimeState& DieState : DiceStates)
 	{
-		if (DieState.bCountsForCombinations && DieState.ComboContributionCount > 0)
+		if (!DieState.bRemovedFromRound && DieState.bCountsForCombinations && DieState.ComboContributionCount > 0)
 		{
 			ComboEligibleDieCount++;
 		}

@@ -1917,6 +1917,81 @@ bool FGambitDiceComponentExplicitFaceRollTest::RunTest(const FString& Parameters
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitDiceRuntimeStateLifecycleTest,
+	"GrandpaGambit.Dice.RuntimeStateLifecycle",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitDiceRuntimeStateLifecycleTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitDiceDefinition* AlwaysOne = MakeDiceDefinition(TestOuter, TEXT("dice.test.runtime_one"), TArray<int32>({ 1 }));
+	UGambitDiceDefinition* AlwaysSix = MakeDiceDefinition(TestOuter, TEXT("dice.test.runtime_six"), TArray<int32>({ 6 }));
+	UGambitDiceDefinition* SilverDie = MakeDiceDefinition(TestOuter, TEXT("dice.test.runtime_silver"), TArray<int32>({ 1, 2, 3, 4, 5, 6 }));
+
+	UGambitDiceComponent* DiceComponent = NewObject<UGambitDiceComponent>();
+	TArray<TObjectPtr<UGambitDiceDefinition>> OwnedDice;
+	OwnedDice.Add(AlwaysOne);
+	OwnedDice.Add(AlwaysSix);
+	DiceComponent->InitializeDicePool(OwnedDice);
+
+	const int32 InitialDiceCount = DiceComponent->GetDiceStatesRef().Num();
+	const int32 FirstInstanceId = DiceComponent->GetDiceStatesRef()[0].InstanceId;
+	TestEqual(TEXT("runtime state keeps source definition at round start"), DiceComponent->GetDiceStatesRef()[0].OriginalDiceDefinition.Get(), AlwaysOne);
+	TestEqual(TEXT("effective definition starts as source definition"), DiceComponent->GetDiceStatesRef()[0].DiceDefinition.Get(), AlwaysOne);
+
+	DiceComponent->SetDieValue(0, 4);
+	DiceComponent->SetDieLocked(0, true);
+	FRandomStream RandomStream(17);
+	TestTrue(TEXT("unlocked reroll still rolls at least one die"), DiceComponent->RollUnlocked(RandomStream));
+	TestEqual(TEXT("locked die keeps its current value during unlocked reroll"), DiceComponent->GetDiceStatesRef()[0].EffectiveValue, 4);
+	TestTrue(TEXT("locked die remains locked after unlocked reroll"), DiceComponent->GetDiceStatesRef()[0].bLocked);
+	TestEqual(TEXT("unlocked authored die rerolls through its definition"), DiceComponent->GetDiceStatesRef()[1].EffectiveValue, 6);
+
+	TestTrue(TEXT("runtime transform succeeds"), DiceComponent->TransformDieToDefinitionForRound(0, SilverDie, true));
+	TestTrue(
+		TEXT("runtime source trace can be recorded"),
+		DiceComponent->RecordRuntimeEffectSource(0, FName(TEXT("consumable.test.runtime")), FName(TEXT("effect.test.runtime_transform"))));
+	const FGambitDieRuntimeState& TransformedState = DiceComponent->GetDiceStatesRef()[0];
+	TestEqual(TEXT("temporary transform preserves original definition"), TransformedState.OriginalDiceDefinition.Get(), AlwaysOne);
+	TestEqual(TEXT("temporary transform updates effective definition"), TransformedState.DiceDefinition.Get(), SilverDie);
+	TestEqual(TEXT("temporary transform preserves current value"), TransformedState.EffectiveValue, 4);
+	TestTrue(TEXT("temporary transform is marked on runtime state"), TransformedState.bTemporarilyTransformed);
+	TestEqual(TEXT("runtime trace stores source item id"), TransformedState.RuntimeSourceItemId, FName(TEXT("consumable.test.runtime")));
+	TestTrue(TEXT("runtime trace stores applied effect id"), TransformedState.AppliedRuntimeEffectIds.Contains(FName(TEXT("effect.test.runtime_transform"))));
+
+	TestTrue(TEXT("temporary die can be added"), DiceComponent->AddTemporaryDie(SilverDie, false, RandomStream));
+	TestEqual(TEXT("temporary die extends runtime hand only for this round"), DiceComponent->GetDiceStatesRef().Num(), InitialDiceCount + 1);
+	TestTrue(TEXT("temporary die is marked temporary"), DiceComponent->GetDiceStatesRef().Last().bTemporaryDie);
+	TestTrue(TEXT("temporary die is marked for round-end destruction"), DiceComponent->GetDiceStatesRef().Last().bDestroyedAfterRound);
+
+	DiceComponent->ResetDiceForNewRound(OwnedDice);
+	const FGambitDieRuntimeState& ResetState = DiceComponent->GetDiceStatesRef()[0];
+	TestEqual(TEXT("round reset restores initial runtime hand size"), DiceComponent->GetDiceStatesRef().Num(), InitialDiceCount);
+	TestEqual(TEXT("round reset preserves stable die instance id by hand index"), ResetState.InstanceId, FirstInstanceId);
+	TestEqual(TEXT("round reset restores original definition"), ResetState.OriginalDiceDefinition.Get(), AlwaysOne);
+	TestEqual(TEXT("round reset restores effective definition"), ResetState.DiceDefinition.Get(), AlwaysOne);
+	TestFalse(TEXT("round reset clears temporary transform flag"), ResetState.bTemporarilyTransformed);
+	TestTrue(TEXT("round reset clears runtime effect trace"), ResetState.AppliedRuntimeEffectIds.Num() == 0);
+	TestFalse(TEXT("round reset removes temporary dice"), DiceComponent->GetDiceStatesRef().ContainsByPredicate([](const FGambitDieRuntimeState& DieState)
+	{
+		return DieState.bTemporaryDie;
+	}));
+
+	UGambitDiceCombinationEvaluator* Evaluator = NewObject<UGambitDiceCombinationEvaluator>();
+	FGambitDieRuntimeState RemovedDie = MakeTestDie(5, 1, true, true, 0);
+	RemovedDie.bRemovedFromRound = true;
+	const FGambitDiceCombinationResult RemovedResult = Evaluator->EvaluateDice(TArray<FGambitDieRuntimeState>({
+		RemovedDie,
+		MakeTestDie(6, 1, true, true, 1)
+	}));
+	TestEqual(TEXT("removed runtime die does not contribute to score sum"), RemovedResult.DiceSum, 6);
+	TestTrue(TEXT("removed runtime die does not contribute to combinations"), RemovedResult.MatchedValues == TArray<int32>({ 6 }));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGambitDiceCombinationContributionRulesTest,
 	"GrandpaGambit.Dice.CombinationContributionRules",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -2951,7 +3026,9 @@ bool FGambitB3PolishTransformResetsTest::RunTest(const FString& Parameters)
 	DiceComponent->SetDieValue(0, 4);
 
 	UGambitConsumableDefinition* Polish = NewObject<UGambitConsumableDefinition>();
+	Polish->ItemId = TEXT("consumable.test.polish");
 	UGambitItemEffectDefinition* EffectDefinition = MakeEffectDefinition(Polish, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::TransformDiceForRound);
+	EffectDefinition->EffectId = TEXT("effect.test.polish_transform");
 	EffectDefinition->TargetRuleId = GambitEffectTargetRules::SelectedDie;
 	EffectDefinition->TransformDiceDefinition = SilverDie;
 	Polish->EffectDefinitions.Add(EffectDefinition);
@@ -2964,10 +3041,23 @@ bool FGambitB3PolishTransformResetsTest::RunTest(const FString& Parameters)
 	Resolver->ExecuteItemEffects(Polish, Context);
 
 	TestEqual(TEXT("polish transforms selected die to silver"), DiceComponent->GetDiceStatesRef()[0].DiceDefinition.Get(), SilverDie);
+	TestEqual(TEXT("polish preserves original die definition in runtime state"), DiceComponent->GetDiceStatesRef()[0].OriginalDiceDefinition.Get(), StandardDie);
 	TestEqual(TEXT("polish preserves current value"), DiceComponent->GetDiceStatesRef()[0].EffectiveValue, 4);
+	TestTrue(TEXT("polish marks die as temporarily transformed"), DiceComponent->GetDiceStatesRef()[0].bTemporarilyTransformed);
+	TestEqual(TEXT("polish stores runtime source item id"), DiceComponent->GetDiceStatesRef()[0].RuntimeSourceItemId, FName(TEXT("consumable.test.polish")));
+	TestEqual(TEXT("polish stores runtime source effect id"), DiceComponent->GetDiceStatesRef()[0].RuntimeSourceEffectId, FName(TEXT("effect.test.polish_transform")));
+	TestTrue(TEXT("polish writes transform ledger event"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.EventType == EGambitRoundGameplayEventType::DieModified
+			&& Event.EffectId == FName(TEXT("effect.test.polish_transform"))
+			&& Event.TargetDieHandIndex == 0;
+	}));
 
 	DiceComponent->InitializeDicePool(OwnedDice);
 	TestEqual(TEXT("next round runtime reset restores owned standard die"), DiceComponent->GetDiceStatesRef()[0].DiceDefinition.Get(), StandardDie);
+	TestEqual(TEXT("next round runtime reset restores original standard die"), DiceComponent->GetDiceStatesRef()[0].OriginalDiceDefinition.Get(), StandardDie);
+	TestFalse(TEXT("next round runtime reset clears transform flag"), DiceComponent->GetDiceStatesRef()[0].bTemporarilyTransformed);
+	TestTrue(TEXT("next round runtime reset clears transform source trace"), DiceComponent->GetDiceStatesRef()[0].RuntimeSourceEffectId.IsNone());
 	return true;
 }
 

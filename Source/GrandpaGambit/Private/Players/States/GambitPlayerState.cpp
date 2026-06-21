@@ -94,6 +94,11 @@ void AGambitPlayerState::InitializeForMatch()
 		ShopComponent->InitializeForMatch();
 	}
 
+	if (DiceComponent)
+	{
+		DiceComponent->ResetMatchRuntimeState();
+	}
+
 	ResetRoundState();
 }
 
@@ -106,7 +111,7 @@ void AGambitPlayerState::ResetRoundState()
 
 	if (DiceComponent && InventoryComponent)
 	{
-		DiceComponent->InitializeDicePool(InventoryComponent->GetOwnedDiceDefinitions());
+		DiceComponent->ResetDiceForNewRound(InventoryComponent->GetOwnedDiceDefinitions());
 	}
 
 	if (ShopComponent)
@@ -537,7 +542,13 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 		Snapshot.bCanBeRerolled = DieState.bCanBeRerolled;
 		Snapshot.bCanBeLocked = DieState.bCanBeLocked;
 		Snapshot.bDestroyedAfterRound = DieState.bDestroyedAfterRound;
+		Snapshot.bRemovedFromRound = DieState.bRemovedFromRound;
+		Snapshot.bTemporaryDie = DieState.bTemporaryDie;
+		Snapshot.bTemporarilyTransformed = DieState.bTemporarilyTransformed;
+		Snapshot.RuntimeSourceItemId = DieState.RuntimeSourceItemId;
+		Snapshot.RuntimeSourceEffectId = DieState.RuntimeSourceEffectId;
 		Snapshot.RuntimeTags = DieState.RuntimeTags;
+		Snapshot.AppliedRuntimeEffectIds = DieState.AppliedRuntimeEffectIds;
 
 		if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
 		{
@@ -554,7 +565,7 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 		}
 
 		Snapshot.Summary = FString::Printf(
-			TEXT("#%d %s Value=%d Raw=%d ScoreValue=%d ComboCount=%d Locked=%s Tags=%d Effects=%d"),
+			TEXT("#%d %s Value=%d Raw=%d ScoreValue=%d ComboCount=%d Locked=%s Temp=%s Transformed=%s Tags=%d Effects=%d RuntimeEffects=%d"),
 			Snapshot.HandIndex,
 			*Snapshot.DisplayName,
 			Snapshot.EffectiveValue,
@@ -562,8 +573,11 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 			Snapshot.ScoreContributionValue,
 			Snapshot.ComboContributionCount,
 			Snapshot.bLocked ? TEXT("Yes") : TEXT("No"),
+			Snapshot.bTemporaryDie ? TEXT("Yes") : TEXT("No"),
+			Snapshot.bTemporarilyTransformed ? TEXT("Yes") : TEXT("No"),
 			Snapshot.RuntimeTags.Num() + Snapshot.DefinitionTags.Num(),
-			Snapshot.EffectIds.Num());
+			Snapshot.EffectIds.Num(),
+			Snapshot.AppliedRuntimeEffectIds.Num());
 		Snapshots.Add(Snapshot);
 	}
 

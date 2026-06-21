@@ -18,6 +18,8 @@ public:
 	UGambitDiceComponent();
 
 	void InitializeDicePool(const TArray<TObjectPtr<UGambitDiceDefinition>>& OwnedDiceDefinitions);
+	void ResetMatchRuntimeState();
+	void ResetDiceForNewRound(const TArray<TObjectPtr<UGambitDiceDefinition>>& OwnedDiceDefinitions);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dice")
 	void RollAll(FRandomStream& RandomStream);
@@ -79,6 +81,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dice")
 	void ClearAllLocks();
 
+	bool RecordRuntimeEffectSource(int32 DieIndex, FName SourceItemId, FName SourceEffectId);
+
 	UFUNCTION(BlueprintPure, Category = "Gambit|Dice")
 	TArray<FGambitDieRuntimeState> GetDiceStates() const { return DiceStates; }
 
@@ -91,6 +95,8 @@ private:
 	FGambitDieRuntimeState MakeRuntimeDie(UGambitDiceDefinition* Definition, int32 HandIndex, const FGambitDieRuntimeState* PreviousState);
 	FGambitDieRuntimeState MakeFallbackDie(int32 HandIndex, const FGambitDieRuntimeState* PreviousState);
 	void RollDie(FGambitDieRuntimeState& DieState, FRandomStream& RandomStream);
+	void ResetDieRollResult(FGambitDieRuntimeState& DieState, int32 RolledFaceIndex, int32 RawValue);
+	void ClearRoundScopedRuntimeState(FGambitDieRuntimeState& DieState);
 	void RefreshHandIndexes();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Dice", meta = (AllowPrivateAccess = "true"))

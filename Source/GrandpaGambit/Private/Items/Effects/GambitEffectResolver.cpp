@@ -1280,6 +1280,32 @@ namespace
 		return NAME_None;
 	}
 
+	void RecordRuntimeEffectSource(
+		FGambitDieRuntimeState& DieState,
+		const FGambitEffectExecutionContext& Context,
+		const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		const FName SourceEffectId = GetEffectSourceId(EffectDefinition);
+		DieState.RuntimeSourceItemId = ResolveDebugSourceId(Context);
+		DieState.RuntimeSourceEffectId = SourceEffectId;
+		if (!SourceEffectId.IsNone())
+		{
+			DieState.AppliedRuntimeEffectIds.AddUnique(SourceEffectId);
+		}
+	}
+
+	void RecordRuntimeEffectSource(
+		UGambitDiceComponent* DiceComponent,
+		const int32 DieIndex,
+		const FGambitEffectExecutionContext& Context,
+		const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		if (DiceComponent)
+		{
+			DiceComponent->RecordRuntimeEffectSource(DieIndex, ResolveDebugSourceId(Context), GetEffectSourceId(EffectDefinition));
+		}
+	}
+
 	FString ResolveDebugSourceName(const FGambitEffectExecutionContext& Context)
 	{
 		if (const UGambitItemDefinition* SourceItem = Context.SourceItem.Get())
@@ -2438,12 +2464,17 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 			if (DiceComponent)
 			{
 				bModified = DiceComponent->ModifyDieValue(DieIndex, Amount);
+				if (bModified)
+				{
+					RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+				}
 			}
 			else if (DiceStates.IsValidIndex(DieIndex))
 			{
 				FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
 				DieState.EffectiveValue += Amount;
 				RefreshRuntimeScoreContribution(DieState);
+				RecordRuntimeEffectSource(DieState, Context, EffectDefinition);
 				bModified = true;
 			}
 
@@ -2487,12 +2518,17 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 			if (DiceComponent)
 			{
 				bModified = DiceComponent->SetDieValue(DieIndex, DieValue);
+				if (bModified)
+				{
+					RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+				}
 			}
 			else if (DiceStates.IsValidIndex(DieIndex))
 			{
 				FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
 				DieState.EffectiveValue = DieValue;
 				RefreshRuntimeScoreContribution(DieState);
+				RecordRuntimeEffectSource(DieState, Context, EffectDefinition);
 				bModified = true;
 			}
 
@@ -2530,13 +2566,17 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 		{
 			if (DiceComponent)
 			{
-				DiceComponent->SetDieLocked(DieIndex, true);
+				if (DiceComponent->SetDieLocked(DieIndex, true))
+				{
+					RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+				}
 			}
 			else if (DiceStates.IsValidIndex(DieIndex))
 			{
 				if (DiceStates[DieIndex].bCanBeLocked)
 				{
 					DiceStates[DieIndex].bLocked = true;
+					RecordRuntimeEffectSource(DiceStates[DieIndex], Context, EffectDefinition);
 				}
 			}
 		}
@@ -2570,6 +2610,14 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 			if (!bRerolled)
 			{
 				continue;
+			}
+			if (DiceComponent)
+			{
+				RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+			}
+			else if (DiceStates.IsValidIndex(DieIndex))
+			{
+				RecordRuntimeEffectSource(DiceStates[DieIndex], Context, EffectDefinition);
 			}
 
 			const TArray<FGambitDieRuntimeState>& UpdatedDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
@@ -2669,28 +2717,44 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 		UGambitDiceDefinition* DiceDefinition = EffectDefinition->TransformDiceDefinition.Get();
 		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
+			const TArray<FGambitDieRuntimeState>& DiceBefore = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+			const int32 InstanceId = DiceBefore.IsValidIndex(DieIndex) ? DiceBefore[DieIndex].InstanceId : INDEX_NONE;
+			bool bTransformed = false;
 			if (DiceComponent && DiceDefinition)
 			{
-				DiceComponent->TransformDieToDefinitionForRound(DieIndex, DiceDefinition, true);
+				if (DiceComponent->TransformDieToDefinitionForRound(DieIndex, DiceDefinition, true))
+				{
+					RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+					bTransformed = true;
+				}
 			}
 			else if (DiceComponent)
 			{
 				const int32 Value = DiceStates.IsValidIndex(DieIndex)
 					? DiceStates[DieIndex].EffectiveValue
 					: ResolveIntScalar(EffectDefinition, TEXT("DieValue"), EffectDefinition->DieValue);
-				DiceComponent->TransformDieForRound(
+				if (DiceComponent->TransformDieForRound(
 					DieIndex,
 					EffectDefinition->TransformDiceType,
 					EffectDefinition->TransformMinValue,
 					EffectDefinition->TransformMaxValue,
-					Value);
+					Value))
+				{
+					RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+					bTransformed = true;
+				}
 			}
 			else if (DiceStates.IsValidIndex(DieIndex))
 			{
 				FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
 				if (DiceDefinition)
 				{
+					if (!DieState.OriginalDiceDefinition)
+					{
+						DieState.OriginalDiceDefinition = DieState.DiceDefinition;
+					}
 					DieState.DiceDefinition = DiceDefinition;
+					DieState.bTemporarilyTransformed = true;
 					DieState.ComboContributionCount = FMath::Max(0, DiceDefinition->DefaultComboContributionCount);
 					DieState.bCountsForScoreSum = DiceDefinition->bCountsForScoreSum;
 					DieState.bCountsForCombinations = DiceDefinition->bCountsForCombinations;
@@ -2703,7 +2767,29 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 						DieState.bLocked = false;
 					}
 				}
+				else
+				{
+					DieState.DiceDefinition = nullptr;
+					DieState.bTemporarilyTransformed = true;
+					DieState.RuntimeTags = { FName(*StaticEnum<EGambitDiceType>()->GetNameStringByValue(static_cast<int64>(EffectDefinition->TransformDiceType))) };
+				}
+				RecordRuntimeEffectSource(DieState, Context, EffectDefinition);
 				RefreshRuntimeScoreContribution(DieState);
+				bTransformed = true;
+			}
+			if (bTransformed)
+			{
+				FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
+					Context,
+					EffectDefinition,
+					EGambitRoundGameplayEventType::DieModified,
+					EGambitRoundGameplayEventOutcome::Applied,
+					FString::Printf(TEXT("%s transformed die %d"), *GetEffectName(EffectDefinition), DieIndex),
+					0.0f,
+					ResolvedTarget->TargetSide);
+				Event.TargetDieHandIndex = DieIndex;
+				Event.TargetDieInstanceId = InstanceId;
+				AddRoundGameplayEvent(Context, Event);
 			}
 		}
 		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
@@ -2873,6 +2959,14 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 				break;
 			default:
 				break;
+			}
+			if (DiceComponent)
+			{
+				RecordRuntimeEffectSource(DiceComponent, DieIndex, Context, EffectDefinition);
+			}
+			else if (DiceStates.IsValidIndex(DieIndex))
+			{
+				RecordRuntimeEffectSource(DiceStates[DieIndex], Context, EffectDefinition);
 			}
 		}
 

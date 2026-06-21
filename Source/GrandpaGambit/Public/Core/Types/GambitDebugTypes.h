@@ -332,6 +332,21 @@ struct GRANDPAGAMBIT_API FGambitDebugDieSnapshot
 	bool bDestroyedAfterRound = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	bool bRemovedFromRound = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	bool bTemporaryDie = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	bool bTemporarilyTransformed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName RuntimeSourceItemId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName RuntimeSourceEffectId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	TArray<FName> DefinitionTags;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
@@ -339,6 +354,9 @@ struct GRANDPAGAMBIT_API FGambitDebugDieSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	TArray<FName> EffectIds;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	TArray<FName> AppliedRuntimeEffectIds;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	FString Summary;

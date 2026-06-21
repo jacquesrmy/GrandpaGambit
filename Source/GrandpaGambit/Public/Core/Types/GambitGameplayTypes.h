@@ -88,6 +88,9 @@ struct FGambitDieRuntimeState
 	TObjectPtr<UGambitDiceDefinition> DiceDefinition = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	TObjectPtr<UGambitDiceDefinition> OriginalDiceDefinition = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
 	int32 InstanceId = INDEX_NONE;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dice")
@@ -122,6 +125,24 @@ struct FGambitDieRuntimeState
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dice")
 	bool bDestroyedAfterRound = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	bool bRemovedFromRound = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	bool bTemporaryDie = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	bool bTemporarilyTransformed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	FName RuntimeSourceItemId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	FName RuntimeSourceEffectId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	TArray<FName> AppliedRuntimeEffectIds;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dice")
 	int32 PreviousRoundValue = INDEX_NONE;
