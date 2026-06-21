@@ -17,6 +17,7 @@ ContentPath=/Game/GrandpaGambit/Data
 JsonPath=Saved/Automation/GambitDataAssetsAudit.json
 CsvPath=Saved/Automation/GambitDataAssetsAudit.csv
 MatrixPath=Docs/ObjectCreation/ObjectMatrix.csv
+MatrixExclusionsPath=Docs/Audits/DataAssetsAuditExclusions.json
 -SkipMatrix
 -FailOnValidationErrors
 ```
@@ -89,9 +90,28 @@ The comparison intentionally does not treat every design concept as a hard build
 
 The commandlet output is the source of truth for real DataAsset validation. `ObjectMatrix.csv` is the source of truth for production planning/tracking intent.
 
+### Matrix Comparison Exclusions
+
+Known non-production comparable assets can be excluded from the matrix comparison through:
+
+```text
+Docs/Audits/DataAssetsAuditExclusions.json
+```
+
+The file is optional. If it is absent, the commandlet continues normally and reports all real assets missing from `ObjectMatrix.csv` as `MissingFromMatrix`.
+
+Each exclusion entry should contain either a stable ID or an asset path, plus:
+
+- `reason`: short explanation that can be reviewed during audit triage
+- `category`: one of `example`, `legacy`, `smoke`, `debug`, or `technical`
+
+An exclusion only changes the matrix-comparison status. It does not validate gameplay content, does not hide the DataAsset from JSON/CSV exports, does not modify the asset, and does not add implicit approval to use the asset in production.
+
+Add an exclusion when a real exported asset is intentionally outside production matrix tracking, such as an example fixture, legacy uppercase-ID asset, smoke asset, debug-only asset, or technical support object. Remove the exclusion when the asset becomes production gameplay content; then add or update the corresponding row in `ObjectMatrix.csv`.
+
 ## Current Reconciliation - 2026-06-21
 
-Latest commandlet result after the Bribe status correction:
+Latest commandlet result after adding explicit matrix comparison exclusions:
 
 - Assets: 274
 - Valid: 274
@@ -100,7 +120,8 @@ Latest commandlet result after the Bribe status correction:
 - Matrix rows read/compared: 274
 - Matched assets: 135
 - Planned missing: 139
-- Actual assets missing from matrix: 10
+- Excluded actual assets: 10
+- Remaining actual assets missing from matrix: 0
 - Type mismatches: 0
 - Matrix status mismatches: 0
 - Duplicate actual IDs: 0
@@ -118,22 +139,22 @@ Planned missing summary:
 | Module | blocked | 16 |
 | Module | todo | 85 |
 
-Actual assets missing from `ObjectMatrix.csv` and current decision:
+Assets explicitly excluded from `ObjectMatrix.csv` comparison:
 
-| Stable ID | Asset type | Decision |
-| --- | --- | --- |
-| `item.example.consumable.steal_gold` | Consumable | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`, referenced by example audit assets only. |
-| `dice.example.weighted_d6` | Die | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`. |
-| `item.example.dice.weighted_d6` | DiceItem | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`, referenced by example loot/shared pool only. |
-| `item.example.module.add_score_flat` | Module | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`, referenced by example audit assets only. |
-| `Dice.D6.Basic` | Die | Exclude from matrix for now. Legacy uppercase-ID basic D6 asset; production tracking uses `dice.standard`, and `ShopLoot.Base`/`SharedPool.Base` do not reference this ID. |
-| `Item.Dice.D6.Basic` | DiceItem | Exclude from matrix for now. Legacy uppercase-ID wrapper for `Dice.D6.Basic`; production tracking uses `item.dice.standard`, and `ShopLoot.Base`/`SharedPool.Base` do not reference this ID. |
-| `Item.Consumable.Add15` | Consumable | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
-| `Item.Consumable.Mult130` | Consumable | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
-| `Item.Module.Add10` | Module | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
-| `Item.Module.Mult120` | Module | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
+| Stable ID | Category |
+| --- | --- |
+| `item.example.consumable.steal_gold` | example |
+| `dice.example.weighted_d6` | example |
+| `item.example.dice.weighted_d6` | example |
+| `item.example.module.add_score_flat` | example |
+| `Dice.D6.Basic` | legacy |
+| `Item.Dice.D6.Basic` | legacy |
+| `Item.Consumable.Add15` | smoke |
+| `Item.Consumable.Mult130` | smoke |
+| `Item.Module.Add10` | smoke |
+| `Item.Module.Mult120` | smoke |
 
-No `ObjectMatrix.csv` rows were added for this reconciliation pass because all 10 actual-missing assets are either validation examples or legacy assets outside the production matrix naming convention. If any of the legacy assets are reintroduced into production, rename/author them with lowercase matrix-style IDs and add them to `ObjectMatrix.csv`.
+No `ObjectMatrix.csv` rows were added for this reconciliation pass because all 10 excluded assets are either validation examples or legacy/smoke assets outside the production matrix naming convention. If any of the legacy assets are reintroduced into production, rename/author them with lowercase matrix-style IDs, add them to `ObjectMatrix.csv`, and remove their exclusion.
 
 ## Known Limits
 

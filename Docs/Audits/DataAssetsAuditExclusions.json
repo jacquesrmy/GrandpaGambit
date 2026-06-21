@@ -1,0 +1,55 @@
+{
+  "description": "Explicit exclusions for real DataAssets that should remain exported by GambitGameplayDataAudit but should not be reported as missing from Docs/ObjectCreation/ObjectMatrix.csv.",
+  "entries": [
+    {
+      "stableId": "item.example.consumable.steal_gold",
+      "category": "example",
+      "reason": "Validation example under /Game/GrandpaGambit/Data/Examples/Validation, referenced by example audit assets only."
+    },
+    {
+      "stableId": "dice.example.weighted_d6",
+      "category": "example",
+      "reason": "Validation example under /Game/GrandpaGambit/Data/Examples/Validation."
+    },
+    {
+      "stableId": "item.example.dice.weighted_d6",
+      "category": "example",
+      "reason": "Validation example under /Game/GrandpaGambit/Data/Examples/Validation, referenced by example loot/shared pool only."
+    },
+    {
+      "stableId": "item.example.module.add_score_flat",
+      "category": "example",
+      "reason": "Validation example under /Game/GrandpaGambit/Data/Examples/Validation, referenced by example audit assets only."
+    },
+    {
+      "stableId": "Dice.D6.Basic",
+      "category": "legacy",
+      "reason": "Legacy uppercase-ID basic D6 asset; production tracking uses dice.standard, and ShopLoot.Base/SharedPool.Base do not reference this ID."
+    },
+    {
+      "stableId": "Item.Dice.D6.Basic",
+      "category": "legacy",
+      "reason": "Legacy uppercase-ID wrapper for Dice.D6.Basic; production tracking uses item.dice.standard, and ShopLoot.Base/SharedPool.Base do not reference this ID."
+    },
+    {
+      "stableId": "Item.Consumable.Add15",
+      "category": "smoke",
+      "reason": "Legacy uppercase-ID smoke asset using a Legacy effect definition; not referenced by ShopLoot.Base or SharedPool.Base."
+    },
+    {
+      "stableId": "Item.Consumable.Mult130",
+      "category": "smoke",
+      "reason": "Legacy uppercase-ID smoke asset using a Legacy effect definition; not referenced by ShopLoot.Base or SharedPool.Base."
+    },
+    {
+      "stableId": "Item.Module.Add10",
+      "category": "smoke",
+      "reason": "Legacy uppercase-ID smoke asset using a Legacy effect definition; not referenced by ShopLoot.Base or SharedPool.Base."
+    },
+    {
+      "stableId": "Item.Module.Mult120",
+      "category": "smoke",
+      "reason": "Legacy uppercase-ID smoke asset using a Legacy effect definition; not referenced by ShopLoot.Base or SharedPool.Base."
+    }
+  ]
+}

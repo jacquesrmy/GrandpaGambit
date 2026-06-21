@@ -25,6 +25,7 @@
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonReader.h"
 #include "Serialization/JsonWriter.h"
 #include "Shop/Data/GambitShopLootTable.h"
 
@@ -50,6 +51,11 @@ namespace
 		return TEXT("Docs/ObjectCreation/ObjectMatrix.csv");
 	}
 
+	const TCHAR* DefaultMatrixExclusionsPath()
+	{
+		return TEXT("Docs/Audits/DataAssetsAuditExclusions.json");
+	}
+
 	struct FGameplayDataAuditRecord
 	{
 		FString AssetType;
@@ -70,6 +76,8 @@ namespace
 		FString MatrixProgress;
 		FString MatrixType;
 		FString MatrixStatus = TEXT("NotCompared");
+		FString MatrixExclusionCategory;
+		FString MatrixExclusionReason;
 		TArray<FString> MatrixMessages;
 		TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
 	};
@@ -86,6 +94,14 @@ namespace
 		FString Cost;
 	};
 
+	struct FMatrixExclusionRecord
+	{
+		FString StableId;
+		FString AssetPath;
+		FString Reason;
+		FString Category;
+	};
+
 	struct FMatrixComparisonIssue
 	{
 		FString Severity;
@@ -98,20 +114,35 @@ namespace
 		int32 LineNumber = 0;
 	};
 
+	struct FMatrixExcludedActualAsset
+	{
+		FString StableId;
+		FString AssetPath;
+		FString AssetType;
+		FString Category;
+		FString Reason;
+	};
+
 	struct FMatrixComparisonResult
 	{
 		FString Status = TEXT("Skipped");
 		FString MatrixPath;
+		FString ExclusionsPath;
+		FString ExclusionsMessage;
 		FString Message;
 		int32 RowsRead = 0;
 		int32 RowsCompared = 0;
 		int32 MatchedAssets = 0;
 		int32 PlannedMissing = 0;
 		int32 ActualMissingFromMatrix = 0;
+		int32 ExclusionEntriesRead = 0;
+		int32 ExcludedActualAssets = 0;
+		int32 RemainingActualMissingFromMatrix = 0;
 		int32 TypeMismatches = 0;
 		int32 StatusMismatches = 0;
 		int32 DuplicateActualIds = 0;
 		TArray<FMatrixComparisonIssue> Issues;
+		TArray<FMatrixExcludedActualAsset> ExcludedActualAssetDetails;
 	};
 
 	FString ParsePathParam(const FString& Params, const TCHAR* ParamName, const TCHAR* DefaultRelativePath)
@@ -404,6 +435,20 @@ namespace
 		AssetJson->SetStringField(TEXT("negativeCategories"), Record.NegativeCategories);
 		AssetJson->SetObjectField(TEXT("validation"), MakeValidationJson(Record));
 		AssetJson->SetArrayField(TEXT("references"), StringArrayToJsonValues(Record.References));
+		TSharedPtr<FJsonObject> MatrixJson = MakeShared<FJsonObject>();
+		MatrixJson->SetStringField(TEXT("progress"), Record.MatrixProgress);
+		MatrixJson->SetStringField(TEXT("type"), Record.MatrixType);
+		MatrixJson->SetStringField(TEXT("status"), Record.MatrixStatus);
+		MatrixJson->SetArrayField(TEXT("messages"), StringArrayToJsonValues(Record.MatrixMessages));
+		if (!Record.MatrixExclusionCategory.IsEmpty())
+		{
+			MatrixJson->SetStringField(TEXT("exclusionCategory"), Record.MatrixExclusionCategory);
+		}
+		if (!Record.MatrixExclusionReason.IsEmpty())
+		{
+			MatrixJson->SetStringField(TEXT("exclusionReason"), Record.MatrixExclusionReason);
+		}
+		AssetJson->SetObjectField(TEXT("matrixComparison"), MatrixJson);
 		if (Record.Details.IsValid())
 		{
 			AssetJson->SetObjectField(TEXT("details"), Record.Details);
@@ -766,6 +811,8 @@ namespace
 			TEXT("MatrixProgress"),
 			TEXT("MatrixType"),
 			TEXT("MatrixStatus"),
+			TEXT("MatrixExclusionCategory"),
+			TEXT("MatrixExclusionReason"),
 			TEXT("MatrixMessages")
 		}));
 
@@ -789,6 +836,8 @@ namespace
 				Record.MatrixProgress,
 				Record.MatrixType,
 				Record.MatrixStatus,
+				Record.MatrixExclusionCategory,
+				Record.MatrixExclusionReason,
 				JoinStrings(Record.MatrixMessages, TEXT(" | "))
 			}));
 		}
@@ -889,6 +938,8 @@ namespace
 		TSharedPtr<FJsonObject> MatrixJson = MakeShared<FJsonObject>();
 		MatrixJson->SetStringField(TEXT("status"), MatrixComparison.Status);
 		MatrixJson->SetStringField(TEXT("matrixPath"), MatrixComparison.MatrixPath);
+		MatrixJson->SetStringField(TEXT("exclusionsPath"), MatrixComparison.ExclusionsPath);
+		MatrixJson->SetStringField(TEXT("exclusionsMessage"), MatrixComparison.ExclusionsMessage);
 		MatrixJson->SetStringField(TEXT("message"), MatrixComparison.Message);
 		TSharedPtr<FJsonObject> MatrixSummaryJson = MakeShared<FJsonObject>();
 		MatrixSummaryJson->SetNumberField(TEXT("rowsRead"), MatrixComparison.RowsRead);
@@ -896,6 +947,9 @@ namespace
 		MatrixSummaryJson->SetNumberField(TEXT("matchedAssets"), MatrixComparison.MatchedAssets);
 		MatrixSummaryJson->SetNumberField(TEXT("plannedMissing"), MatrixComparison.PlannedMissing);
 		MatrixSummaryJson->SetNumberField(TEXT("actualMissingFromMatrix"), MatrixComparison.ActualMissingFromMatrix);
+		MatrixSummaryJson->SetNumberField(TEXT("exclusionEntriesRead"), MatrixComparison.ExclusionEntriesRead);
+		MatrixSummaryJson->SetNumberField(TEXT("excludedActualAssets"), MatrixComparison.ExcludedActualAssets);
+		MatrixSummaryJson->SetNumberField(TEXT("remainingActualMissingFromMatrix"), MatrixComparison.RemainingActualMissingFromMatrix);
 		MatrixSummaryJson->SetNumberField(TEXT("typeMismatches"), MatrixComparison.TypeMismatches);
 		MatrixSummaryJson->SetNumberField(TEXT("statusMismatches"), MatrixComparison.StatusMismatches);
 		MatrixSummaryJson->SetNumberField(TEXT("duplicateActualIds"), MatrixComparison.DuplicateActualIds);
@@ -916,6 +970,19 @@ namespace
 			MatrixIssuesJson.Add(MakeShared<FJsonValueObject>(IssueJson));
 		}
 		MatrixJson->SetArrayField(TEXT("issues"), MatrixIssuesJson);
+
+		TArray<TSharedPtr<FJsonValue>> ExcludedActualAssetsJson;
+		for (const FMatrixExcludedActualAsset& ExcludedAsset : MatrixComparison.ExcludedActualAssetDetails)
+		{
+			TSharedPtr<FJsonObject> ExcludedAssetJson = MakeShared<FJsonObject>();
+			ExcludedAssetJson->SetStringField(TEXT("stableId"), ExcludedAsset.StableId);
+			ExcludedAssetJson->SetStringField(TEXT("assetPath"), ExcludedAsset.AssetPath);
+			ExcludedAssetJson->SetStringField(TEXT("assetType"), ExcludedAsset.AssetType);
+			ExcludedAssetJson->SetStringField(TEXT("category"), ExcludedAsset.Category);
+			ExcludedAssetJson->SetStringField(TEXT("reason"), ExcludedAsset.Reason);
+			ExcludedActualAssetsJson.Add(MakeShared<FJsonValueObject>(ExcludedAssetJson));
+		}
+		MatrixJson->SetArrayField(TEXT("excludedActualAssets"), ExcludedActualAssetsJson);
 		Root->SetObjectField(TEXT("matrixComparison"), MatrixJson);
 
 		FString Output;
@@ -1041,6 +1108,66 @@ namespace
 		return true;
 	}
 
+	bool ReadMatrixExclusions(const FString& ExclusionsPath, TArray<FMatrixExclusionRecord>& OutRecords, FString& OutMessage)
+	{
+		if (ExclusionsPath.IsEmpty() || !FPaths::FileExists(ExclusionsPath))
+		{
+			OutMessage = ExclusionsPath.IsEmpty()
+				? TEXT("No matrix comparison exclusions path was configured.")
+				: FString::Printf(TEXT("No matrix comparison exclusions file found at %s."), *ExclusionsPath);
+			return true;
+		}
+
+		FString JsonText;
+		if (!FFileHelper::LoadFileToString(JsonText, *ExclusionsPath))
+		{
+			OutMessage = FString::Printf(TEXT("Matrix comparison exclusions file could not be read: %s"), *ExclusionsPath);
+			return false;
+		}
+
+		TSharedPtr<FJsonObject> RootObject;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonText);
+		if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+		{
+			OutMessage = FString::Printf(TEXT("Matrix comparison exclusions file could not be parsed: %s"), *ExclusionsPath);
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Entries = nullptr;
+		if (!RootObject->TryGetArrayField(TEXT("entries"), Entries) || !Entries)
+		{
+			OutMessage = FString::Printf(TEXT("Matrix comparison exclusions file has no entries array: %s"), *ExclusionsPath);
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& EntryValue : *Entries)
+		{
+			const TSharedPtr<FJsonObject> EntryObject = EntryValue.IsValid() ? EntryValue->AsObject() : nullptr;
+			if (!EntryObject.IsValid())
+			{
+				continue;
+			}
+
+			FMatrixExclusionRecord Record;
+			EntryObject->TryGetStringField(TEXT("stableId"), Record.StableId);
+			if (Record.StableId.IsEmpty())
+			{
+				EntryObject->TryGetStringField(TEXT("id"), Record.StableId);
+			}
+			EntryObject->TryGetStringField(TEXT("assetPath"), Record.AssetPath);
+			EntryObject->TryGetStringField(TEXT("reason"), Record.Reason);
+			EntryObject->TryGetStringField(TEXT("category"), Record.Category);
+
+			if (!Record.StableId.IsEmpty() || !Record.AssetPath.IsEmpty())
+			{
+				OutRecords.Add(MoveTemp(Record));
+			}
+		}
+
+		OutMessage = FString::Printf(TEXT("Loaded %d matrix comparison exclusions from %s."), OutRecords.Num(), *ExclusionsPath);
+		return true;
+	}
+
 	FString MatrixTypeToAssetType(const FString& MatrixType)
 	{
 		if (MatrixType == TEXT("Die"))
@@ -1104,10 +1231,39 @@ namespace
 		return Issue;
 	}
 
-	void ApplyMatrixComparison(TArray<FGameplayDataAuditRecord>& Records, const FString& MatrixPath, FMatrixComparisonResult& OutResult)
+	const FMatrixExclusionRecord* FindMatrixExclusion(
+		const FGameplayDataAuditRecord& Record,
+		const TMap<FString, FMatrixExclusionRecord>& ExclusionsByStableId,
+		const TMap<FString, FMatrixExclusionRecord>& ExclusionsByAssetPath)
+	{
+		if (!Record.StableId.IsEmpty())
+		{
+			if (const FMatrixExclusionRecord* Exclusion = ExclusionsByStableId.Find(Record.StableId))
+			{
+				return Exclusion;
+			}
+		}
+
+		if (!Record.AssetPath.IsEmpty())
+		{
+			if (const FMatrixExclusionRecord* Exclusion = ExclusionsByAssetPath.Find(Record.AssetPath))
+			{
+				return Exclusion;
+			}
+		}
+
+		return nullptr;
+	}
+
+	void ApplyMatrixComparison(
+		TArray<FGameplayDataAuditRecord>& Records,
+		const FString& MatrixPath,
+		const FString& ExclusionsPath,
+		FMatrixComparisonResult& OutResult)
 	{
 		OutResult.Status = TEXT("Compared");
 		OutResult.MatrixPath = MatrixPath;
+		OutResult.ExclusionsPath = ExclusionsPath;
 
 		TArray<FObjectMatrixRecord> MatrixRecords;
 		FString MatrixError;
@@ -1116,6 +1272,24 @@ namespace
 			OutResult.Status = TEXT("Skipped");
 			OutResult.Message = MatrixError;
 			return;
+		}
+
+		TArray<FMatrixExclusionRecord> MatrixExclusions;
+		ReadMatrixExclusions(ExclusionsPath, MatrixExclusions, OutResult.ExclusionsMessage);
+		OutResult.ExclusionEntriesRead = MatrixExclusions.Num();
+
+		TMap<FString, FMatrixExclusionRecord> ExclusionsByStableId;
+		TMap<FString, FMatrixExclusionRecord> ExclusionsByAssetPath;
+		for (const FMatrixExclusionRecord& Exclusion : MatrixExclusions)
+		{
+			if (!Exclusion.StableId.IsEmpty())
+			{
+				ExclusionsByStableId.Add(Exclusion.StableId, Exclusion);
+			}
+			if (!Exclusion.AssetPath.IsEmpty())
+			{
+				ExclusionsByAssetPath.Add(Exclusion.AssetPath, Exclusion);
+			}
 		}
 
 		OutResult.RowsRead = MatrixRecords.Num();
@@ -1271,6 +1445,27 @@ namespace
 
 			if (!MatrixById.Contains(Record.StableId))
 			{
+				if (const FMatrixExclusionRecord* Exclusion = FindMatrixExclusion(Record, ExclusionsByStableId, ExclusionsByAssetPath))
+				{
+					OutResult.ExcludedActualAssets++;
+					Record.MatrixStatus = TEXT("ExcludedFromMatrixComparison");
+					Record.MatrixExclusionCategory = Exclusion->Category;
+					Record.MatrixExclusionReason = Exclusion->Reason;
+					const FString Message = Exclusion->Reason.IsEmpty()
+						? TEXT("Asset is explicitly excluded from ObjectMatrix.csv comparison.")
+						: FString::Printf(TEXT("Asset is explicitly excluded from ObjectMatrix.csv comparison: %s"), *Exclusion->Reason);
+					Record.MatrixMessages.Add(Message);
+
+					FMatrixExcludedActualAsset ExcludedAsset;
+					ExcludedAsset.StableId = Record.StableId;
+					ExcludedAsset.AssetPath = Record.AssetPath;
+					ExcludedAsset.AssetType = Record.AssetType;
+					ExcludedAsset.Category = Exclusion->Category;
+					ExcludedAsset.Reason = Exclusion->Reason;
+					OutResult.ExcludedActualAssetDetails.Add(MoveTemp(ExcludedAsset));
+					continue;
+				}
+
 				OutResult.ActualMissingFromMatrix++;
 				Record.MatrixStatus = TEXT("MissingFromMatrix");
 				const FString Message = TEXT("Asset StableId is not present in ObjectMatrix.csv.");
@@ -1287,6 +1482,7 @@ namespace
 			}
 		}
 
+		OutResult.RemainingActualMissingFromMatrix = OutResult.ActualMissingFromMatrix;
 		OutResult.Message = TEXT("Compared ObjectMatrix.csv IDs against exported DiceId/ItemId values for dice, dice items, modules and consumables.");
 	}
 
@@ -1331,6 +1527,7 @@ int32 UGambitGameplayDataAuditCommandlet::Main(const FString& Params)
 	const FString JsonPath = ParsePathParam(Params, TEXT("JsonPath="), DefaultJsonPath());
 	const FString CsvPath = ParsePathParam(Params, TEXT("CsvPath="), DefaultCsvPath());
 	const FString MatrixPath = ParsePathParam(Params, TEXT("MatrixPath="), DefaultMatrixPath());
+	const FString MatrixExclusionsPath = ParsePathParam(Params, TEXT("MatrixExclusionsPath="), DefaultMatrixExclusionsPath());
 	const bool bSkipMatrix = FParse::Param(*Params, TEXT("SkipMatrix"));
 	const bool bFailOnValidationErrors = FParse::Param(*Params, TEXT("FailOnValidationErrors"));
 
@@ -1425,11 +1622,12 @@ int32 UGambitGameplayDataAuditCommandlet::Main(const FString& Params)
 	{
 		MatrixComparison.Status = TEXT("Skipped");
 		MatrixComparison.MatrixPath = MatrixPath;
+		MatrixComparison.ExclusionsPath = MatrixExclusionsPath;
 		MatrixComparison.Message = TEXT("Skipped by -SkipMatrix.");
 	}
 	else
 	{
-		ApplyMatrixComparison(Records, MatrixPath, MatrixComparison);
+		ApplyMatrixComparison(Records, MatrixPath, MatrixExclusionsPath, MatrixComparison);
 	}
 
 	TMap<FString, int32> CountsByType;
@@ -1477,7 +1675,7 @@ int32 UGambitGameplayDataAuditCommandlet::Main(const FString& Params)
 	UE_LOG(
 		LogTemp,
 		Display,
-		TEXT("GameplayDataAudit summary: Assets=%d Dice=%d DiceItems=%d Modules=%d Consumables=%d Effects=%d ShopLootTables=%d SharedPools=%d ValidationWarnings=%d ValidationErrors=%d MatrixStatus=%s MatrixIssues=%d"),
+		TEXT("GameplayDataAudit summary: Assets=%d Dice=%d DiceItems=%d Modules=%d Consumables=%d Effects=%d ShopLootTables=%d SharedPools=%d ValidationWarnings=%d ValidationErrors=%d MatrixStatus=%s MatrixMatched=%d MatrixPlannedMissing=%d MatrixExcludedActual=%d MatrixRemainingActualMissing=%d MatrixIssues=%d"),
 		RealAssetCount,
 		CountsByType.FindRef(TEXT("DiceDefinition")),
 		CountsByType.FindRef(TEXT("DiceItemDefinition")),
@@ -1489,6 +1687,10 @@ int32 UGambitGameplayDataAuditCommandlet::Main(const FString& Params)
 		ValidationWarningCount,
 		ValidationErrorCount,
 		*MatrixComparison.Status,
+		MatrixComparison.MatchedAssets,
+		MatrixComparison.PlannedMissing,
+		MatrixComparison.ExcludedActualAssets,
+		MatrixComparison.RemainingActualMissingFromMatrix,
 		MatrixComparison.Issues.Num());
 
 	if (bWriteFailed)
