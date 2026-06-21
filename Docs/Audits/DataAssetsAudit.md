@@ -78,6 +78,63 @@ The comparison reports:
 
 The comparison intentionally does not treat every design concept as a hard build failure. Rows with `todo` or `blocked` progress are reported as informational when missing.
 
+### Interpreting Matrix Gaps
+
+`MatrixAssetMissing` means a row exists in `ObjectMatrix.csv`, but no matching real asset was found by stable ID. For `todo` and `blocked` rows this is expected backlog/planning debt, not a validation failure. Do not change those rows to `validated` unless the audit exports a matching real DataAsset and the asset validation is clean.
+
+`MissingFromMatrix` means a real comparable asset exists, but its stable ID is not present in `ObjectMatrix.csv`. Treat this as a triage prompt:
+
+- add a row to `ObjectMatrix.csv` when the asset is production gameplay content that should be tracked as part of dice, shop, module, or consumable authoring
+- document the exclusion when the asset is an example, validation fixture, debug/test content, legacy smoke asset, or technical support asset
+
+The commandlet output is the source of truth for real DataAsset validation. `ObjectMatrix.csv` is the source of truth for production planning/tracking intent.
+
+## Current Reconciliation - 2026-06-21
+
+Latest commandlet result after the Bribe status correction:
+
+- Assets: 274
+- Valid: 274
+- Warnings: 0
+- Errors: 0
+- Matrix rows read/compared: 274
+- Matched assets: 135
+- Planned missing: 139
+- Actual assets missing from matrix: 10
+- Type mismatches: 0
+- Matrix status mismatches: 0
+- Duplicate actual IDs: 0
+
+Planned missing summary:
+
+| Type | Progress | Count |
+| --- | --- | ---: |
+| Consumable | blocked | 1 |
+| Consumable | todo | 5 |
+| DiceItem | blocked | 4 |
+| DiceItem | todo | 12 |
+| Die | blocked | 4 |
+| Die | todo | 12 |
+| Module | blocked | 16 |
+| Module | todo | 85 |
+
+Actual assets missing from `ObjectMatrix.csv` and current decision:
+
+| Stable ID | Asset type | Decision |
+| --- | --- | --- |
+| `item.example.consumable.steal_gold` | Consumable | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`, referenced by example audit assets only. |
+| `dice.example.weighted_d6` | Die | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`. |
+| `item.example.dice.weighted_d6` | DiceItem | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`, referenced by example loot/shared pool only. |
+| `item.example.module.add_score_flat` | Module | Exclude from matrix. Validation example under `/Game/GrandpaGambit/Data/Examples/Validation`, referenced by example audit assets only. |
+| `Dice.D6.Basic` | Die | Exclude from matrix for now. Legacy uppercase-ID basic D6 asset; production tracking uses `dice.standard`, and `ShopLoot.Base`/`SharedPool.Base` do not reference this ID. |
+| `Item.Dice.D6.Basic` | DiceItem | Exclude from matrix for now. Legacy uppercase-ID wrapper for `Dice.D6.Basic`; production tracking uses `item.dice.standard`, and `ShopLoot.Base`/`SharedPool.Base` do not reference this ID. |
+| `Item.Consumable.Add15` | Consumable | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
+| `Item.Consumable.Mult130` | Consumable | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
+| `Item.Module.Add10` | Module | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
+| `Item.Module.Mult120` | Module | Exclude from matrix for now. Legacy uppercase-ID smoke asset using a `Legacy` effect definition; not referenced by `ShopLoot.Base` or `SharedPool.Base`. |
+
+No `ObjectMatrix.csv` rows were added for this reconciliation pass because all 10 actual-missing assets are either validation examples or legacy assets outside the production matrix naming convention. If any of the legacy assets are reintroduced into production, rename/author them with lowercase matrix-style IDs and add them to `ObjectMatrix.csv`.
+
 ## Known Limits
 
 - The audit does not parse `.uasset` files outside Unreal.

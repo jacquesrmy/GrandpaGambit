@@ -5,9 +5,12 @@ Ce dossier sert de plan de production pour les DataAssets d'objets de GrandpaGam
 ## Source de verite
 
 - `ObjectMatrix.csv` est la source de suivi rapide. Une ligne = une fiche de creation DataAsset ou concept DataAsset associe.
+- `Docs/Audits/DataAssetsAudit.md` et les exports `Saved/Automation/GambitDataAssetsAudit.json/.csv` indiquent quels DataAssets Unreal existent vraiment et si leur validation C++ passe.
 - `Dice.md`, `Consumables.md` et `Modules.md` donnent une lecture plus claire par famille.
 - `EffectsCoverage.md` decrit ce qui est deja couvert par les enums/effects C++ et ce qui manque.
 - `CreationBatches.md` donne les lots de creation recommandes.
+
+`ObjectMatrix.csv` reste une matrice de planification, pas une preuve de validation runtime. Une ligne `todo` ou `blocked` absente des assets est du backlog attendu. Un asset reel absent de la matrice doit etre trie : ajout a `ObjectMatrix.csv` s'il devient contenu gameplay de production, documentation d'exclusion s'il s'agit d'un exemple, test, legacy, debug ou asset technique.
 
 ## Colonnes de suivi
 
