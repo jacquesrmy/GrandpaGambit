@@ -17,6 +17,7 @@ FGambitEffectExecutionContext UGambitRoundEffectPipeline::MakeEffectContext(cons
 	FGambitEffectExecutionContext Context;
 	Context.Hook = Request.Hook;
 	Context.CurrentPhase = Request.CurrentPhase;
+	Context.RoundNumber = Request.RoundNumber;
 	Context.SourcePlayer = Request.SourcePlayer;
 	Context.TargetPlayer = Request.TargetPlayer ? Request.TargetPlayer : Request.SourcePlayer;
 	Context.SharedPoolComponent = Request.SharedPoolComponent;
@@ -86,6 +87,7 @@ void UGambitRoundEffectPipeline::CommitEffectContext(
 		Context.SourcePlayer->AppendDebugScoreLines(Context.DebugScoreLines);
 		Context.SourcePlayer->AppendDebugGoldLines(Context.DebugGoldLines);
 		Context.SourcePlayer->AppendDebugShopLines(Context.DebugShopLines);
+		Context.SourcePlayer->AppendRoundEvents(Context.RoundEvents);
 	}
 
 	if (Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer)
@@ -94,6 +96,7 @@ void UGambitRoundEffectPipeline::CommitEffectContext(
 		Context.TargetPlayer->AppendDebugScoreLines(Context.DebugScoreLines);
 		Context.TargetPlayer->AppendDebugGoldLines(Context.DebugGoldLines);
 		Context.TargetPlayer->AppendDebugShopLines(Context.DebugShopLines);
+		Context.TargetPlayer->AppendRoundEvents(Context.RoundEvents);
 	}
 
 	if (Context.SourcePlayer && Context.RerollLimitDelta != 0 && CommitRequest.RerollLimitDeltaByPlayer)

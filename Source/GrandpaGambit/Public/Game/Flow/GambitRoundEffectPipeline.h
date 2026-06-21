@@ -14,6 +14,7 @@ struct GRANDPAGAMBIT_API FGambitRoundEffectContextRequest
 {
 	EGambitEffectHook Hook = EGambitEffectHook::ScoreModifier;
 	EGambitRoundPhase CurrentPhase = EGambitRoundPhase::None;
+	int32 RoundNumber = 0;
 	AGambitPlayerState* SourcePlayer = nullptr;
 	AGambitPlayerState* TargetPlayer = nullptr;
 	UGambitSharedPoolComponent* SharedPoolComponent = nullptr;

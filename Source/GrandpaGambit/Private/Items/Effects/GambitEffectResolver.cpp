@@ -1462,6 +1462,92 @@ namespace
 		Line.Summary = Summary;
 		return Line;
 	}
+
+	int32 ResolveRoundEventPlayerId(const AGambitPlayerState* PlayerState)
+	{
+		return PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE;
+	}
+
+	FName ResolveRoundEventEffectTypeId(const UGambitItemEffectDefinition* EffectDefinition)
+	{
+		if (!EffectDefinition)
+		{
+			return NAME_None;
+		}
+
+		return EffectDefinition->EffectTypeId.IsNone()
+			? FName(*EffectResolverEnumToDebugString(EffectDefinition->EffectType))
+			: EffectDefinition->EffectTypeId;
+	}
+
+	TArray<FName> NegativeEffectCategoriesToIds(const TArray<EGambitNegativeEffectCategory>& Categories)
+	{
+		TArray<FName> CategoryIds;
+		CategoryIds.Reserve(Categories.Num());
+		for (const EGambitNegativeEffectCategory Category : Categories)
+		{
+			if (Category != EGambitNegativeEffectCategory::None)
+			{
+				CategoryIds.AddUnique(FName(*NegativeEffectCategoryToString(Category)));
+			}
+		}
+		return CategoryIds;
+	}
+
+	AGambitPlayerState* ResolveRoundEventTargetPlayer(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitEffectTarget Target)
+	{
+		if (Target == EGambitEffectTarget::SourceAndTarget && Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer)
+		{
+			return Context.TargetPlayer.Get();
+		}
+
+		if (AGambitPlayerState* Player = ResolvePlayerForRead(Context, Target))
+		{
+			return Player;
+		}
+
+		return Target == EGambitEffectTarget::Target ? Context.TargetPlayer.Get() : Context.SourcePlayer.Get();
+	}
+
+	FGambitRoundGameplayEvent MakeRoundGameplayEvent(
+		const FGambitEffectExecutionContext& Context,
+		const UGambitItemEffectDefinition* EffectDefinition,
+		const EGambitRoundGameplayEventType EventType,
+		const EGambitRoundGameplayEventOutcome Outcome,
+		const FString& Reason,
+		const float NumericDelta = 0.0f,
+		const EGambitEffectTarget Target = EGambitEffectTarget::Source)
+	{
+		FGambitRoundGameplayEvent Event;
+		Event.EventType = EventType;
+		Event.Outcome = Outcome;
+		Event.RoundNumber = Context.RoundNumber;
+		Event.Phase = Context.CurrentPhase;
+		Event.SourcePlayerId = ResolveRoundEventPlayerId(Context.SourcePlayer.Get());
+		Event.TargetPlayerId = ResolveRoundEventPlayerId(ResolveRoundEventTargetPlayer(Context, Target));
+		Event.SourceItemId = ResolveDebugSourceId(Context);
+		Event.EffectId = GetEffectSourceId(EffectDefinition);
+		Event.EffectTypeId = ResolveRoundEventEffectTypeId(EffectDefinition);
+		Event.TargetRuleId = EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None;
+		Event.NumericDelta = NumericDelta;
+		Event.SourceDieInstanceId = Context.SourceDieInstanceId;
+		Event.SourceDieHandIndex = Context.SourceDieHandIndex;
+		Event.TargetDieInstanceId = Context.TargetDieInstanceId;
+		Event.TargetDieHandIndex = Context.TargetDieHandIndex;
+		Event.Reason = Reason;
+		if (EffectDefinition && EffectDefinition->bNegativeEffect)
+		{
+			Event.NegativeCategoryIds = NegativeEffectCategoriesToIds(ResolveNegativeEffectCategories(EffectDefinition));
+		}
+		return Event;
+	}
+
+	void AddRoundGameplayEvent(FGambitEffectExecutionContext& Context, const FGambitRoundGameplayEvent& Event)
+	{
+		Context.RoundEvents.Add(Event);
+	}
 }
 
 int32 UGambitEffectResolver::ExecuteItemEffects(UGambitItemDefinition* ItemDefinition, FGambitEffectExecutionContext& Context) const
@@ -1510,6 +1596,18 @@ int32 UGambitEffectResolver::ExecuteItemEffects(UGambitItemDefinition* ItemDefin
 				*GetItemName(ItemDefinition),
 				*EffectClass->GetName());
 		}
+	}
+
+	if (ItemDefinition->ItemType == EGambitItemType::Consumable && Context.Hook == EGambitEffectHook::ConsumableUse)
+	{
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			nullptr,
+			EGambitRoundGameplayEventType::ConsumableUsed,
+			TriggeredCount > 0 ? EGambitRoundGameplayEventOutcome::Applied : EGambitRoundGameplayEventOutcome::Skipped,
+			FString::Printf(TEXT("%s was used"), *GetItemName(ItemDefinition)),
+			0.0f,
+			EGambitEffectTarget::Source));
 	}
 
 	return TriggeredCount;
@@ -1609,6 +1707,19 @@ bool UGambitEffectResolver::ExecuteEffectDefinition(UGambitItemEffectDefinition*
 					*NegativeEffectCategoriesToString(NegativeCategories),
 					*ProtectionSource,
 					*ChargeSummary)));
+			FGambitRoundGameplayEvent PreventedEvent = MakeRoundGameplayEvent(
+				Context,
+				EffectDefinition,
+				EGambitRoundGameplayEventType::EffectPrevented,
+				EGambitRoundGameplayEventOutcome::Prevented,
+				FString::Printf(
+					TEXT("%s prevented by %s"),
+					*GetEffectName(EffectDefinition),
+					*ProtectionSource),
+				0.0f,
+				EffectDefinition->Target);
+			PreventedEvent.NegativeCategoryIds = NegativeEffectCategoriesToIds(NegativeCategories);
+			AddRoundGameplayEvent(Context, PreventedEvent);
 			UE_LOG(
 				LogGambit,
 				Log,
@@ -1632,6 +1743,17 @@ bool UGambitEffectResolver::ExecuteEffectDefinition(UGambitItemEffectDefinition*
 
 	if (bTriggered)
 	{
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::EffectApplied,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(
+				TEXT("%s applied %s"),
+				*ResolveDebugSourceName(Context),
+				*GetEffectName(EffectDefinition)),
+			static_cast<float>(ResolveContextualAmountAsInt(EffectDefinition, Context, EffectDefinition->Target)),
+			EffectDefinition->Target));
 		Context.DebugEffectEvents.Add(MakeEffectDebugEvent(
 			Context,
 			EffectDefinition,
@@ -2086,6 +2208,14 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 	case EGambitItemEffectType::ScoreModifier:
 		ApplyScoreModifier(ResolveScoreModifierDelta(Context, Target), EffectDefinition->ScoreModifier);
 		AddScoreModifierDebugLine(Context, EffectDefinition->ScoreModifier, GetEffectName(EffectDefinition));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::ScoreModifierApplied,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s applied a score modifier"), *GetEffectName(EffectDefinition)),
+			EffectDefinition->ScoreModifier.AdditiveBonus,
+			Target));
 		return true;
 	case EGambitItemEffectType::AddScoreFlat:
 	{
@@ -2109,6 +2239,14 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			ScoreBefore,
 			ScoreAfter,
 			FString::Printf(TEXT("%s adds %+d score"), *GetEffectName(EffectDefinition), Amount)));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::ScoreModifierApplied,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s adds %+d score"), *GetEffectName(EffectDefinition), Amount),
+			static_cast<float>(Amount),
+			Target));
 		return true;
 	}
 	case EGambitItemEffectType::MultiplyScore:
@@ -2134,6 +2272,14 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			ScoreBefore,
 			ScoreAfter,
 			FString::Printf(TEXT("%s multiplies score by x%0.2f"), *GetEffectName(EffectDefinition), Multiplier)));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::ScoreModifierApplied,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s multiplies score by x%0.2f"), *GetEffectName(EffectDefinition), Multiplier),
+			Multiplier,
+			Target));
 		return true;
 	}
 	case EGambitItemEffectType::MultiplyDiceContribution:
@@ -2155,6 +2301,14 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			0.0f,
 			0.0f,
 			FString::Printf(TEXT("%s changes dice contribution by %+0.2f"), *GetEffectName(EffectDefinition), Bonus)));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::ScoreModifierApplied,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s changes dice contribution by %+0.2f"), *GetEffectName(EffectDefinition), Bonus),
+			Bonus,
+			Target));
 		return true;
 	}
 	case EGambitItemEffectType::AddTemporaryScoreModifier:
@@ -2183,6 +2337,14 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			DebugModifier.Multiplier *= TemporaryMultiplier;
 		}
 		AddScoreModifierDebugLine(Context, DebugModifier, FString::Printf(TEXT("%s temporary modifier"), *GetEffectName(EffectDefinition)));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::ScoreModifierApplied,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s applied a temporary score modifier"), *GetEffectName(EffectDefinition)),
+			DebugModifier.AdditiveBonus,
+			ResolvedTarget->TargetSide));
 		return true;
 	}
 	case EGambitItemEffectType::StealScore:
@@ -2269,15 +2431,36 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
 		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
+			const TArray<FGambitDieRuntimeState>& CurrentDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+			const int32 ValueBefore = CurrentDiceStates.IsValidIndex(DieIndex) ? CurrentDiceStates[DieIndex].EffectiveValue : INDEX_NONE;
+			const int32 InstanceId = CurrentDiceStates.IsValidIndex(DieIndex) ? CurrentDiceStates[DieIndex].InstanceId : INDEX_NONE;
+			bool bModified = false;
 			if (DiceComponent)
 			{
-				DiceComponent->ModifyDieValue(DieIndex, Amount);
+				bModified = DiceComponent->ModifyDieValue(DieIndex, Amount);
 			}
 			else if (DiceStates.IsValidIndex(DieIndex))
 			{
 				FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
 				DieState.EffectiveValue += Amount;
 				RefreshRuntimeScoreContribution(DieState);
+				bModified = true;
+			}
+
+			const TArray<FGambitDieRuntimeState>& UpdatedDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+			if (bModified && UpdatedDiceStates.IsValidIndex(DieIndex))
+			{
+				FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
+					Context,
+					EffectDefinition,
+					EGambitRoundGameplayEventType::DieModified,
+					EGambitRoundGameplayEventOutcome::Applied,
+					FString::Printf(TEXT("%s modifies die %d by %+d"), *GetEffectName(EffectDefinition), DieIndex, Amount),
+					ValueBefore != INDEX_NONE ? static_cast<float>(UpdatedDiceStates[DieIndex].EffectiveValue - ValueBefore) : static_cast<float>(Amount),
+					ResolvedTarget->TargetSide);
+				Event.TargetDieHandIndex = DieIndex;
+				Event.TargetDieInstanceId = InstanceId;
+				AddRoundGameplayEvent(Context, Event);
 			}
 		}
 		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
@@ -2297,15 +2480,36 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 		UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get();
 		for (const int32 DieIndex : ResolvedTarget->DiceHandIndexes)
 		{
+			const TArray<FGambitDieRuntimeState>& CurrentDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+			const int32 ValueBefore = CurrentDiceStates.IsValidIndex(DieIndex) ? CurrentDiceStates[DieIndex].EffectiveValue : INDEX_NONE;
+			const int32 InstanceId = CurrentDiceStates.IsValidIndex(DieIndex) ? CurrentDiceStates[DieIndex].InstanceId : INDEX_NONE;
+			bool bModified = false;
 			if (DiceComponent)
 			{
-				DiceComponent->SetDieValue(DieIndex, DieValue);
+				bModified = DiceComponent->SetDieValue(DieIndex, DieValue);
 			}
 			else if (DiceStates.IsValidIndex(DieIndex))
 			{
 				FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
 				DieState.EffectiveValue = DieValue;
 				RefreshRuntimeScoreContribution(DieState);
+				bModified = true;
+			}
+
+			const TArray<FGambitDieRuntimeState>& UpdatedDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+			if (bModified && UpdatedDiceStates.IsValidIndex(DieIndex))
+			{
+				FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
+					Context,
+					EffectDefinition,
+					EGambitRoundGameplayEventType::DieModified,
+					EGambitRoundGameplayEventOutcome::Applied,
+					FString::Printf(TEXT("%s sets die %d to %d"), *GetEffectName(EffectDefinition), DieIndex, DieValue),
+					ValueBefore != INDEX_NONE ? static_cast<float>(UpdatedDiceStates[DieIndex].EffectiveValue - ValueBefore) : 0.0f,
+					ResolvedTarget->TargetSide);
+				Event.TargetDieHandIndex = DieIndex;
+				Event.TargetDieInstanceId = InstanceId;
+				AddRoundGameplayEvent(Context, Event);
 			}
 		}
 		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
@@ -2374,6 +2578,17 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 				Context.LastAffectedDieIndex = DieIndex;
 				Context.LastAffectedDieValueBefore = ValueBefore;
 				Context.LastAffectedDieValueAfter = UpdatedDiceStates[DieIndex].EffectiveValue;
+				FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
+					Context,
+					EffectDefinition,
+					EGambitRoundGameplayEventType::DieModified,
+					EGambitRoundGameplayEventOutcome::Applied,
+					FString::Printf(TEXT("%s rerolled die %d"), *GetEffectName(EffectDefinition), DieIndex),
+					static_cast<float>(UpdatedDiceStates[DieIndex].EffectiveValue - ValueBefore),
+					ResolvedTarget->TargetSide);
+				Event.TargetDieHandIndex = DieIndex;
+				Event.TargetDieInstanceId = UpdatedDiceStates[DieIndex].InstanceId;
+				AddRoundGameplayEvent(Context, Event);
 			}
 			bRerolledAny = true;
 		}
@@ -2409,6 +2624,10 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 
 		TArray<FGambitDieRuntimeState>& DiceStates = ResolveDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		const int32 DieIndex = ResolvedTarget->DiceHandIndexes[0];
+		const TArray<FGambitDieRuntimeState>& CurrentDiceStates = ResolvedTarget->DiceComponent
+			? ResolvedTarget->DiceComponent->GetDiceStatesRef()
+			: DiceStates;
+		const int32 RemovedInstanceId = CurrentDiceStates.IsValidIndex(DieIndex) ? CurrentDiceStates[DieIndex].InstanceId : INDEX_NONE;
 		if (UGambitDiceComponent* DiceComponent = ResolvedTarget->DiceComponent.Get())
 		{
 			DiceComponent->RemoveDieAtIndex(DieIndex);
@@ -2422,6 +2641,17 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 			UGambitDiceDefinition* RemovedDieDefinition = nullptr;
 			InventoryComponent->RemoveOwnedDieAtIndex(DieIndex, RemovedDieDefinition);
 		}
+		FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::DieDestroyedOrRemoved,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s removed die %d"), *GetEffectName(EffectDefinition), DieIndex),
+			-1.0f,
+			ResolvedTarget->TargetSide);
+		Event.TargetDieHandIndex = DieIndex;
+		Event.TargetDieInstanceId = RemovedInstanceId;
+		AddRoundGameplayEvent(Context, Event);
 		RefreshDiceSnapshot(Context, ResolvedTarget->TargetSide);
 		return true;
 	}
@@ -2599,6 +2829,21 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 				{
 					DiceStates[DieIndex].bDestroyedAfterRound = EffectDefinition->bRuntimeBoolValue;
 				}
+				if (EffectDefinition->bRuntimeBoolValue)
+				{
+					const TArray<FGambitDieRuntimeState>& CurrentDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+					FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
+						Context,
+						EffectDefinition,
+						EGambitRoundGameplayEventType::DieDestroyedOrRemoved,
+						EGambitRoundGameplayEventOutcome::Applied,
+						FString::Printf(TEXT("%s marked die %d for removal"), *GetEffectName(EffectDefinition), DieIndex),
+						-1.0f,
+						ResolvedTarget->TargetSide);
+					Event.TargetDieHandIndex = DieIndex;
+					Event.TargetDieInstanceId = CurrentDiceStates.IsValidIndex(DieIndex) ? CurrentDiceStates[DieIndex].InstanceId : INDEX_NONE;
+					AddRoundGameplayEvent(Context, Event);
+				}
 				break;
 			case EGambitItemEffectType::AddDieRuntimeTags:
 				if (DiceComponent)
@@ -2663,6 +2908,14 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 				GoldBefore,
 				GoldAfter,
 				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
+			AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+				Context,
+				EffectDefinition,
+				EGambitRoundGameplayEventType::GoldChanged,
+				EGambitRoundGameplayEventOutcome::Applied,
+				FString::Printf(TEXT("%s changes gold by %+d"), *GetEffectName(EffectDefinition), GoldAfter - GoldBefore),
+				static_cast<float>(GoldAfter - GoldBefore),
+				ResolvedTarget->TargetSide));
 			return true;
 		}
 		return false;
@@ -2686,6 +2939,14 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 					GoldBefore,
 					EconomyComponent->GetCurrentGold(),
 					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
+				AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+					Context,
+					EffectDefinition,
+					EGambitRoundGameplayEventType::GoldChanged,
+					EGambitRoundGameplayEventOutcome::Applied,
+					FString::Printf(TEXT("%s changes gold by -%d"), *GetEffectName(EffectDefinition), Cost),
+					static_cast<float>(EconomyComponent->GetCurrentGold() - GoldBefore),
+					ResolvedTarget->TargetSide));
 			}
 			return bSpent;
 		}
@@ -2717,6 +2978,14 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 			TargetEconomy->GetCurrentGold() + ActualAmount,
 			TargetEconomy->GetCurrentGold(),
 			FString::Printf(TEXT("%s steals %d gold from target"), *GetEffectName(EffectDefinition), ActualAmount)));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::GoldChanged,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s removes %d gold from target"), *GetEffectName(EffectDefinition), ActualAmount),
+			static_cast<float>(-ActualAmount),
+			EGambitEffectTarget::Target));
 
 		const int32 SourceGoldBefore = SourceEconomy->GetCurrentGold();
 		SourceEconomy->AddGold(ActualAmount);
@@ -2727,6 +2996,14 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 			SourceGoldBefore,
 			SourceEconomy->GetCurrentGold(),
 			FString::Printf(TEXT("%s gains %d stolen gold"), *GetEffectName(EffectDefinition), ActualAmount)));
+		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
+			Context,
+			EffectDefinition,
+			EGambitRoundGameplayEventType::GoldChanged,
+			EGambitRoundGameplayEventOutcome::Applied,
+			FString::Printf(TEXT("%s adds %d stolen gold"), *GetEffectName(EffectDefinition), ActualAmount),
+			static_cast<float>(SourceEconomy->GetCurrentGold() - SourceGoldBefore),
+			EGambitEffectTarget::Source));
 		return true;
 	}
 	case EGambitItemEffectType::ModifyDebtLimit:

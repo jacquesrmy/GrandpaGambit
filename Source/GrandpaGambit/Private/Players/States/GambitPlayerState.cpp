@@ -171,6 +171,22 @@ void AGambitPlayerState::ApplyTemporaryScoreModifier(const FGambitScoreModifierC
 	}
 }
 
+void AGambitPlayerState::AddRoundEvent(const FGambitRoundGameplayEvent& Event)
+{
+	if (RoundStateComponent)
+	{
+		RoundStateComponent->AddRoundEvent(Event);
+	}
+}
+
+void AGambitPlayerState::AppendRoundEvents(const TArray<FGambitRoundGameplayEvent>& Events)
+{
+	if (RoundStateComponent)
+	{
+		RoundStateComponent->AppendRoundEvents(Events);
+	}
+}
+
 FGambitScoreModifierContext AGambitPlayerState::BuildCombinedScoreModifier() const
 {
 	if (RoundStateComponent)
@@ -384,6 +400,56 @@ FGambitPlayerRuntimeSnapshot AGambitPlayerState::BuildRuntimeSnapshot() const
 	Snapshot.TotalVictoryPoints = TotalVictoryPoints;
 	Snapshot.SlotState = GetSlotState();
 	return Snapshot;
+}
+
+TArray<FGambitRoundGameplayEvent> AGambitPlayerState::GetRoundEvents() const
+{
+	return RoundStateComponent ? RoundStateComponent->GetRoundEvents() : TArray<FGambitRoundGameplayEvent>();
+}
+
+const TArray<FGambitRoundGameplayEvent>& AGambitPlayerState::GetRoundEventsRef() const
+{
+	static const TArray<FGambitRoundGameplayEvent> EmptyRoundEvents;
+	return RoundStateComponent ? RoundStateComponent->GetRoundEventsRef() : EmptyRoundEvents;
+}
+
+bool AGambitPlayerState::HasEventThisRound(const EGambitRoundGameplayEventType EventType) const
+{
+	return RoundStateComponent ? RoundStateComponent->HasEventThisRound(EventType) : false;
+}
+
+int32 AGambitPlayerState::CountEventsThisRound(const EGambitRoundGameplayEventType EventType) const
+{
+	return RoundStateComponent ? RoundStateComponent->CountEventsThisRound(EventType) : 0;
+}
+
+TArray<FGambitRoundGameplayEvent> AGambitPlayerState::GetRoundEventsByType(
+	const EGambitRoundGameplayEventType EventType) const
+{
+	return RoundStateComponent
+		? RoundStateComponent->GetRoundEventsByType(EventType)
+		: TArray<FGambitRoundGameplayEvent>();
+}
+
+TArray<FGambitRoundGameplayEvent> AGambitPlayerState::GetRoundEventsBySourceItem(const FName SourceItemId) const
+{
+	return RoundStateComponent
+		? RoundStateComponent->GetRoundEventsBySourceItem(SourceItemId)
+		: TArray<FGambitRoundGameplayEvent>();
+}
+
+TArray<FGambitRoundGameplayEvent> AGambitPlayerState::GetRoundEventsByEffect(const FName EffectId) const
+{
+	return RoundStateComponent
+		? RoundStateComponent->GetRoundEventsByEffect(EffectId)
+		: TArray<FGambitRoundGameplayEvent>();
+}
+
+TArray<FGambitRoundGameplayEvent> AGambitPlayerState::GetRoundEventsByTargetPlayer(const int32 TargetPlayerId) const
+{
+	return RoundStateComponent
+		? RoundStateComponent->GetRoundEventsByTargetPlayer(TargetPlayerId)
+		: TArray<FGambitRoundGameplayEvent>();
 }
 
 void AGambitPlayerState::AddDebugEffectEvent(const FGambitDebugEffectEvent& Event)

@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "Core/Types/GambitDebugTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "GambitPlayerRoundStateComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGambitPlayerRoundScoreChanged, int32, NewRoundScore);
@@ -28,6 +29,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round State")
 	void ApplyTemporaryScoreModifier(const FGambitScoreModifierContext& Modifier);
 
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Events")
+	void AddRoundEvent(const FGambitRoundGameplayEvent& Event);
+
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Debug")
 	void AddDebugEffectEvent(const FGambitDebugEffectEvent& Event);
 
@@ -44,6 +48,7 @@ public:
 	void AppendDebugScoreLines(const TArray<FGambitDebugScoreLine>& Lines);
 	void AppendDebugGoldLines(const TArray<FGambitDebugGoldLine>& Lines);
 	void AppendDebugShopLines(const TArray<FGambitDebugShopLine>& Lines);
+	void AppendRoundEvents(const TArray<FGambitRoundGameplayEvent>& Events);
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round State")
 	FGambitScoreModifierContext GetTemporaryScoreModifier() const { return RoundConsumableModifier; }
@@ -58,6 +63,29 @@ public:
 	FGambitScoreBreakdown GetLastScoreBreakdown() const { return LastScoreBreakdown; }
 
 	const FGambitScoreBreakdown& GetLastScoreBreakdownRef() const { return LastScoreBreakdown; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEvents() const { return RoundEvents; }
+
+	const TArray<FGambitRoundGameplayEvent>& GetRoundEventsRef() const { return RoundEvents; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	bool HasEventThisRound(EGambitRoundGameplayEventType EventType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	int32 CountEventsThisRound(EGambitRoundGameplayEventType EventType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsByType(EGambitRoundGameplayEventType EventType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsBySourceItem(FName SourceItemId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsByEffect(FName EffectId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsByTargetPlayer(int32 TargetPlayerId) const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Debug")
 	TArray<FGambitDebugEffectEvent> GetDebugEffectEvents() const { return DebugEffectEvents; }
@@ -92,6 +120,9 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round State", meta = (AllowPrivateAccess = "true"))
 	FGambitScoreModifierContext RoundConsumableModifier;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Events", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitRoundGameplayEvent> RoundEvents;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
 	TArray<FGambitDebugEffectEvent> DebugEffectEvents;
 
@@ -106,4 +137,7 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
 	int32 NextDebugSequence = 1;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Events", meta = (AllowPrivateAccess = "true"))
+	int32 NextRoundEventSequence = 1;
 };

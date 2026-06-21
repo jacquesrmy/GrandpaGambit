@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Core/Types/GambitDebugTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "GambitEffectExecutionTypes.generated.h"
 
 class AGambitPlayerState;
@@ -364,6 +365,9 @@ struct GRANDPAGAMBIT_API FGambitEffectExecutionContext
 	EGambitRoundPhase CurrentPhase = EGambitRoundPhase::None;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")
+	int32 RoundNumber = 0;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect")
 	TObjectPtr<AGambitPlayerState> SourcePlayer = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")
@@ -524,4 +528,7 @@ struct GRANDPAGAMBIT_API FGambitEffectExecutionContext
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect|Debug")
 	TArray<FGambitDebugShopLine> DebugShopLines;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Round Events")
+	TArray<FGambitRoundGameplayEvent> RoundEvents;
 };

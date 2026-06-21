@@ -376,6 +376,32 @@ namespace
 			: FString::Printf(TEXT("Purchase refused for %s: %s"), *Line.ItemName, *Line.FailureReason);
 		return Line;
 	}
+
+	int32 ResolveRoundFlowPlayerId(const AGambitPlayerState* PlayerState)
+	{
+		return PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE;
+	}
+
+	FGambitRoundGameplayEvent MakeRoundFlowEvent(
+		const AGambitGameState* GameState,
+		AGambitPlayerState* SourcePlayer,
+		AGambitPlayerState* TargetPlayer,
+		const EGambitRoundGameplayEventType EventType,
+		const EGambitRoundGameplayEventOutcome Outcome,
+		const float NumericDelta,
+		const FString& Reason)
+	{
+		FGambitRoundGameplayEvent Event;
+		Event.EventType = EventType;
+		Event.Outcome = Outcome;
+		Event.RoundNumber = GameState ? GameState->GetCurrentRoundIndex() : 0;
+		Event.Phase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+		Event.SourcePlayerId = ResolveRoundFlowPlayerId(SourcePlayer);
+		Event.TargetPlayerId = ResolveRoundFlowPlayerId(TargetPlayer ? TargetPlayer : SourcePlayer);
+		Event.NumericDelta = NumericDelta;
+		Event.Reason = Reason;
+		return Event;
+	}
 }
 
 UGambitRoundFlowComponent::UGambitRoundFlowComponent()
@@ -538,6 +564,18 @@ bool UGambitRoundFlowComponent::RequestReroll(AGambitPlayerState* PlayerState)
 	}
 
 	const int32 UsedAfter = GetRerollCount(PlayerState);
+	if (bSuccess && PlayerState)
+	{
+		PlayerState->AddRoundEvent(MakeRoundFlowEvent(
+			GameState,
+			PlayerState,
+			PlayerState,
+			EGambitRoundGameplayEventType::RerollUsed,
+			EGambitRoundGameplayEventOutcome::Applied,
+			static_cast<float>(UsedAfter),
+			FString::Printf(TEXT("Reroll used %d/%d"), UsedAfter, EffectiveRerollLimit)));
+	}
+
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
 	const FString DiceString = PlayerState ? FormatRoundFlowDiceValues(PlayerState->GetDiceStatesRef()) : FString(TEXT("[]"));
 	UE_LOG(
@@ -953,6 +991,14 @@ void UGambitRoundFlowComponent::EnterResolutionPhase()
 		ScoreBreakdown = PostScoreContext.CurrentScoreBreakdown;
 
 		PlayerState->ApplyRoundScore(ScoreBreakdown);
+		PlayerState->AddRoundEvent(MakeRoundFlowEvent(
+			GetGambitGameState(),
+			PlayerState,
+			PlayerState,
+			EGambitRoundGameplayEventType::RoundScored,
+			EGambitRoundGameplayEventOutcome::Applied,
+			static_cast<float>(ScoreBreakdown.FinalScore),
+			FString::Printf(TEXT("Round score finalized at %d"), ScoreBreakdown.FinalScore)));
 		RecordScoreBreakdownDebugLines(PlayerState, EGambitRoundPhase::Resolution, ScoreBreakdown);
 		UE_LOG(
 			LogGambit,
@@ -1235,6 +1281,7 @@ FGambitRoundEffectContextRequest UGambitRoundFlowComponent::BuildEffectContextRe
 	FGambitRoundEffectContextRequest Request;
 	Request.Hook = Hook;
 	Request.CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	Request.RoundNumber = GameState ? GameState->GetCurrentRoundIndex() : 0;
 	Request.SourcePlayer = SourcePlayer;
 	Request.TargetPlayer = TargetPlayer ? TargetPlayer : SourcePlayer;
 	Request.SharedPoolComponent = GameState ? GameState->GetSharedPoolComponent() : nullptr;

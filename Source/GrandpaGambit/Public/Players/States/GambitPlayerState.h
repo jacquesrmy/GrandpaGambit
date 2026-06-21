@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Core/Types/GambitDebugTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "GambitPlayerState.generated.h"
 
 class UGambitDiceComponent;
@@ -49,6 +50,11 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player")
 	void ApplyTemporaryScoreModifier(const FGambitScoreModifierContext& Modifier);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Events")
+	void AddRoundEvent(const FGambitRoundGameplayEvent& Event);
+
+	void AppendRoundEvents(const TArray<FGambitRoundGameplayEvent>& Events);
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player")
 	FGambitScoreModifierContext BuildCombinedScoreModifier() const;
@@ -123,6 +129,29 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player")
 	FGambitPlayerRuntimeSnapshot BuildRuntimeSnapshot() const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEvents() const;
+
+	const TArray<FGambitRoundGameplayEvent>& GetRoundEventsRef() const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	bool HasEventThisRound(EGambitRoundGameplayEventType EventType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	int32 CountEventsThisRound(EGambitRoundGameplayEventType EventType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsByType(EGambitRoundGameplayEventType EventType) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsBySourceItem(FName SourceItemId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsByEffect(FName EffectId) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
+	TArray<FGambitRoundGameplayEvent> GetRoundEventsByTargetPlayer(int32 TargetPlayerId) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Debug")
 	void AddDebugEffectEvent(const FGambitDebugEffectEvent& Event);

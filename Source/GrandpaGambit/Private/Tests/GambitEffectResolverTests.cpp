@@ -18,6 +18,7 @@
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/Components/GambitEconomyComponent.h"
 #include "Players/Components/GambitInventoryComponent.h"
+#include "Players/Components/GambitPlayerRoundStateComponent.h"
 #include "Players/States/GambitPlayerState.h"
 #include "Scoring/Calculators/GambitScoreCalculator.h"
 #include "Scoring/Calculators/GambitScoreModifierMath.h"
@@ -132,6 +133,16 @@ namespace
 		return Context.DebugEffectEvents.FilterByPredicate([](const FGambitDebugEffectEvent& Event)
 		{
 			return Event.bPrevented;
+		}).Num();
+	}
+
+	int32 CountRoundEvents(
+		const FGambitEffectExecutionContext& Context,
+		const EGambitRoundGameplayEventType EventType)
+	{
+		return Context.RoundEvents.FilterByPredicate([EventType](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EventType;
 		}).Num();
 	}
 
@@ -1052,6 +1063,95 @@ bool FGambitConsumableOpponentTargetEffectTest::RunTest(const FString& Parameter
 	TestEqual(TEXT("source gains 4 gold"), SourceEconomy->GetCurrentGold(), SourceGoldBefore + 4);
 	TestEqual(TEXT("steal gold records target loss and source gain"), Context.DebugGoldLines.Num(), 2);
 	TestTrue(TEXT("steal gold records a debug effect event"), Context.DebugEffectEvents.Num() > 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitRoundGameplayEventLedgerTest,
+	"GrandpaGambit.RoundEvents.Ledger",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitRoundGameplayEventLedgerTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+
+	{
+		UGambitEconomyComponent* Economy = NewObject<UGambitEconomyComponent>();
+		Economy->InitializeForMatch();
+
+		UGambitItemEffectDefinition* AddGold = MakeEffectDefinition(TestOuter, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddGold);
+		AddGold->EffectId = TEXT("effect.test.ledger.add_gold");
+		AddGold->Amount = 3.0f;
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.CurrentPhase = EGambitRoundPhase::Action;
+		Context.RoundNumber = 2;
+		Context.SourceEconomyComponent = Economy;
+
+		TestTrue(TEXT("ledger AddGold effect executes"), Resolver->ExecuteEffectDefinition(AddGold, Context));
+		TestEqual(TEXT("applied effect writes EffectApplied event"), CountRoundEvents(Context, EGambitRoundGameplayEventType::EffectApplied), 1);
+		TestEqual(TEXT("gold effect writes GoldChanged event"), CountRoundEvents(Context, EGambitRoundGameplayEventType::GoldChanged), 1);
+		TestTrue(TEXT("EffectApplied carries round number"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::EffectApplied && Event.RoundNumber == 2;
+		}));
+	}
+
+	{
+		FGambitGoldStealProtectionTestContext TestContext = MakeGoldStealProtectionTestContext();
+		UGambitItemEffectDefinition* Defense = MakePreventNegativeEffectDefinition(
+			TestOuter,
+			EGambitEffectHook::ConsumableUse,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::GoldSteal }));
+		UGambitItemEffectDefinition* GoldSteal = MakeStealGoldEffectDefinition(TestOuter, true);
+
+		TestTrue(TEXT("ledger defense effect executes"), Resolver->ExecuteEffectDefinition(Defense, TestContext.EffectContext));
+		TestFalse(TEXT("ledger defense blocks negative effect"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
+		TestEqual(TEXT("prevented negative effect writes EffectPrevented event"), CountRoundEvents(TestContext.EffectContext, EGambitRoundGameplayEventType::EffectPrevented), 1);
+		TestTrue(TEXT("EffectPrevented carries negative category id"), TestContext.EffectContext.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::EffectPrevented
+				&& Event.NegativeCategoryIds.Contains(FName(TEXT("GoldSteal")));
+		}));
+	}
+
+	{
+		UGambitPlayerRoundStateComponent* RoundState = NewObject<UGambitPlayerRoundStateComponent>();
+		FGambitRoundGameplayEvent Event;
+		Event.EventType = EGambitRoundGameplayEventType::EffectApplied;
+		Event.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+		RoundState->AddRoundEvent(Event);
+		TestEqual(TEXT("round state stores event before reset"), RoundState->CountEventsThisRound(EGambitRoundGameplayEventType::None), 1);
+		RoundState->ResetRoundState();
+		TestEqual(TEXT("round reset clears event history"), RoundState->CountEventsThisRound(EGambitRoundGameplayEventType::None), 0);
+	}
+
+	{
+		UGambitConsumableDefinition* Consumable = NewObject<UGambitConsumableDefinition>(TestOuter);
+		Consumable->ItemId = TEXT("consumable.test.ledger");
+		UGambitItemEffectDefinition* TemporaryScore = MakeEffectDefinition(Consumable, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::AddTemporaryScoreModifier);
+		TemporaryScore->EffectId = TEXT("effect.test.ledger.temporary_score");
+		TemporaryScore->ScoreModifier.AdditiveBonus = 5.0f;
+		Consumable->EffectDefinitions.Add(TemporaryScore);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.CurrentPhase = EGambitRoundPhase::Action;
+		Resolver->ExecuteItemEffects(Consumable, Context);
+
+		TestEqual(TEXT("consumable execution writes ConsumableUsed event"), CountRoundEvents(Context, EGambitRoundGameplayEventType::ConsumableUsed), 1);
+		TestEqual(TEXT("temporary score modifier writes ScoreModifierApplied event"), CountRoundEvents(Context, EGambitRoundGameplayEventType::ScoreModifierApplied), 1);
+		TestTrue(TEXT("consumable event remains filterable by source item"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::ConsumableUsed
+				&& Event.SourceItemId == FName(TEXT("consumable.test.ledger"));
+		}));
+	}
+
 	return true;
 }
 

@@ -17,11 +17,13 @@ void UGambitPlayerRoundStateComponent::ResetRoundState()
 {
 	CurrentRoundScore = 0;
 	LastScoreBreakdown = FGambitScoreBreakdown();
+	RoundEvents.Reset();
 	DebugEffectEvents.Reset();
 	DebugScoreLines.Reset();
 	DebugGoldLines.Reset();
 	DebugShopLines.Reset();
 	NextDebugSequence = 1;
+	NextRoundEventSequence = 1;
 
 	RoundConsumableModifier = FGambitScoreModifierMath::MakeNeutral();
 
@@ -38,6 +40,13 @@ void UGambitPlayerRoundStateComponent::ApplyRoundScore(const FGambitScoreBreakdo
 void UGambitPlayerRoundStateComponent::ApplyTemporaryScoreModifier(const FGambitScoreModifierContext& Modifier)
 {
 	RoundConsumableModifier = FGambitScoreModifierMath::Merge(RoundConsumableModifier, Modifier);
+}
+
+void UGambitPlayerRoundStateComponent::AddRoundEvent(const FGambitRoundGameplayEvent& Event)
+{
+	FGambitRoundGameplayEvent StoredEvent = Event;
+	StoredEvent.Sequence = NextRoundEventSequence++;
+	RoundEvents.Add(StoredEvent);
 }
 
 void UGambitPlayerRoundStateComponent::AddDebugEffectEvent(const FGambitDebugEffectEvent& Event)
@@ -100,7 +109,74 @@ void UGambitPlayerRoundStateComponent::AppendDebugShopLines(const TArray<FGambit
 	}
 }
 
+void UGambitPlayerRoundStateComponent::AppendRoundEvents(const TArray<FGambitRoundGameplayEvent>& Events)
+{
+	for (const FGambitRoundGameplayEvent& Event : Events)
+	{
+		AddRoundEvent(Event);
+	}
+}
+
 FGambitScoreModifierContext UGambitPlayerRoundStateComponent::BuildCombinedScoreModifier() const
 {
 	return RoundConsumableModifier;
+}
+
+bool UGambitPlayerRoundStateComponent::HasEventThisRound(const EGambitRoundGameplayEventType EventType) const
+{
+	return CountEventsThisRound(EventType) > 0;
+}
+
+int32 UGambitPlayerRoundStateComponent::CountEventsThisRound(const EGambitRoundGameplayEventType EventType) const
+{
+	if (EventType == EGambitRoundGameplayEventType::None)
+	{
+		return RoundEvents.Num();
+	}
+
+	return RoundEvents.FilterByPredicate([EventType](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.EventType == EventType;
+	}).Num();
+}
+
+TArray<FGambitRoundGameplayEvent> UGambitPlayerRoundStateComponent::GetRoundEventsByType(
+	const EGambitRoundGameplayEventType EventType) const
+{
+	if (EventType == EGambitRoundGameplayEventType::None)
+	{
+		return RoundEvents;
+	}
+
+	return RoundEvents.FilterByPredicate([EventType](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.EventType == EventType;
+	});
+}
+
+TArray<FGambitRoundGameplayEvent> UGambitPlayerRoundStateComponent::GetRoundEventsBySourceItem(
+	const FName SourceItemId) const
+{
+	return RoundEvents.FilterByPredicate([SourceItemId](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.SourceItemId == SourceItemId;
+	});
+}
+
+TArray<FGambitRoundGameplayEvent> UGambitPlayerRoundStateComponent::GetRoundEventsByEffect(
+	const FName EffectId) const
+{
+	return RoundEvents.FilterByPredicate([EffectId](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.EffectId == EffectId;
+	});
+}
+
+TArray<FGambitRoundGameplayEvent> UGambitPlayerRoundStateComponent::GetRoundEventsByTargetPlayer(
+	const int32 TargetPlayerId) const
+{
+	return RoundEvents.FilterByPredicate([TargetPlayerId](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.TargetPlayerId == TargetPlayerId;
+	});
 }
