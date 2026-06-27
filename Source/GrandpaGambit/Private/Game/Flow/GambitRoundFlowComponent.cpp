@@ -10,6 +10,7 @@
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Dice/Evaluation/GambitDiceCombinationEvaluator.h"
 #include "Game/Flow/GambitRoundEffectPipeline.h"
+#include "Game/Flow/GambitTargetSelectionService.h"
 #include "Game/States/GambitGameState.h"
 #include "GameFramework/GameModeBase.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
@@ -433,6 +434,11 @@ void UGambitRoundFlowComponent::BeginPlay()
 		EffectPipeline = NewObject<UGambitRoundEffectPipeline>(this);
 	}
 	EffectPipeline->SetEffectResolver(EffectResolver);
+
+	if (!TargetSelectionService)
+	{
+		TargetSelectionService = NewObject<UGambitTargetSelectionService>(this);
+	}
 }
 
 void UGambitRoundFlowComponent::StartMatchFlow()
@@ -671,6 +677,46 @@ bool UGambitRoundFlowComponent::RequestUseConsumableOnTargetSelectedDie(
 		SlotIndex,
 		bSuccess ? TEXT("Success") : TEXT("Failure"));
 	return bSuccess;
+}
+
+bool UGambitRoundFlowComponent::BuildConsumableTargetSelectionRequest(
+	AGambitPlayerState* PlayerState,
+	const int32 SlotIndex,
+	FGambitTargetSelectionRequest& OutRequest) const
+{
+	if (!TargetSelectionService)
+	{
+		OutRequest = FGambitTargetSelectionRequest();
+		OutRequest.InvalidReason = TEXT("Target selection failed: missing target selection service.");
+		return false;
+	}
+
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	const FGambitEffectExecutionContext BaseContext = CreateEffectContext(EGambitEffectHook::ConsumableUse, PlayerState, PlayerState);
+	return TargetSelectionService->BuildConsumableTargetSelectionRequest(
+		PlayerState,
+		SlotIndex,
+		GetAllPlayers(),
+		CurrentPhase,
+		BaseContext,
+		OutRequest);
+}
+
+bool UGambitRoundFlowComponent::RequestUseConsumableWithTargetSelectionResult(
+	AGambitPlayerState* PlayerState,
+	const FGambitTargetSelectionResult& TargetSelectionResult)
+{
+	if (!PlayerState || !TargetSelectionResult.bConfirmed)
+	{
+		return false;
+	}
+
+	return RequestUseConsumableOnTargetSelectedDie(
+		PlayerState,
+		TargetSelectionResult.SourceConsumableSlotIndex,
+		TargetSelectionResult.TargetPlayer ? TargetSelectionResult.TargetPlayer.Get() : PlayerState,
+		TargetSelectionResult.TargetDieHandIndex);
 }
 
 bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerState, const int32 OfferId)

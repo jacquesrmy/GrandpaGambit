@@ -7,6 +7,7 @@
 
 class AGambitGameMode;
 class AGambitGameState;
+class AGambitPlayerController;
 class AGambitPlayerState;
 class UGambitDebugAutoPlayer;
 class UGambitLocalMultiplayerSubsystem;
@@ -80,6 +81,18 @@ public:
 	FGambitDevSandboxActionResult RequestUseConsumableOnDie(int32 PlayerIndex, int32 SlotIndex, int32 DieIndex);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestBeginConsumableTargetSelection(int32 PlayerIndex, int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestSelectTargetSelectionOption(int32 PlayerIndex, int32 OptionId);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestConfirmTargetSelection(int32 PlayerIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestCancelTargetSelection(int32 PlayerIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
 	FGambitDevSandboxActionResult RequestPurchaseOffer(int32 PlayerIndex, int32 OfferId);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
@@ -122,6 +135,8 @@ private:
 	UGambitLocalMultiplayerSubsystem* GetLocalMultiplayerSubsystem() const;
 	TArray<AGambitPlayerState*> GetAllPlayers() const;
 	AGambitPlayerState* GetPlayerByIndex(int32 PlayerIndex) const;
+	AGambitPlayerController* GetControllerForPlayer(AGambitPlayerState* PlayerState) const;
+	AGambitPlayerController* GetControllerForPlayerIndex(int32 PlayerIndex) const;
 	UGambitDebugAutoPlayer* GetOrCreateAutoPlayer();
 	void NormalizeInspectedPlayerIndex();
 	void SetAllPlayersReady(bool bReady) const;

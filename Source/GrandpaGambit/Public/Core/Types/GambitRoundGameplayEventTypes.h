@@ -19,7 +19,10 @@ enum class EGambitRoundGameplayEventType : uint8
 	DieDestroyedOrRemoved,
 	ShopPurchase,
 	RerollUsed,
-	RoundScored
+	RoundScored,
+	TargetSelectionRequested,
+	TargetSelectionCancelled,
+	TargetSelectionInvalid
 };
 
 UENUM(BlueprintType)

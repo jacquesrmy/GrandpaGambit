@@ -54,6 +54,18 @@ public:
 	FGambitDevSandboxActionResult RequestUseConsumableOnDie(int32 PlayerIndex, int32 SlotIndex, int32 DieIndex);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestBeginConsumableTargetSelection(int32 PlayerIndex, int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestSelectTargetSelectionOption(int32 PlayerIndex, int32 OptionId);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestConfirmTargetSelection(int32 PlayerIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
+	FGambitDevSandboxActionResult RequestCancelTargetSelection(int32 PlayerIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
 	FGambitDevSandboxActionResult RequestPurchaseOffer(int32 PlayerIndex, int32 OfferId);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")

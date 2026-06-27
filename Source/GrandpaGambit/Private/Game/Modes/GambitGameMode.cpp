@@ -114,6 +114,25 @@ bool AGambitGameMode::RequestUseConsumableOnTargetSelectedDie(
 		: false;
 }
 
+bool AGambitGameMode::BuildConsumableTargetSelectionRequest(
+	AGambitPlayerState* PlayerState,
+	const int32 SlotIndex,
+	FGambitTargetSelectionRequest& OutRequest) const
+{
+	return RoundFlowComponent
+		? RoundFlowComponent->BuildConsumableTargetSelectionRequest(PlayerState, SlotIndex, OutRequest)
+		: false;
+}
+
+bool AGambitGameMode::RequestUseConsumableWithTargetSelectionResult(
+	AGambitPlayerState* PlayerState,
+	const FGambitTargetSelectionResult& TargetSelectionResult)
+{
+	return RoundFlowComponent
+		? RoundFlowComponent->RequestUseConsumableWithTargetSelectionResult(PlayerState, TargetSelectionResult)
+		: false;
+}
+
 bool AGambitGameMode::RequestPurchaseOffer(AGambitPlayerState* PlayerState, const int32 OfferId)
 {
 	return RoundFlowComponent ? RoundFlowComponent->RequestPurchaseOffer(PlayerState, OfferId) : false;

@@ -112,7 +112,7 @@ namespace
 		return FString::Join(CategoryNames, TEXT(","));
 	}
 
-	FString FormatIntArray(const TArray<int32>& Values)
+	FString FormatEffectResolverIntArray(const TArray<int32>& Values)
 	{
 		TArray<FString> Parts;
 		Parts.Reserve(Values.Num());
@@ -2786,7 +2786,7 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 				{
 					Reason += FString::Printf(
 						TEXT(" with runtime faces %s"),
-						*FormatIntArray(UpdatedDiceStates[DieIndex].RuntimeFaces));
+						*FormatEffectResolverIntArray(UpdatedDiceStates[DieIndex].RuntimeFaces));
 				}
 
 				FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(

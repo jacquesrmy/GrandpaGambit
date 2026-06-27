@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Core/Types/GambitTargetSelectionTypes.h"
 #include "GambitPlayerController.generated.h"
 
 class AGambitGameMode;
@@ -12,6 +13,8 @@ class UGambitMatchDebugComponent;
 class UGambitLocalMultiplayerSubsystem;
 enum class EGambitCoreInputAction : uint8;
 struct FInputActionValue;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGambitTargetSelectionChanged, FGambitTargetSelectionRequest, Request);
 
 UCLASS()
 class GRANDPAGAMBIT_API AGambitPlayerController : public APlayerController
@@ -34,6 +37,33 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Input")
 	void RequestUseConsumableOnSelectedDie(int32 SlotIndex, int32 SelectedDieIndex);
 
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Target Selection")
+	bool RequestBeginConsumableTargetSelection(int32 SlotIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Target Selection")
+	bool StartTargetSelection(const FGambitTargetSelectionRequest& Request);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Target Selection")
+	bool RequestCancelTargetSelection();
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Target Selection")
+	bool RequestSelectTargetSelectionOption(int32 OptionId);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Target Selection")
+	bool RequestConfirmTargetSelection();
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Target Selection")
+	bool HasPendingTargetSelection() const { return bHasPendingTargetSelection; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Target Selection")
+	FGambitTargetSelectionRequest GetPendingTargetSelectionRequest() const { return PendingTargetSelectionRequest; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Target Selection")
+	int32 GetPendingTargetSelectionSelectedOptionId() const { return PendingTargetSelectionSelectedOptionId; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Target Selection")
+	bool GetSelectedTargetSelectionOption(UPARAM(ref) FGambitTargetSelectionOption& OutOption) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Input")
 	void RequestPurchaseOffer(int32 OfferId);
 
@@ -42,6 +72,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Local Multiplayer")
 	bool RequestLeaveThisLocalPlayer();
+
+	UPROPERTY(BlueprintAssignable, Category = "Gambit|Target Selection")
+	FOnGambitTargetSelectionChanged OnTargetSelectionChanged;
 
 	UFUNCTION(Exec)
 	void GambitPrintMatch();
@@ -179,6 +212,15 @@ protected:
 private:
 	UInputAction* ResolveInputAction(UInputAction* PreferredAction, EGambitCoreInputAction FallbackAction) const;
 	void ToggleDieLockByIndex(int32 DieIndex);
+	const FGambitTargetSelectionOption* FindPendingTargetSelectionOption(int32 OptionId) const;
+	void ClearPendingTargetSelection();
+	FGambitTargetSelectionResult BuildTargetSelectionResult(const FGambitTargetSelectionOption& Option) const;
+	void AddTargetSelectionFeedback(
+		EGambitRoundGameplayEventType EventType,
+		EGambitRoundGameplayEventOutcome Outcome,
+		const FGambitTargetSelectionRequest& Request,
+		const FString& Summary,
+		const FGambitTargetSelectionOption* Option = nullptr) const;
 
 	AGambitPlayerState* GetGambitPlayerState() const;
 	AGambitGameMode* GetGambitGameMode() const;
@@ -239,4 +281,13 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Gameplay Input", meta = (AllowPrivateAccess = "true"))
 	bool bReadyState = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Target Selection", meta = (AllowPrivateAccess = "true"))
+	bool bHasPendingTargetSelection = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Target Selection", meta = (AllowPrivateAccess = "true"))
+	FGambitTargetSelectionRequest PendingTargetSelectionRequest;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Target Selection", meta = (AllowPrivateAccess = "true"))
+	int32 PendingTargetSelectionSelectedOptionId = INDEX_NONE;
 };

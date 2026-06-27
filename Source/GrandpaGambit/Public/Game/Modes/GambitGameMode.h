@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
+#include "Core/Types/GambitTargetSelectionTypes.h"
 #include "GambitGameMode.generated.h"
 
 class AGambitPlayerState;
@@ -47,6 +48,17 @@ public:
 		int32 SlotIndex,
 		AGambitPlayerState* TargetPlayerState,
 		int32 SelectedDieIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Target Selection")
+	bool BuildConsumableTargetSelectionRequest(
+		AGambitPlayerState* PlayerState,
+		int32 SlotIndex,
+		UPARAM(ref) FGambitTargetSelectionRequest& OutRequest) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Target Selection")
+	bool RequestUseConsumableWithTargetSelectionResult(
+		AGambitPlayerState* PlayerState,
+		const FGambitTargetSelectionResult& TargetSelectionResult);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	bool RequestPurchaseOffer(AGambitPlayerState* PlayerState, int32 OfferId);

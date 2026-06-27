@@ -11,8 +11,30 @@
 #include "InputActionValue.h"
 #include "Engine/LocalPlayer.h"
 #include "Game/Modes/GambitGameMode.h"
+#include "Game/States/GambitGameState.h"
+#include "Items/Data/GambitItemDefinition.h"
 #include "Players/States/GambitPlayerState.h"
 #include "Players/Subsystems/GambitLocalMultiplayerSubsystem.h"
+
+namespace
+{
+	FString ResolveControllerItemName(const UGambitItemDefinition* ItemDefinition)
+	{
+		if (!ItemDefinition)
+		{
+			return TEXT("None");
+		}
+
+		return ItemDefinition->DisplayName.IsEmpty()
+			? ItemDefinition->GetResolvedItemId().ToString()
+			: ItemDefinition->DisplayName.ToString();
+	}
+
+	int32 ResolveControllerPlayerId(const AGambitPlayerState* PlayerState)
+	{
+		return PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE;
+	}
+}
 
 void AGambitPlayerController::BeginPlay()
 {
@@ -115,6 +137,11 @@ void AGambitPlayerController::RequestReroll()
 
 void AGambitPlayerController::RequestUseConsumable(const int32 SlotIndex)
 {
+	if (RequestBeginConsumableTargetSelection(SlotIndex))
+	{
+		return;
+	}
+
 	if (HasAuthority())
 	{
 		if (AGambitGameMode* GameMode = GetGambitGameMode())
@@ -139,6 +166,167 @@ void AGambitPlayerController::RequestUseConsumableOnSelectedDie(const int32 Slot
 	}
 
 	ServerRequestUseConsumableOnSelectedDie(SlotIndex, SelectedDieIndex);
+}
+
+bool AGambitPlayerController::RequestBeginConsumableTargetSelection(const int32 SlotIndex)
+{
+	AGambitGameMode* GameMode = GetGambitGameMode();
+	if (!GameMode)
+	{
+		return false;
+	}
+
+	FGambitTargetSelectionRequest Request;
+	if (!GameMode->BuildConsumableTargetSelectionRequest(GetGambitPlayerState(), SlotIndex, Request)
+		|| !Request.bRequiresExplicitSelection)
+	{
+		return false;
+	}
+
+	return StartTargetSelection(Request);
+}
+
+bool AGambitPlayerController::StartTargetSelection(const FGambitTargetSelectionRequest& Request)
+{
+	if (!Request.bRequiresExplicitSelection)
+	{
+		return false;
+	}
+
+	PendingTargetSelectionRequest = Request;
+	bHasPendingTargetSelection = true;
+	PendingTargetSelectionSelectedOptionId = INDEX_NONE;
+
+	for (const FGambitTargetSelectionOption& Option : PendingTargetSelectionRequest.Options)
+	{
+		if (Option.bValid)
+		{
+			PendingTargetSelectionSelectedOptionId = Option.OptionId;
+			break;
+		}
+	}
+
+	const FString Summary = Request.DebugText.IsEmpty()
+		? FString::Printf(TEXT("%s requires target selection"), *ResolveControllerItemName(Request.SourceItemDefinition))
+		: Request.DebugText;
+	AddTargetSelectionFeedback(
+		EGambitRoundGameplayEventType::TargetSelectionRequested,
+		EGambitRoundGameplayEventOutcome::Applied,
+		PendingTargetSelectionRequest,
+		Summary);
+
+	if (!PendingTargetSelectionRequest.HasValidOptions())
+	{
+		AddTargetSelectionFeedback(
+			EGambitRoundGameplayEventType::TargetSelectionInvalid,
+			EGambitRoundGameplayEventOutcome::Failed,
+			PendingTargetSelectionRequest,
+			PendingTargetSelectionRequest.InvalidReason.IsEmpty()
+				? TEXT("Target selection has no valid options.")
+				: PendingTargetSelectionRequest.InvalidReason);
+	}
+
+	OnTargetSelectionChanged.Broadcast(PendingTargetSelectionRequest);
+	return true;
+}
+
+bool AGambitPlayerController::RequestCancelTargetSelection()
+{
+	if (!bHasPendingTargetSelection)
+	{
+		return false;
+	}
+
+	AddTargetSelectionFeedback(
+		EGambitRoundGameplayEventType::TargetSelectionCancelled,
+		EGambitRoundGameplayEventOutcome::Skipped,
+		PendingTargetSelectionRequest,
+		TEXT("Target selection cancelled."));
+	ClearPendingTargetSelection();
+	return true;
+}
+
+bool AGambitPlayerController::RequestSelectTargetSelectionOption(const int32 OptionId)
+{
+	if (!bHasPendingTargetSelection)
+	{
+		return false;
+	}
+
+	const FGambitTargetSelectionOption* Option = FindPendingTargetSelectionOption(OptionId);
+	if (!Option || !Option->bValid)
+	{
+		AddTargetSelectionFeedback(
+			EGambitRoundGameplayEventType::TargetSelectionInvalid,
+			EGambitRoundGameplayEventOutcome::Failed,
+			PendingTargetSelectionRequest,
+			FString::Printf(TEXT("Target selection option %d is invalid."), OptionId));
+		return false;
+	}
+
+	PendingTargetSelectionSelectedOptionId = OptionId;
+	OnTargetSelectionChanged.Broadcast(PendingTargetSelectionRequest);
+	return true;
+}
+
+bool AGambitPlayerController::RequestConfirmTargetSelection()
+{
+	if (!bHasPendingTargetSelection)
+	{
+		return false;
+	}
+
+	const FGambitTargetSelectionOption* Option = FindPendingTargetSelectionOption(PendingTargetSelectionSelectedOptionId);
+	if (!Option || !Option->bValid)
+	{
+		AddTargetSelectionFeedback(
+			EGambitRoundGameplayEventType::TargetSelectionInvalid,
+			EGambitRoundGameplayEventOutcome::Failed,
+			PendingTargetSelectionRequest,
+			TEXT("Target selection confirmation failed: no valid option selected."));
+		return false;
+	}
+
+	AGambitGameMode* GameMode = GetGambitGameMode();
+	if (!GameMode)
+	{
+		AddTargetSelectionFeedback(
+			EGambitRoundGameplayEventType::TargetSelectionInvalid,
+			EGambitRoundGameplayEventOutcome::Failed,
+			PendingTargetSelectionRequest,
+			TEXT("Target selection confirmation failed: missing GameMode."),
+			Option);
+		return false;
+	}
+
+	const FGambitTargetSelectionResult Result = BuildTargetSelectionResult(*Option);
+	const bool bSuccess = GameMode->RequestUseConsumableWithTargetSelectionResult(GetGambitPlayerState(), Result);
+	if (!bSuccess)
+	{
+		AddTargetSelectionFeedback(
+			EGambitRoundGameplayEventType::TargetSelectionInvalid,
+			EGambitRoundGameplayEventOutcome::Failed,
+			PendingTargetSelectionRequest,
+			TEXT("Target selection confirmation was refused by round flow."),
+			Option);
+		return false;
+	}
+
+	ClearPendingTargetSelection();
+	return true;
+}
+
+bool AGambitPlayerController::GetSelectedTargetSelectionOption(FGambitTargetSelectionOption& OutOption) const
+{
+	const FGambitTargetSelectionOption* Option = FindPendingTargetSelectionOption(PendingTargetSelectionSelectedOptionId);
+	if (!Option)
+	{
+		OutOption = FGambitTargetSelectionOption();
+		return false;
+	}
+
+	OutOption = *Option;
+	return true;
 }
 
 void AGambitPlayerController::RequestPurchaseOffer(const int32 OfferId)
@@ -733,6 +921,95 @@ void AGambitPlayerController::ToggleDieLockByIndex(const int32 DieIndex)
 	}
 
 	RequestSetDieLocked(DieIndex, !DiceStates[DieIndex].bLocked);
+}
+
+const FGambitTargetSelectionOption* AGambitPlayerController::FindPendingTargetSelectionOption(const int32 OptionId) const
+{
+	if (!bHasPendingTargetSelection)
+	{
+		return nullptr;
+	}
+
+	return PendingTargetSelectionRequest.Options.FindByPredicate([OptionId](const FGambitTargetSelectionOption& Option)
+	{
+		return Option.OptionId == OptionId;
+	});
+}
+
+void AGambitPlayerController::ClearPendingTargetSelection()
+{
+	bHasPendingTargetSelection = false;
+	PendingTargetSelectionRequest = FGambitTargetSelectionRequest();
+	PendingTargetSelectionSelectedOptionId = INDEX_NONE;
+	OnTargetSelectionChanged.Broadcast(PendingTargetSelectionRequest);
+}
+
+FGambitTargetSelectionResult AGambitPlayerController::BuildTargetSelectionResult(
+	const FGambitTargetSelectionOption& Option) const
+{
+	FGambitTargetSelectionResult Result;
+	Result.RequestId = PendingTargetSelectionRequest.RequestId;
+	Result.bConfirmed = true;
+	Result.SourceConsumableSlotIndex = PendingTargetSelectionRequest.SourceConsumableSlotIndex;
+	Result.SelectedOptionId = Option.OptionId;
+	Result.TargetPlayer = Option.TargetPlayer ? Option.TargetPlayer.Get() : PendingTargetSelectionRequest.RequestingPlayer.Get();
+	Result.TargetPlayerIndex = Option.TargetPlayerIndex;
+	Result.TargetDieHandIndex = Option.TargetDieHandIndex;
+	Result.TargetDieInstanceId = Option.TargetDieInstanceId;
+	Result.TargetRuleId = Option.TargetRuleId;
+	return Result;
+}
+
+void AGambitPlayerController::AddTargetSelectionFeedback(
+	const EGambitRoundGameplayEventType EventType,
+	const EGambitRoundGameplayEventOutcome Outcome,
+	const FGambitTargetSelectionRequest& Request,
+	const FString& Summary,
+	const FGambitTargetSelectionOption* Option) const
+{
+	AGambitPlayerState* TargetSelectionPlayerState = Request.RequestingPlayer
+		? Request.RequestingPlayer.Get()
+		: GetGambitPlayerState();
+	if (!TargetSelectionPlayerState)
+	{
+		return;
+	}
+
+	const AGambitGameState* GameState = GetWorld() ? GetWorld()->GetGameState<AGambitGameState>() : nullptr;
+	const AGambitPlayerState* TargetPlayer = Option && Option->TargetPlayer
+		? Option->TargetPlayer.Get()
+		: TargetSelectionPlayerState;
+	const EGambitRoundPhase Phase = GameState ? GameState->GetCurrentPhase() : Request.CurrentPhase;
+
+	FGambitDebugEffectEvent DebugEvent;
+	DebugEvent.Category = Outcome == EGambitRoundGameplayEventOutcome::Failed
+		? EGambitDebugEventCategory::Refusal
+		: EGambitDebugEventCategory::Effect;
+	DebugEvent.Phase = Phase;
+	DebugEvent.HookId = TEXT("TargetSelection");
+	DebugEvent.SourceId = Request.SourceItemId;
+	DebugEvent.SourceName = ResolveControllerItemName(Request.SourceItemDefinition);
+	DebugEvent.EffectId = Request.EffectId;
+	DebugEvent.TargetRuleId = Request.TargetRuleId;
+	DebugEvent.TargetName = Option ? Option->Label : TEXT("Pending target");
+	DebugEvent.bTriggered = Outcome == EGambitRoundGameplayEventOutcome::Applied;
+	DebugEvent.Summary = Summary;
+	TargetSelectionPlayerState->AddDebugEffectEvent(DebugEvent);
+
+	FGambitRoundGameplayEvent RoundEvent;
+	RoundEvent.EventType = EventType;
+	RoundEvent.Outcome = Outcome;
+	RoundEvent.RoundNumber = GameState ? GameState->GetCurrentRoundIndex() : 0;
+	RoundEvent.Phase = Phase;
+	RoundEvent.SourcePlayerId = ResolveControllerPlayerId(TargetSelectionPlayerState);
+	RoundEvent.TargetPlayerId = ResolveControllerPlayerId(TargetPlayer);
+	RoundEvent.SourceItemId = Request.SourceItemId;
+	RoundEvent.EffectId = Request.EffectId;
+	RoundEvent.TargetRuleId = Request.TargetRuleId;
+	RoundEvent.TargetDieHandIndex = Option ? Option->TargetDieHandIndex : INDEX_NONE;
+	RoundEvent.TargetDieInstanceId = Option ? Option->TargetDieInstanceId : INDEX_NONE;
+	RoundEvent.Reason = Summary;
+	TargetSelectionPlayerState->AddRoundEvent(RoundEvent);
 }
 
 AGambitPlayerState* AGambitPlayerController::GetGambitPlayerState() const

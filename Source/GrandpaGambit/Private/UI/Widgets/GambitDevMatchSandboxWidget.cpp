@@ -120,6 +120,50 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::RequestUseConsumable
 	return RefreshAfterCommand(SandboxComponent->RequestUseConsumableOnDie(PlayerIndex, SlotIndex, DieIndex));
 }
 
+FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::RequestBeginConsumableTargetSelection(
+	const int32 PlayerIndex,
+	const int32 SlotIndex)
+{
+	if (!SandboxComponent && !InitializeSandboxWidget())
+	{
+		return MakeMissingSandboxResult(TEXT("Begin target selection failed: missing sandbox component"));
+	}
+
+	return RefreshAfterCommand(SandboxComponent->RequestBeginConsumableTargetSelection(PlayerIndex, SlotIndex));
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::RequestSelectTargetSelectionOption(
+	const int32 PlayerIndex,
+	const int32 OptionId)
+{
+	if (!SandboxComponent && !InitializeSandboxWidget())
+	{
+		return MakeMissingSandboxResult(TEXT("Select target option failed: missing sandbox component"));
+	}
+
+	return RefreshAfterCommand(SandboxComponent->RequestSelectTargetSelectionOption(PlayerIndex, OptionId));
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::RequestConfirmTargetSelection(const int32 PlayerIndex)
+{
+	if (!SandboxComponent && !InitializeSandboxWidget())
+	{
+		return MakeMissingSandboxResult(TEXT("Confirm target selection failed: missing sandbox component"));
+	}
+
+	return RefreshAfterCommand(SandboxComponent->RequestConfirmTargetSelection(PlayerIndex));
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::RequestCancelTargetSelection(const int32 PlayerIndex)
+{
+	if (!SandboxComponent && !InitializeSandboxWidget())
+	{
+		return MakeMissingSandboxResult(TEXT("Cancel target selection failed: missing sandbox component"));
+	}
+
+	return RefreshAfterCommand(SandboxComponent->RequestCancelTargetSelection(PlayerIndex));
+}
+
 FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::RequestPurchaseOffer(const int32 PlayerIndex, const int32 OfferId)
 {
 	if (!SandboxComponent && !InitializeSandboxWidget())

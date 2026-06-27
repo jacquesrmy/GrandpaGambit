@@ -7,6 +7,7 @@
 #include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/Modes/GambitGameMode.h"
 #include "Game/States/GambitGameState.h"
+#include "Players/Controllers/GambitPlayerController.h"
 #include "Players/States/GambitPlayerState.h"
 #include "Players/Subsystems/GambitLocalMultiplayerSubsystem.h"
 
@@ -221,8 +222,14 @@ TArray<FGambitDevSandboxPlayerSlotSnapshot> UGambitDevMatchSandboxComponent::Bui
 		Slot.RerollsUsed = RoundFlow ? RoundFlow->GetRerollsUsedForPlayer(const_cast<AGambitPlayerState*>(PlayerState)) : 0;
 		Slot.MaxRerolls = RoundFlow ? RoundFlow->GetMaxRerollsForPlayer(const_cast<AGambitPlayerState*>(PlayerState)) : 0;
 		Slot.SlotState = PlayerState->GetSlotState();
+		if (const AGambitPlayerController* PlayerController = GetControllerForPlayer(const_cast<AGambitPlayerState*>(PlayerState)))
+		{
+			Slot.bHasPendingTargetSelection = PlayerController->HasPendingTargetSelection();
+			Slot.PendingTargetSelection = PlayerController->GetPendingTargetSelectionRequest();
+			Slot.SelectedTargetOptionId = PlayerController->GetPendingTargetSelectionSelectedOptionId();
+		}
 		Slot.Summary = FString::Printf(
-			TEXT("P%d %s Mode=%s Gold=%d VP=%d Score=%d Rerolls=%d/%d"),
+			TEXT("P%d %s Mode=%s Gold=%d VP=%d Score=%d Rerolls=%d/%d TargetPending=%s"),
 			PlayerIndex,
 			*Slot.PlayerName,
 			*ControlModeToString(Slot.ControlMode),
@@ -230,7 +237,8 @@ TArray<FGambitDevSandboxPlayerSlotSnapshot> UGambitDevMatchSandboxComponent::Bui
 			Slot.TotalVictoryPoints,
 			Slot.CurrentRoundScore,
 			Slot.RerollsUsed,
-			Slot.MaxRerolls);
+			Slot.MaxRerolls,
+			Slot.bHasPendingTargetSelection ? TEXT("Yes") : TEXT("No"));
 		Slots.Add(Slot);
 	}
 
@@ -408,6 +416,86 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestUseConsuma
 		bSuccess,
 		bSuccess ? EGambitDevSandboxActionStatus::Success : EGambitDevSandboxActionStatus::InvalidPhase,
 		FString::Printf(TEXT("Use P%d consumable slot %d on die %d"), PlayerIndex, SlotIndex, DieIndex),
+		PlayerIndex,
+		PhaseBefore);
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestBeginConsumableTargetSelection(
+	const int32 PlayerIndex,
+	const int32 SlotIndex)
+{
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase PhaseBefore = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	AGambitPlayerController* PlayerController = GetControllerForPlayerIndex(PlayerIndex);
+	if (!PlayerController)
+	{
+		return MakeResult(false, EGambitDevSandboxActionStatus::InvalidPlayer, TEXT("Begin target selection failed: missing player controller"), PlayerIndex, PhaseBefore);
+	}
+
+	const bool bSuccess = PlayerController->RequestBeginConsumableTargetSelection(SlotIndex);
+	return MakeResult(
+		bSuccess,
+		bSuccess ? EGambitDevSandboxActionStatus::Success : EGambitDevSandboxActionStatus::Failed,
+		FString::Printf(TEXT("Begin P%d consumable target selection slot %d"), PlayerIndex, SlotIndex),
+		PlayerIndex,
+		PhaseBefore);
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestSelectTargetSelectionOption(
+	const int32 PlayerIndex,
+	const int32 OptionId)
+{
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase PhaseBefore = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	AGambitPlayerController* PlayerController = GetControllerForPlayerIndex(PlayerIndex);
+	if (!PlayerController)
+	{
+		return MakeResult(false, EGambitDevSandboxActionStatus::InvalidPlayer, TEXT("Select target option failed: missing player controller"), PlayerIndex, PhaseBefore);
+	}
+
+	const bool bSuccess = PlayerController->RequestSelectTargetSelectionOption(OptionId);
+	return MakeResult(
+		bSuccess,
+		bSuccess ? EGambitDevSandboxActionStatus::Success : EGambitDevSandboxActionStatus::Failed,
+		FString::Printf(TEXT("Select P%d target option %d"), PlayerIndex, OptionId),
+		PlayerIndex,
+		PhaseBefore);
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestConfirmTargetSelection(const int32 PlayerIndex)
+{
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase PhaseBefore = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	AGambitPlayerController* PlayerController = GetControllerForPlayerIndex(PlayerIndex);
+	if (!PlayerController)
+	{
+		return MakeResult(false, EGambitDevSandboxActionStatus::InvalidPlayer, TEXT("Confirm target selection failed: missing player controller"), PlayerIndex, PhaseBefore);
+	}
+
+	const bool bSuccess = PlayerController->RequestConfirmTargetSelection();
+	return MakeResult(
+		bSuccess,
+		bSuccess ? EGambitDevSandboxActionStatus::Success : EGambitDevSandboxActionStatus::Failed,
+		FString::Printf(TEXT("Confirm P%d target selection"), PlayerIndex),
+		PlayerIndex,
+		PhaseBefore);
+}
+
+FGambitDevSandboxActionResult UGambitDevMatchSandboxComponent::RequestCancelTargetSelection(const int32 PlayerIndex)
+{
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase PhaseBefore = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	AGambitPlayerController* PlayerController = GetControllerForPlayerIndex(PlayerIndex);
+	if (!PlayerController)
+	{
+		return MakeResult(false, EGambitDevSandboxActionStatus::InvalidPlayer, TEXT("Cancel target selection failed: missing player controller"), PlayerIndex, PhaseBefore);
+	}
+
+	const bool bSuccess = PlayerController->RequestCancelTargetSelection();
+	return MakeResult(
+		bSuccess,
+		bSuccess ? EGambitDevSandboxActionStatus::Success : EGambitDevSandboxActionStatus::Failed,
+		FString::Printf(TEXT("Cancel P%d target selection"), PlayerIndex),
 		PlayerIndex,
 		PhaseBefore);
 }
@@ -628,6 +716,36 @@ AGambitPlayerState* UGambitDevMatchSandboxComponent::GetPlayerByIndex(const int3
 {
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
 	return Players.IsValidIndex(PlayerIndex) ? Players[PlayerIndex] : nullptr;
+}
+
+AGambitPlayerController* UGambitDevMatchSandboxComponent::GetControllerForPlayer(AGambitPlayerState* PlayerState) const
+{
+	if (!PlayerState)
+	{
+		return nullptr;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		AGambitPlayerController* PlayerController = Cast<AGambitPlayerController>(It->Get());
+		if (PlayerController && PlayerController->GetPlayerState<AGambitPlayerState>() == PlayerState)
+		{
+			return PlayerController;
+		}
+	}
+
+	return nullptr;
+}
+
+AGambitPlayerController* UGambitDevMatchSandboxComponent::GetControllerForPlayerIndex(const int32 PlayerIndex) const
+{
+	return GetControllerForPlayer(GetPlayerByIndex(PlayerIndex));
 }
 
 UGambitDebugAutoPlayer* UGambitDevMatchSandboxComponent::GetOrCreateAutoPlayer()

@@ -4,6 +4,7 @@
 #include "Components/ActorComponent.h"
 #include "Core/Types/GambitGameplayEvents.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Core/Types/GambitTargetSelectionTypes.h"
 #include "Items/Effects/GambitEffectExecutionTypes.h"
 #include "GambitRoundFlowComponent.generated.h"
 
@@ -14,6 +15,7 @@ class UGambitEffectResolver;
 class UGambitItemDefinition;
 class UGambitRoundEffectPipeline;
 class UGambitScoreCalculatorContract;
+class UGambitTargetSelectionService;
 struct FGambitEffectExecutionContext;
 struct FGambitRoundEffectCommitRequest;
 struct FGambitRoundEffectContextRequest;
@@ -50,6 +52,17 @@ public:
 		int32 SlotIndex,
 		AGambitPlayerState* TargetPlayerState,
 		int32 SelectedDieIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow|Target Selection")
+	bool BuildConsumableTargetSelectionRequest(
+		AGambitPlayerState* PlayerState,
+		int32 SlotIndex,
+		UPARAM(ref) FGambitTargetSelectionRequest& OutRequest) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow|Target Selection")
+	bool RequestUseConsumableWithTargetSelectionResult(
+		AGambitPlayerState* PlayerState,
+		const FGambitTargetSelectionResult& TargetSelectionResult);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
 	bool RequestPurchaseOffer(AGambitPlayerState* PlayerState, int32 OfferId);
@@ -127,6 +140,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UGambitRoundEffectPipeline> EffectPipeline;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UGambitTargetSelectionService> TargetSelectionService;
 
 	UPROPERTY(VisibleAnywhere, Category = "Gambit|Round Flow")
 	FRandomStream MatchRandomStream;

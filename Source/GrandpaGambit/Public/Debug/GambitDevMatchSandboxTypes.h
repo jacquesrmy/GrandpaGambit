@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Core/Types/GambitDebugTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Core/Types/GambitTargetSelectionTypes.h"
 #include "GambitDevMatchSandboxTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -83,6 +84,15 @@ struct GRANDPAGAMBIT_API FGambitDevSandboxPlayerSlotSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
 	FGambitPlayerSlotState SlotState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
+	bool bHasPendingTargetSelection = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
+	FGambitTargetSelectionRequest PendingTargetSelection;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
+	int32 SelectedTargetOptionId = INDEX_NONE;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
 	FString Summary;
