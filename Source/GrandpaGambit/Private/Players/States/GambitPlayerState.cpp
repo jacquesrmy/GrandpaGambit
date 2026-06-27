@@ -545,14 +545,22 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 		Snapshot.bRemovedFromRound = DieState.bRemovedFromRound;
 		Snapshot.bTemporaryDie = DieState.bTemporaryDie;
 		Snapshot.bTemporarilyTransformed = DieState.bTemporarilyTransformed;
+		Snapshot.bHasRuntimeFaceOverride = DieState.bHasRuntimeFaceOverride;
+		Snapshot.RuntimeFaces = DieState.RuntimeFaces;
 		Snapshot.RuntimeSourceItemId = DieState.RuntimeSourceItemId;
 		Snapshot.RuntimeSourceEffectId = DieState.RuntimeSourceEffectId;
 		Snapshot.RuntimeTags = DieState.RuntimeTags;
 		Snapshot.AppliedRuntimeEffectIds = DieState.AppliedRuntimeEffectIds;
 
+		if (const UGambitDiceDefinition* OriginalDiceDefinition = DieState.OriginalDiceDefinition.Get())
+		{
+			Snapshot.OriginalDiceId = OriginalDiceDefinition->GetResolvedDiceId();
+		}
+
 		if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
 		{
-			Snapshot.DiceId = DiceDefinition->GetResolvedDiceId();
+			Snapshot.EffectiveDiceId = DiceDefinition->GetResolvedDiceId();
+			Snapshot.DiceId = Snapshot.EffectiveDiceId;
 			Snapshot.DisplayName = ResolveTextOrName(DiceDefinition->DisplayName, Snapshot.DiceId);
 			Snapshot.Rarity = DiceDefinition->Rarity;
 			Snapshot.DiceType = DiceDefinition->DiceType;
@@ -561,11 +569,11 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 		}
 		else
 		{
-			Snapshot.DisplayName = TEXT("Unknown Die");
+			Snapshot.DisplayName = Snapshot.bHasRuntimeFaceOverride ? TEXT("Runtime Face Die") : TEXT("Unknown Die");
 		}
 
 		Snapshot.Summary = FString::Printf(
-			TEXT("#%d %s Value=%d Raw=%d ScoreValue=%d ComboCount=%d Locked=%s Temp=%s Transformed=%s Tags=%d Effects=%d RuntimeEffects=%d"),
+			TEXT("#%d %s Value=%d Raw=%d ScoreValue=%d ComboCount=%d Locked=%s Temp=%s Transformed=%s FaceOverride=%s RuntimeFaces=%d Tags=%d Effects=%d RuntimeEffects=%d"),
 			Snapshot.HandIndex,
 			*Snapshot.DisplayName,
 			Snapshot.EffectiveValue,
@@ -575,6 +583,8 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 			Snapshot.bLocked ? TEXT("Yes") : TEXT("No"),
 			Snapshot.bTemporaryDie ? TEXT("Yes") : TEXT("No"),
 			Snapshot.bTemporarilyTransformed ? TEXT("Yes") : TEXT("No"),
+			Snapshot.bHasRuntimeFaceOverride ? TEXT("Yes") : TEXT("No"),
+			Snapshot.RuntimeFaces.Num(),
 			Snapshot.RuntimeTags.Num() + Snapshot.DefinitionTags.Num(),
 			Snapshot.EffectIds.Num(),
 			Snapshot.AppliedRuntimeEffectIds.Num());

@@ -68,6 +68,11 @@ namespace
 		State.RuntimeSourceEffectId = NAME_None;
 		State.AppliedRuntimeEffectIds.Reset();
 	}
+
+	bool HasRuntimeFaceOverride(const FGambitDieRuntimeState& DieState)
+	{
+		return DieState.bHasRuntimeFaceOverride && DieState.RuntimeFaces.Num() > 0;
+	}
 }
 
 UGambitDiceComponent::UGambitDiceComponent()
@@ -111,6 +116,87 @@ void UGambitDiceComponent::ResetDiceForNewRound(const TArray<TObjectPtr<UGambitD
 	}
 
 	OnDiceStateChanged.Broadcast();
+}
+
+bool UGambitDiceComponent::BuildRuntimeFacesFromRange(
+	const int32 MinValue,
+	const int32 MaxValue,
+	TArray<int32>& OutFaces)
+{
+	OutFaces.Reset();
+	if (MinValue > MaxValue)
+	{
+		return false;
+	}
+
+	const int64 MinValue64 = static_cast<int64>(MinValue);
+	const int64 MaxValue64 = static_cast<int64>(MaxValue);
+	for (int64 Value = MinValue64; Value <= MaxValue64; ++Value)
+	{
+		OutFaces.Add(static_cast<int32>(Value));
+	}
+
+	return OutFaces.Num() > 0;
+}
+
+TArray<int32> UGambitDiceComponent::ResolveRollableFaces(const FGambitDieRuntimeState& DieState)
+{
+	if (HasRuntimeFaceOverride(DieState))
+	{
+		return DieState.RuntimeFaces;
+	}
+
+	if (const UGambitDiceDefinition* Definition = DieState.DiceDefinition.Get())
+	{
+		return Definition->GetResolvedFaces();
+	}
+
+	return GetDiceComponentFallbackD6Faces();
+}
+
+bool UGambitDiceComponent::RollRuntimeDieState(
+	FGambitDieRuntimeState& DieState,
+	FRandomStream& RandomStream,
+	const bool bRequireCanBeRerolled)
+{
+	if (bRequireCanBeRerolled && !DieState.bCanBeRerolled)
+	{
+		return false;
+	}
+
+	const TArray<int32> RollableFaces = ResolveRollableFaces(DieState);
+	if (RollableFaces.Num() == 0)
+	{
+		return false;
+	}
+
+	int32 RolledFaceIndex = 0;
+	if (HasRuntimeFaceOverride(DieState))
+	{
+		RolledFaceIndex = RandomStream.RandRange(0, RollableFaces.Num() - 1);
+	}
+	else if (const UGambitDiceDefinition* Definition = DieState.DiceDefinition.Get())
+	{
+		RolledFaceIndex = Definition->RollFaceIndex(RandomStream);
+		if (!RollableFaces.IsValidIndex(RolledFaceIndex))
+		{
+			RolledFaceIndex = 0;
+		}
+	}
+	else
+	{
+		RolledFaceIndex = RollFallbackFaceIndex(RandomStream);
+		if (!RollableFaces.IsValidIndex(RolledFaceIndex))
+		{
+			RolledFaceIndex = 0;
+		}
+	}
+
+	DieState.RolledFaceIndex = RolledFaceIndex;
+	DieState.RawValue = RollableFaces[RolledFaceIndex];
+	DieState.EffectiveValue = DieState.RawValue;
+	RefreshScoreContribution(DieState);
+	return true;
 }
 
 void UGambitDiceComponent::RollAll(FRandomStream& RandomStream)
@@ -345,6 +431,8 @@ bool UGambitDiceComponent::TransformDieToDefinitionForRound(
 		DieState.OriginalDiceDefinition = DieState.DiceDefinition;
 	}
 	DieState.DiceDefinition = NewDefinition;
+	DieState.RuntimeFaces.Reset();
+	DieState.bHasRuntimeFaceOverride = false;
 	DieState.bTemporarilyTransformed = true;
 	ApplyRuntimeRulesFromDefinition(DieState, NewDefinition);
 
@@ -395,22 +483,31 @@ bool UGambitDiceComponent::TransformDieForRound(
 	}
 
 	FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
+	TArray<int32> RuntimeFaces;
+	if (!BuildRuntimeFacesFromRange(MinValue, MaxValue, RuntimeFaces))
+	{
+		return false;
+	}
+
+	if (!DieState.OriginalDiceDefinition)
+	{
+		DieState.OriginalDiceDefinition = DieState.DiceDefinition;
+	}
+
 	DieState.DiceDefinition = nullptr;
 	DieState.bTemporarilyTransformed = true;
+	DieState.bHasRuntimeFaceOverride = true;
+	DieState.RolledFaceIndex = RuntimeFaces.IndexOfByKey(CurrentValue);
+	DieState.RuntimeFaces = MoveTemp(RuntimeFaces);
 	DieState.RawValue = CurrentValue;
 	DieState.EffectiveValue = CurrentValue;
 	DieState.ScoreContributionValue = CurrentValue;
-	DieState.RolledFaceIndex = INDEX_NONE;
 	DieState.ComboContributionCount = 1;
 	DieState.bCountsForScoreSum = true;
 	DieState.bCountsForCombinations = true;
 	DieState.bCanBeRerolled = true;
 	DieState.bCanBeLocked = true;
 	DieState.RuntimeTags = { FName(*StaticEnum<EGambitDiceType>()->GetNameStringByValue(static_cast<int64>(DiceType))) };
-	// MinValue/MaxValue are recorded by the effect definition today, but this fallback transform
-	// does not own a generated face table yet. Rerolls still use the existing D6 fallback path.
-	(void)MinValue;
-	(void)MaxValue;
 
 	OnDiceStateChanged.Broadcast();
 	return true;
@@ -506,27 +603,7 @@ FGambitDieRuntimeState UGambitDiceComponent::MakeFallbackDie(
 
 void UGambitDiceComponent::RollDie(FGambitDieRuntimeState& DieState, FRandomStream& RandomStream)
 {
-	if (const UGambitDiceDefinition* Definition = DieState.DiceDefinition.Get())
-	{
-		const int32 RolledFaceIndex = Definition->RollFaceIndex(RandomStream);
-		ResetDieRollResult(DieState, RolledFaceIndex, Definition->GetFaceValue(RolledFaceIndex));
-	}
-	else
-	{
-		const int32 RolledFaceIndex = RollFallbackFaceIndex(RandomStream);
-		ResetDieRollResult(DieState, RolledFaceIndex, GetFallbackFaceValue(RolledFaceIndex));
-	}
-}
-
-void UGambitDiceComponent::ResetDieRollResult(
-	FGambitDieRuntimeState& DieState,
-	const int32 RolledFaceIndex,
-	const int32 RawValue)
-{
-	DieState.RolledFaceIndex = RolledFaceIndex;
-	DieState.RawValue = RawValue;
-	DieState.EffectiveValue = DieState.RawValue;
-	RefreshScoreContribution(DieState);
+	RollRuntimeDieState(DieState, RandomStream, false);
 }
 
 void UGambitDiceComponent::ClearRoundScopedRuntimeState(FGambitDieRuntimeState& DieState)
@@ -534,6 +611,8 @@ void UGambitDiceComponent::ClearRoundScopedRuntimeState(FGambitDieRuntimeState& 
 	DieState.bRemovedFromRound = false;
 	DieState.bTemporaryDie = false;
 	DieState.bTemporarilyTransformed = false;
+	DieState.RuntimeFaces.Reset();
+	DieState.bHasRuntimeFaceOverride = false;
 	ResetRuntimeEffectTrace(DieState);
 }
 

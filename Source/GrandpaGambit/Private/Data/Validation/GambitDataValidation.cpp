@@ -582,7 +582,7 @@ namespace
 			}
 			if (!EffectDefinition->TransformDiceDefinition)
 			{
-				AddWarning(OutIssues, FString::Printf(TEXT("%s transforms to a runtime fallback die instead of a concrete dice definition."), *EffectLabel));
+				AddWarning(OutIssues, FString::Printf(TEXT("%s transforms to temporary runtime faces instead of a concrete dice definition."), *EffectLabel));
 			}
 			break;
 		case EGambitItemEffectType::AddTemporaryDie:

@@ -1901,6 +1901,9 @@ bool FGambitDiceComponentExplicitFaceRollTest::RunTest(const FString& Parameters
 	const TArray<FGambitDieRuntimeState>& DiceStates = DiceComponent->GetDiceStatesRef();
 	TestTrue(TEXT("dice component created at least one runtime die"), DiceStates.Num() >= 1);
 	TestTrue(TEXT("rolled value comes from explicit risky faces"), RiskyDie->GetResolvedFaces().Contains(DiceStates[0].RawValue));
+	TestFalse(TEXT("authored die roll does not create runtime face override"), DiceStates[0].bHasRuntimeFaceOverride);
+	TestEqual(TEXT("authored die roll keeps runtime faces empty"), DiceStates[0].RuntimeFaces.Num(), 0);
+	TestTrue(TEXT("rollable faces resolve to authored definition faces"), UGambitDiceComponent::ResolveRollableFaces(DiceStates[0]) == RiskyDie->GetResolvedFaces());
 
 	DiceComponent->SetDieValue(0, 12);
 	TestEqual(TEXT("controlled mutation does not clamp to authored faces"), DiceComponent->GetDiceStatesRef()[0].EffectiveValue, 12);
@@ -1958,6 +1961,8 @@ bool FGambitDiceRuntimeStateLifecycleTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("temporary transform updates effective definition"), TransformedState.DiceDefinition.Get(), SilverDie);
 	TestEqual(TEXT("temporary transform preserves current value"), TransformedState.EffectiveValue, 4);
 	TestTrue(TEXT("temporary transform is marked on runtime state"), TransformedState.bTemporarilyTransformed);
+	TestFalse(TEXT("definition transform does not create runtime face override"), TransformedState.bHasRuntimeFaceOverride);
+	TestEqual(TEXT("definition transform keeps runtime faces empty"), TransformedState.RuntimeFaces.Num(), 0);
 	TestEqual(TEXT("runtime trace stores source item id"), TransformedState.RuntimeSourceItemId, FName(TEXT("consumable.test.runtime")));
 	TestTrue(TEXT("runtime trace stores applied effect id"), TransformedState.AppliedRuntimeEffectIds.Contains(FName(TEXT("effect.test.runtime_transform"))));
 
@@ -1973,6 +1978,8 @@ bool FGambitDiceRuntimeStateLifecycleTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("round reset restores original definition"), ResetState.OriginalDiceDefinition.Get(), AlwaysOne);
 	TestEqual(TEXT("round reset restores effective definition"), ResetState.DiceDefinition.Get(), AlwaysOne);
 	TestFalse(TEXT("round reset clears temporary transform flag"), ResetState.bTemporarilyTransformed);
+	TestFalse(TEXT("round reset clears runtime face override flag"), ResetState.bHasRuntimeFaceOverride);
+	TestEqual(TEXT("round reset clears runtime faces"), ResetState.RuntimeFaces.Num(), 0);
 	TestTrue(TEXT("round reset clears runtime effect trace"), ResetState.AppliedRuntimeEffectIds.Num() == 0);
 	TestFalse(TEXT("round reset removes temporary dice"), DiceComponent->GetDiceStatesRef().ContainsByPredicate([](const FGambitDieRuntimeState& DieState)
 	{
@@ -1988,6 +1995,78 @@ bool FGambitDiceRuntimeStateLifecycleTest::RunTest(const FString& Parameters)
 	}));
 	TestEqual(TEXT("removed runtime die does not contribute to score sum"), RemovedResult.DiceSum, 6);
 	TestTrue(TEXT("removed runtime die does not contribute to combinations"), RemovedResult.MatchedValues == TArray<int32>({ 6 }));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitDiceRuntimeFaceOverrideTest,
+	"GrandpaGambit.Dice.RuntimeFaceOverride",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitDiceRuntimeFaceOverrideTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+	UGambitDiceDefinition* StandardDie = MakeDiceDefinition(TestOuter, TEXT("dice.test.runtime_standard"), TArray<int32>({ 1, 2, 3, 4, 5, 6 }));
+	UGambitDiceComponent* DiceComponent = NewObject<UGambitDiceComponent>();
+	TArray<TObjectPtr<UGambitDiceDefinition>> OwnedDice;
+	OwnedDice.Add(StandardDie);
+	DiceComponent->InitializeDicePool(OwnedDice);
+	DiceComponent->SetDieValue(0, 4);
+
+	UGambitConsumableDefinition* RuntimeTransform = NewObject<UGambitConsumableDefinition>();
+	RuntimeTransform->ItemId = TEXT("consumable.test.runtime_faces");
+	UGambitItemEffectDefinition* EffectDefinition = MakeEffectDefinition(RuntimeTransform, EGambitEffectHook::ConsumableUse, EGambitItemEffectType::TransformDiceForRound);
+	EffectDefinition->EffectId = TEXT("effect.test.runtime_faces");
+	EffectDefinition->TargetRuleId = GambitEffectTargetRules::SelectedDie;
+	EffectDefinition->TransformDiceType = EGambitDiceType::D10;
+	EffectDefinition->TransformMinValue = 8;
+	EffectDefinition->TransformMaxValue = 10;
+	RuntimeTransform->EffectDefinitions.Add(EffectDefinition);
+
+	FGambitEffectExecutionContext Context;
+	Context.Hook = EGambitEffectHook::ConsumableUse;
+	Context.SourceDiceComponent = DiceComponent;
+	Context.SourceDice = DiceComponent->GetDiceStates();
+	Context.SourceDieHandIndex = 0;
+	Context.RandomStream.Initialize(20260621);
+	Resolver->ExecuteItemEffects(RuntimeTransform, Context);
+
+	const FGambitDieRuntimeState& TransformedState = DiceComponent->GetDiceStatesRef()[0];
+	TestEqual(TEXT("runtime face transform clears effective definition"), TransformedState.DiceDefinition.Get(), static_cast<UGambitDiceDefinition*>(nullptr));
+	TestEqual(TEXT("runtime face transform preserves original loadout definition"), TransformedState.OriginalDiceDefinition.Get(), StandardDie);
+	TestEqual(TEXT("runtime face transform preserves current value before reroll"), TransformedState.EffectiveValue, 4);
+	TestTrue(TEXT("runtime face transform marks temporary transform"), TransformedState.bTemporarilyTransformed);
+	TestTrue(TEXT("runtime face transform enables override flag"), TransformedState.bHasRuntimeFaceOverride);
+	TestTrue(TEXT("runtime face transform generates min..max faces"), TransformedState.RuntimeFaces == TArray<int32>({ 8, 9, 10 }));
+	TestTrue(TEXT("runtime face transform resolves rollable faces from override"), UGambitDiceComponent::ResolveRollableFaces(TransformedState) == TArray<int32>({ 8, 9, 10 }));
+	TestEqual(TEXT("runtime face transform records source item id"), TransformedState.RuntimeSourceItemId, FName(TEXT("consumable.test.runtime_faces")));
+	TestEqual(TEXT("runtime face transform records source effect id"), TransformedState.RuntimeSourceEffectId, FName(TEXT("effect.test.runtime_faces")));
+	TestTrue(TEXT("runtime face transform writes enriched ledger event"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+	{
+		return Event.EventType == EGambitRoundGameplayEventType::DieModified
+			&& Event.EffectId == FName(TEXT("effect.test.runtime_faces"))
+			&& Event.Reason.Contains(TEXT("runtime faces [8,9,10]"));
+	}));
+
+	FRandomStream RerollStream(7);
+	for (int32 Iteration = 0; Iteration < 16; ++Iteration)
+	{
+		TestTrue(TEXT("runtime face override die can be rerolled"), DiceComponent->RollDieAtIndex(0, RerollStream));
+		const FGambitDieRuntimeState& RerolledState = DiceComponent->GetDiceStatesRef()[0];
+		TestTrue(TEXT("reroll value comes from runtime faces"), RerolledState.RuntimeFaces.Contains(RerolledState.EffectiveValue));
+		TestTrue(TEXT("reroll does not fall back to D6 faces"), RerolledState.EffectiveValue >= 8 && RerolledState.EffectiveValue <= 10);
+	}
+
+	DiceComponent->ResetDiceForNewRound(OwnedDice);
+	const FGambitDieRuntimeState& ResetState = DiceComponent->GetDiceStatesRef()[0];
+	TestEqual(TEXT("reset restores standard effective definition"), ResetState.DiceDefinition.Get(), StandardDie);
+	TestFalse(TEXT("reset clears runtime face override flag"), ResetState.bHasRuntimeFaceOverride);
+	TestEqual(TEXT("reset clears runtime faces"), ResetState.RuntimeFaces.Num(), 0);
+	TestFalse(TEXT("reset clears temporary transform flag after runtime face override"), ResetState.bTemporarilyTransformed);
+	TestTrue(TEXT("reset clears runtime face source trace"), ResetState.RuntimeSourceEffectId.IsNone());
 	return true;
 }
 
@@ -3044,6 +3123,8 @@ bool FGambitB3PolishTransformResetsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("polish preserves original die definition in runtime state"), DiceComponent->GetDiceStatesRef()[0].OriginalDiceDefinition.Get(), StandardDie);
 	TestEqual(TEXT("polish preserves current value"), DiceComponent->GetDiceStatesRef()[0].EffectiveValue, 4);
 	TestTrue(TEXT("polish marks die as temporarily transformed"), DiceComponent->GetDiceStatesRef()[0].bTemporarilyTransformed);
+	TestFalse(TEXT("polish definition transform does not create runtime face override"), DiceComponent->GetDiceStatesRef()[0].bHasRuntimeFaceOverride);
+	TestEqual(TEXT("polish definition transform keeps runtime faces empty"), DiceComponent->GetDiceStatesRef()[0].RuntimeFaces.Num(), 0);
 	TestEqual(TEXT("polish stores runtime source item id"), DiceComponent->GetDiceStatesRef()[0].RuntimeSourceItemId, FName(TEXT("consumable.test.polish")));
 	TestEqual(TEXT("polish stores runtime source effect id"), DiceComponent->GetDiceStatesRef()[0].RuntimeSourceEffectId, FName(TEXT("effect.test.polish_transform")));
 	TestTrue(TEXT("polish writes transform ledger event"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
@@ -3057,6 +3138,8 @@ bool FGambitB3PolishTransformResetsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("next round runtime reset restores owned standard die"), DiceComponent->GetDiceStatesRef()[0].DiceDefinition.Get(), StandardDie);
 	TestEqual(TEXT("next round runtime reset restores original standard die"), DiceComponent->GetDiceStatesRef()[0].OriginalDiceDefinition.Get(), StandardDie);
 	TestFalse(TEXT("next round runtime reset clears transform flag"), DiceComponent->GetDiceStatesRef()[0].bTemporarilyTransformed);
+	TestFalse(TEXT("next round runtime reset clears polish face override flag"), DiceComponent->GetDiceStatesRef()[0].bHasRuntimeFaceOverride);
+	TestEqual(TEXT("next round runtime reset clears polish runtime faces"), DiceComponent->GetDiceStatesRef()[0].RuntimeFaces.Num(), 0);
 	TestTrue(TEXT("next round runtime reset clears transform source trace"), DiceComponent->GetDiceStatesRef()[0].RuntimeSourceEffectId.IsNone());
 	return true;
 }

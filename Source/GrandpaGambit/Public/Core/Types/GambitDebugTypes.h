@@ -293,6 +293,12 @@ struct GRANDPAGAMBIT_API FGambitDebugDieSnapshot
 	FName DiceId;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName EffectiveDiceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName OriginalDiceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	FString DisplayName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
@@ -339,6 +345,12 @@ struct GRANDPAGAMBIT_API FGambitDebugDieSnapshot
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	bool bTemporarilyTransformed = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	bool bHasRuntimeFaceOverride = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	TArray<int32> RuntimeFaces;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	FName RuntimeSourceItemId;

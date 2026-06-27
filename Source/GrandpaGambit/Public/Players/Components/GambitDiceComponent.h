@@ -21,6 +21,10 @@ public:
 	void ResetMatchRuntimeState();
 	void ResetDiceForNewRound(const TArray<TObjectPtr<UGambitDiceDefinition>>& OwnedDiceDefinitions);
 
+	static bool BuildRuntimeFacesFromRange(int32 MinValue, int32 MaxValue, TArray<int32>& OutFaces);
+	static TArray<int32> ResolveRollableFaces(const FGambitDieRuntimeState& DieState);
+	static bool RollRuntimeDieState(FGambitDieRuntimeState& DieState, FRandomStream& RandomStream, bool bRequireCanBeRerolled = true);
+
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dice")
 	void RollAll(FRandomStream& RandomStream);
 
@@ -95,7 +99,6 @@ private:
 	FGambitDieRuntimeState MakeRuntimeDie(UGambitDiceDefinition* Definition, int32 HandIndex, const FGambitDieRuntimeState* PreviousState);
 	FGambitDieRuntimeState MakeFallbackDie(int32 HandIndex, const FGambitDieRuntimeState* PreviousState);
 	void RollDie(FGambitDieRuntimeState& DieState, FRandomStream& RandomStream);
-	void ResetDieRollResult(FGambitDieRuntimeState& DieState, int32 RolledFaceIndex, int32 RawValue);
 	void ClearRoundScopedRuntimeState(FGambitDieRuntimeState& DieState);
 	void RefreshHandIndexes();
 

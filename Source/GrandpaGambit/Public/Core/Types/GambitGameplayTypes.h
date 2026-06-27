@@ -91,6 +91,12 @@ struct FGambitDieRuntimeState
 	TObjectPtr<UGambitDiceDefinition> OriginalDiceDefinition = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	TArray<int32> RuntimeFaces;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
+	bool bHasRuntimeFaceOverride = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Dice")
 	int32 InstanceId = INDEX_NONE;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Dice")

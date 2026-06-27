@@ -112,6 +112,18 @@ namespace
 		return FString::Join(CategoryNames, TEXT(","));
 	}
 
+	FString FormatIntArray(const TArray<int32>& Values)
+	{
+		TArray<FString> Parts;
+		Parts.Reserve(Values.Num());
+		for (const int32 Value : Values)
+		{
+			Parts.Add(FString::FromInt(Value));
+		}
+
+		return FString::Printf(TEXT("[%s]"), *FString::Join(Parts, TEXT(",")));
+	}
+
 	float ResolveScalar(const UGambitItemEffectDefinition* EffectDefinition, const FName ParameterName, const float Fallback)
 	{
 		if (!EffectDefinition)
@@ -1223,35 +1235,6 @@ namespace
 		}
 
 		return Context.ScoreModifierDelta;
-	}
-
-	int32 RollFallbackD6Value(FRandomStream& RandomStream)
-	{
-		static const TArray<int32> FallbackFaces = { 1, 2, 3, 4, 5, 6 };
-		return FallbackFaces[RandomStream.RandRange(0, FallbackFaces.Num() - 1)];
-	}
-
-	bool RerollRuntimeDieState(FGambitDieRuntimeState& DieState, FRandomStream& RandomStream)
-	{
-		if (!DieState.bCanBeRerolled)
-		{
-			return false;
-		}
-
-		if (const UGambitDiceDefinition* DiceDefinition = DieState.DiceDefinition.Get())
-		{
-			DieState.RolledFaceIndex = DiceDefinition->RollFaceIndex(RandomStream);
-			DieState.RawValue = DiceDefinition->GetFaceValue(DieState.RolledFaceIndex);
-		}
-		else
-		{
-			DieState.RolledFaceIndex = INDEX_NONE;
-			DieState.RawValue = RollFallbackD6Value(RandomStream);
-		}
-
-		DieState.EffectiveValue = DieState.RawValue;
-		RefreshRuntimeScoreContribution(DieState);
-		return true;
 	}
 
 	template <typename TEnum>
@@ -2606,7 +2589,7 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 			const int32 ValueBefore = CurrentDiceStates[DieIndex].EffectiveValue;
 			const bool bRerolled = DiceComponent
 				? DiceComponent->RollDieAtIndex(DieIndex, Context.RandomStream)
-				: RerollRuntimeDieState(DiceStates[DieIndex], Context.RandomStream);
+				: UGambitDiceComponent::RollRuntimeDieState(DiceStates[DieIndex], Context.RandomStream, true);
 			if (!bRerolled)
 			{
 				continue;
@@ -2754,6 +2737,8 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 						DieState.OriginalDiceDefinition = DieState.DiceDefinition;
 					}
 					DieState.DiceDefinition = DiceDefinition;
+					DieState.RuntimeFaces.Reset();
+					DieState.bHasRuntimeFaceOverride = false;
 					DieState.bTemporarilyTransformed = true;
 					DieState.ComboContributionCount = FMath::Max(0, DiceDefinition->DefaultComboContributionCount);
 					DieState.bCountsForScoreSum = DiceDefinition->bCountsForScoreSum;
@@ -2769,8 +2754,24 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 				}
 				else
 				{
+					TArray<int32> RuntimeFaces;
+					if (!UGambitDiceComponent::BuildRuntimeFacesFromRange(
+						EffectDefinition->TransformMinValue,
+						EffectDefinition->TransformMaxValue,
+						RuntimeFaces))
+					{
+						continue;
+					}
+
+					if (!DieState.OriginalDiceDefinition)
+					{
+						DieState.OriginalDiceDefinition = DieState.DiceDefinition;
+					}
 					DieState.DiceDefinition = nullptr;
 					DieState.bTemporarilyTransformed = true;
+					DieState.bHasRuntimeFaceOverride = true;
+					DieState.RolledFaceIndex = RuntimeFaces.IndexOfByKey(DieState.EffectiveValue);
+					DieState.RuntimeFaces = MoveTemp(RuntimeFaces);
 					DieState.RuntimeTags = { FName(*StaticEnum<EGambitDiceType>()->GetNameStringByValue(static_cast<int64>(EffectDefinition->TransformDiceType))) };
 				}
 				RecordRuntimeEffectSource(DieState, Context, EffectDefinition);
@@ -2779,12 +2780,21 @@ bool UGambitEffectResolver::ApplyDiceEffect(
 			}
 			if (bTransformed)
 			{
+				const TArray<FGambitDieRuntimeState>& UpdatedDiceStates = DiceComponent ? DiceComponent->GetDiceStatesRef() : DiceStates;
+				FString Reason = FString::Printf(TEXT("%s transformed die %d"), *GetEffectName(EffectDefinition), DieIndex);
+				if (UpdatedDiceStates.IsValidIndex(DieIndex) && UpdatedDiceStates[DieIndex].bHasRuntimeFaceOverride)
+				{
+					Reason += FString::Printf(
+						TEXT(" with runtime faces %s"),
+						*FormatIntArray(UpdatedDiceStates[DieIndex].RuntimeFaces));
+				}
+
 				FGambitRoundGameplayEvent Event = MakeRoundGameplayEvent(
 					Context,
 					EffectDefinition,
 					EGambitRoundGameplayEventType::DieModified,
 					EGambitRoundGameplayEventOutcome::Applied,
-					FString::Printf(TEXT("%s transformed die %d"), *GetEffectName(EffectDefinition), DieIndex),
+					Reason,
 					0.0f,
 					ResolvedTarget->TargetSide);
 				Event.TargetDieHandIndex = DieIndex;
