@@ -576,6 +576,9 @@ struct FGambitConsumableRuntimeSlot
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = "Consumable")
+	FGuid InventoryInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Consumable")
 	TObjectPtr<UGambitConsumableDefinition> Definition = nullptr;
 
 	bool IsValid() const

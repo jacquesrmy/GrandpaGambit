@@ -297,7 +297,8 @@ bool UGambitShopComponent::PurchaseOfferWithContext(
 		return false;
 	}
 
-	if (!GrantPurchasedItemToInventory(ItemDefinition, InventoryComponent))
+	const FName SourcePurchaseId = FName(*FString::Printf(TEXT("shop.offer.%d"), PurchaseContext.OfferId));
+	if (!GrantPurchasedItemToInventory(ItemDefinition, InventoryComponent, SourcePurchaseId))
 	{
 		if (Offer.bUsesSharedPool && SharedPoolComponent)
 		{
@@ -432,29 +433,15 @@ void UGambitShopComponent::ReleaseOfferReservations(UGambitSharedPoolComponent* 
 
 bool UGambitShopComponent::GrantPurchasedItemToInventory(
 	UGambitItemDefinition* ItemDefinition,
-	UGambitInventoryComponent* InventoryComponent) const
+	UGambitInventoryComponent* InventoryComponent,
+	const FName SourcePurchaseId) const
 {
 	if (!ItemDefinition || !InventoryComponent)
 	{
 		return false;
 	}
 
-	if (UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(ItemDefinition))
-	{
-		return InventoryComponent->AddModule(ModuleDefinition);
-	}
-
-	if (UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(ItemDefinition))
-	{
-		return InventoryComponent->AddConsumable(ConsumableDefinition);
-	}
-
-	if (UGambitDiceItemDefinition* DiceItemDefinition = Cast<UGambitDiceItemDefinition>(ItemDefinition))
-	{
-		return InventoryComponent->AddOwnedDie(DiceItemDefinition->GrantedDiceDefinition);
-	}
-
-	return false;
+	return InventoryComponent->AddItemDefinitionWithSource(ItemDefinition, SourcePurchaseId);
 }
 
 bool UGambitShopComponent::ValidateInventoryCapacity(

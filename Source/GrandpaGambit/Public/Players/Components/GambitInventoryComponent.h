@@ -3,10 +3,12 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Players/Models/GambitInventoryItemInstance.h"
 #include "GambitInventoryComponent.generated.h"
 
 class UGambitConsumableDefinition;
 class UGambitDiceDefinition;
+class UGambitDiceItemDefinition;
 class UGambitItemDefinition;
 class UGambitModuleDefinition;
 class UGambitPlayerLoadoutDefinition;
@@ -35,6 +37,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Inventory")
 	bool AddConsumable(UGambitConsumableDefinition* ConsumableDefinition);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Inventory")
+	bool AddItemDefinition(UGambitItemDefinition* ItemDefinition);
+
+	bool AddItemDefinitionWithSource(
+		UGambitItemDefinition* ItemDefinition,
+		FName SourcePurchaseId,
+		FName SourceEffectId = NAME_None);
 
 	bool RemoveOwnedDieAtIndex(int32 DieIndex, UGambitDiceDefinition*& OutRemovedDieDefinition);
 
@@ -96,12 +106,72 @@ public:
 
 	const TArray<FGambitConsumableRuntimeSlot>& GetConsumableSlotsRef() const { return ConsumableSlots; }
 
+	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
+	TArray<FGambitInventoryItemInstance> GetOwnedItemInstances() const { return OwnedItemInstances; }
+
+	const TArray<FGambitInventoryItemInstance>& GetOwnedItemInstancesRef() const { return OwnedItemInstances; }
+
+	const FGambitInventoryItemInstance* FindItemInstanceById(const FGuid& InstanceId) const;
+
+	const FGambitInventoryItemInstance* FindFirstItemInstanceByDefinition(const UGambitItemDefinition* ItemDefinition) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
+	TArray<FGambitInventoryItemInstance> GetActiveModuleInstances() const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
+	TArray<FGambitInventoryItemInstance> GetConsumableInstances() const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
+	bool HasItemDefinition(UGambitItemDefinition* ItemDefinition) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Inventory")
+	UGambitItemDefinition* GetItemDefinitionFromInstance(const FGambitInventoryItemInstance& ItemInstance) const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|Inventory")
 	FOnGambitInventoryChanged OnInventoryChanged;
 
 private:
+	FGambitInventoryItemInstance BuildItemInstance(
+		UGambitItemDefinition* ItemDefinition,
+		UGambitDiceDefinition* DiceDefinition,
+		EGambitItemType ItemType,
+		FName SourceStableId,
+		bool bEquipped,
+		bool bActive,
+		FName SourcePurchaseId,
+		FName SourceEffectId) const;
+
+	bool AddDiceItemDefinition(
+		UGambitDiceItemDefinition* DiceItemDefinition,
+		FName SourcePurchaseId,
+		FName SourceEffectId);
+
+	bool AddOwnedDieDefinition(
+		UGambitDiceDefinition* DieDefinition,
+		UGambitItemDefinition* SourceItemDefinition,
+		FName SourceStableId,
+		FName SourcePurchaseId,
+		FName SourceEffectId);
+
+	bool AddModuleDefinition(
+		UGambitModuleDefinition* ModuleDefinition,
+		FName SourcePurchaseId,
+		FName SourceEffectId);
+
+	bool AddConsumableDefinition(
+		UGambitConsumableDefinition* ConsumableDefinition,
+		FName SourcePurchaseId,
+		FName SourceEffectId);
+
+	bool RemoveInventoryInstanceById(const FGuid& InstanceId);
+	bool RemoveFirstInventoryInstanceByDefinition(const UGambitItemDefinition* ItemDefinition);
+	bool RemoveDiceInventoryInstanceAtIndex(int32 DieIndex);
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|Inventory", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UGambitPlayerLoadoutDefinition> DefaultLoadoutDefinition = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Inventory", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitInventoryItemInstance> OwnedItemInstances;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Inventory", meta = (AllowPrivateAccess = "true"))
 	TArray<TObjectPtr<UGambitDiceDefinition>> OwnedDiceDefinitions;

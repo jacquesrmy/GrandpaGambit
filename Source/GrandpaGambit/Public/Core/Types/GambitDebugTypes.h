@@ -383,6 +383,18 @@ struct GRANDPAGAMBIT_API FGambitDebugItemSnapshot
 	FName ItemId;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FGuid InventoryInstanceId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName SourceStableId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName SourcePurchaseId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	FName SourceEffectId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	FString DisplayName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
@@ -398,7 +410,19 @@ struct GRANDPAGAMBIT_API FGambitDebugItemSnapshot
 	bool bUsesSharedPool = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	int32 StackCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	bool bEquipped = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	bool bActive = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	TArray<FName> Tags;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
+	TArray<FName> RuntimeTags;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Debug")
 	TArray<FName> EffectIds;

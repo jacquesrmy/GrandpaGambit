@@ -2039,10 +2039,37 @@ void UGambitMatchDebugComponent::DebugPrintInventory() const
 			UE_LOG(
 				LogGambit,
 				Log,
-				TEXT("DebugInventory: %s Consumable[%d] %s"),
+				TEXT("DebugInventory: %s Consumable[%d] Instance=%s %s"),
 				*BuildMatchDebugPlayerLabel(PlayerState, Players),
 				Index,
+				*Slot.InventoryInstanceId.ToString(EGuidFormats::DigitsWithHyphens),
 				*FormatItemDetails(Consumable));
+		}
+
+		if (const UGambitInventoryComponent* InventoryComponent = PlayerState->GetInventoryComponent())
+		{
+			const TArray<FGambitInventoryItemInstance>& Instances = InventoryComponent->GetOwnedItemInstancesRef();
+			for (int32 Index = 0; Index < Instances.Num(); ++Index)
+			{
+				const FGambitInventoryItemInstance& Instance = Instances[Index];
+				UE_LOG(
+					LogGambit,
+					Log,
+					TEXT("DebugInventory: %s ItemInstance[%d] Id=%s Type=%s Source=%s Purchase=%s Effect=%s Item=%s Dice=%s Equipped=%s Active=%s Stack=%d Tags=%d"),
+					*BuildMatchDebugPlayerLabel(PlayerState, Players),
+					Index,
+					*Instance.InstanceId.ToString(EGuidFormats::DigitsWithHyphens),
+					*MatchDebugItemTypeToString(Instance.ItemType),
+					*Instance.SourceStableId.ToString(),
+					*Instance.SourcePurchaseId.ToString(),
+					*Instance.SourceEffectId.ToString(),
+					*FormatItemDetails(Instance.ItemDefinition.Get()),
+					*FormatDiceDefinition(Instance.DiceDefinition.Get()),
+					Instance.bEquipped ? TEXT("Yes") : TEXT("No"),
+					Instance.bActive ? TEXT("Yes") : TEXT("No"),
+					Instance.StackCount,
+					Instance.RuntimeTags.Num());
+			}
 		}
 	}
 }

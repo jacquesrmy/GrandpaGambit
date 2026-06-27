@@ -3329,6 +3329,81 @@ bool FGambitB3GoldenRerollIncreaseRewardTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitInventoryRuntimeInstancesTest,
+	"GrandpaGambit.Inventory.RuntimeInstances",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitInventoryRuntimeInstancesTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitInventoryComponent* InventoryComponent = NewObject<UGambitInventoryComponent>(TestOuter);
+
+	UGambitModuleDefinition* ModuleDefinition = NewObject<UGambitModuleDefinition>(TestOuter);
+	ModuleDefinition->ItemId = TEXT("module.test.runtime_instance");
+	TestTrue(TEXT("adding a module succeeds"), InventoryComponent->AddModule(ModuleDefinition));
+	TestEqual(TEXT("historical module getter still returns the module definition"), InventoryComponent->GetActiveModules()[0].Get(), ModuleDefinition);
+	TestEqual(TEXT("adding a module creates one owned runtime instance"), InventoryComponent->GetOwnedItemInstancesRef().Num(), 1);
+	TestTrue(TEXT("module definition is discoverable through runtime instances"), InventoryComponent->HasItemDefinition(ModuleDefinition));
+
+	const FGambitInventoryItemInstance* ModuleInstance = InventoryComponent->FindFirstItemInstanceByDefinition(ModuleDefinition);
+	TestTrue(TEXT("module instance can be found by definition"), ModuleInstance != nullptr);
+	if (ModuleInstance)
+	{
+		TestTrue(TEXT("module instance has a stable instance id"), ModuleInstance->InstanceId.IsValid());
+		TestEqual(TEXT("module instance records module item type"), ModuleInstance->ItemType, EGambitItemType::Module);
+		TestTrue(TEXT("module instance is active"), ModuleInstance->bActive);
+		TestTrue(TEXT("module instance is equipped"), ModuleInstance->bEquipped);
+		TestTrue(TEXT("active module instance getter returns the module"), InventoryComponent->GetActiveModuleInstances()[0].InstanceId == ModuleInstance->InstanceId);
+	}
+
+	UGambitConsumableDefinition* ConsumableDefinition = NewObject<UGambitConsumableDefinition>(TestOuter);
+	ConsumableDefinition->ItemId = TEXT("consumable.test.runtime_instance");
+	TestTrue(TEXT("adding a consumable succeeds"), InventoryComponent->AddConsumable(ConsumableDefinition));
+	TestEqual(TEXT("historical consumable slot getter still returns the consumable definition"), InventoryComponent->GetConsumableSlotsRef()[0].Definition.Get(), ConsumableDefinition);
+	TestEqual(TEXT("consumable instance getter returns one available consumable"), InventoryComponent->GetConsumableInstances().Num(), 1);
+
+	const FGuid ConsumedInstanceId = InventoryComponent->GetConsumableSlotsRef()[0].InventoryInstanceId;
+	TestTrue(TEXT("consumable slot records its runtime instance id"), ConsumedInstanceId.IsValid());
+	TestTrue(TEXT("consumable instance can be found by slot id"), InventoryComponent->FindItemInstanceById(ConsumedInstanceId) != nullptr);
+
+	UGambitConsumableDefinition* ConsumedDefinition = nullptr;
+	TestTrue(TEXT("consuming the consumable succeeds"), InventoryComponent->ConsumeConsumableDefinitionAtSlot(0, ConsumedDefinition));
+	TestEqual(TEXT("consume returns the historical consumable definition"), ConsumedDefinition, ConsumableDefinition);
+	TestEqual(TEXT("consumed slot is removed from historical slots"), InventoryComponent->GetConsumableSlotsRef().Num(), 0);
+	TestEqual(TEXT("consumed runtime instance is removed from available consumables"), InventoryComponent->GetConsumableInstances().Num(), 0);
+	TestTrue(TEXT("consumed runtime instance id is no longer findable"), InventoryComponent->FindItemInstanceById(ConsumedInstanceId) == nullptr);
+
+	TestTrue(TEXT("first duplicate consumable can be added"), InventoryComponent->AddConsumable(ConsumableDefinition));
+	TestTrue(TEXT("second duplicate consumable can be added"), InventoryComponent->AddConsumable(ConsumableDefinition));
+	const FGuid FirstDuplicateId = InventoryComponent->GetConsumableSlotsRef()[0].InventoryInstanceId;
+	const FGuid SecondDuplicateId = InventoryComponent->GetConsumableSlotsRef()[1].InventoryInstanceId;
+	TestTrue(TEXT("duplicate consumables receive distinct instance ids"), FirstDuplicateId.IsValid() && SecondDuplicateId.IsValid() && FirstDuplicateId != SecondDuplicateId);
+
+	UGambitConsumableDefinition* RemovedDefinition = nullptr;
+	TestTrue(TEXT("removing the first duplicate consumable succeeds"), InventoryComponent->RemoveConsumableAtSlot(0, RemovedDefinition));
+	TestEqual(TEXT("remove returns the duplicate consumable definition"), RemovedDefinition, ConsumableDefinition);
+	TestTrue(TEXT("removed duplicate instance is gone"), InventoryComponent->FindItemInstanceById(FirstDuplicateId) == nullptr);
+	TestTrue(TEXT("remaining duplicate instance is preserved"), InventoryComponent->FindItemInstanceById(SecondDuplicateId) != nullptr);
+
+	const int32 ModuleCapacity = InventoryComponent->GetModuleSlotCapacity();
+	for (int32 Index = InventoryComponent->GetModuleSlotsUsed(); Index < ModuleCapacity; ++Index)
+	{
+		UGambitModuleDefinition* FillerModule = NewObject<UGambitModuleDefinition>(TestOuter);
+		FillerModule->ItemId = FName(*FString::Printf(TEXT("module.test.runtime_instance.slot_%d"), Index));
+		TestTrue(TEXT("filler module can occupy available module slot"), InventoryComponent->AddModule(FillerModule));
+	}
+
+	UGambitModuleDefinition* OverflowModule = NewObject<UGambitModuleDefinition>(TestOuter);
+	OverflowModule->ItemId = TEXT("module.test.runtime_instance.overflow");
+	TestFalse(TEXT("module slot capacity is still enforced"), InventoryComponent->AddModule(OverflowModule));
+	TestEqual(TEXT("active module definitions fill exactly the configured capacity"), InventoryComponent->GetModuleSlotsUsed(), ModuleCapacity);
+	TestEqual(TEXT("active module instances fill exactly the configured capacity"), InventoryComponent->GetActiveModuleInstances().Num(), ModuleCapacity);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGambitB3ConsumableSingleUseRemovesSlotTest,
 	"GrandpaGambit.B3.Consumables.SingleUseRemovesSlot",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -3662,10 +3737,30 @@ bool FGambitB5ShopPurchaseRareLegendaryOffersTest::RunTest(const FString& Parame
 
 	TestTrue(TEXT("rare B5 shared-pool shop offer purchases successfully"), ShopComponent->PurchaseOffer(1, EconomyComponent, InventoryComponent, SharedPool));
 	TestEqual(TEXT("rare B5 purchase grants royal die"), InventoryComponent->GetOwnedDiceDefinitions()[0].Get(), RoyalDie);
+	TestTrue(TEXT("rare B5 purchase records the dice item definition as owned"), InventoryComponent->HasItemDefinition(RoyalItem));
+	if (const FGambitInventoryItemInstance* RoyalInstance = InventoryComponent->FindFirstItemInstanceByDefinition(RoyalItem))
+	{
+		TestEqual(TEXT("rare B5 runtime instance points at the granted royal die"), RoyalInstance->DiceDefinition.Get(), RoyalDie);
+		TestEqual(TEXT("rare B5 runtime instance records the purchase source"), RoyalInstance->SourcePurchaseId, FName(TEXT("shop.offer.1")));
+	}
+	else
+	{
+		AddError(TEXT("rare B5 purchase did not create a runtime inventory instance"));
+	}
 	TestEqual(TEXT("rare B5 purchase decrements shared stock"), SharedPool->GetRemainingStock(RoyalItem), 1);
 
 	TestTrue(TEXT("legendary B5 shared-pool shop offer purchases successfully"), ShopComponent->PurchaseOffer(2, EconomyComponent, InventoryComponent, SharedPool));
 	TestEqual(TEXT("legendary B5 purchase grants jackpot die"), InventoryComponent->GetOwnedDiceDefinitions()[1].Get(), JackpotDie);
+	TestTrue(TEXT("legendary B5 purchase records the dice item definition as owned"), InventoryComponent->HasItemDefinition(JackpotItem));
+	if (const FGambitInventoryItemInstance* JackpotInstance = InventoryComponent->FindFirstItemInstanceByDefinition(JackpotItem))
+	{
+		TestEqual(TEXT("legendary B5 runtime instance points at the granted jackpot die"), JackpotInstance->DiceDefinition.Get(), JackpotDie);
+		TestEqual(TEXT("legendary B5 runtime instance records the purchase source"), JackpotInstance->SourcePurchaseId, FName(TEXT("shop.offer.2")));
+	}
+	else
+	{
+		AddError(TEXT("legendary B5 purchase did not create a runtime inventory instance"));
+	}
 	TestEqual(TEXT("legendary B5 purchase consumes final shared stock"), SharedPool->GetRemainingStock(JackpotItem), 0);
 	TestFalse(TEXT("legendary B5 shared stock blocks another purchase"), SharedPool->IsItemAvailable(JackpotItem));
 	TestEqual(TEXT("B5 rare and legendary purchases spend expected gold"), EconomyComponent->GetCurrentGold(), 17);

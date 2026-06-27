@@ -83,7 +83,10 @@ private:
 	FGambitShopOffer* FindOfferMutable(int32 OfferId);
 	const FGambitShopOffer* FindOffer(int32 OfferId) const;
 	void ReleaseOfferReservations(UGambitSharedPoolComponent* SharedPoolComponent);
-	bool GrantPurchasedItemToInventory(UGambitItemDefinition* ItemDefinition, UGambitInventoryComponent* InventoryComponent) const;
+	bool GrantPurchasedItemToInventory(
+		UGambitItemDefinition* ItemDefinition,
+		UGambitInventoryComponent* InventoryComponent,
+		FName SourcePurchaseId) const;
 	bool ValidateInventoryCapacity(UGambitItemDefinition* ItemDefinition, const UGambitInventoryComponent* InventoryComponent, FString& OutFailureReason) const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|Shop", meta = (AllowPrivateAccess = "true"))

@@ -9,6 +9,7 @@
 #include "Players/Components/GambitEconomyComponent.h"
 #include "Players/Components/GambitInventoryComponent.h"
 #include "Players/Components/GambitPlayerRoundStateComponent.h"
+#include "Players/Models/GambitInventoryItemInstance.h"
 #include "Scoring/Calculators/GambitScoreModifierMath.h"
 #include "Shop/Components/GambitShopComponent.h"
 
@@ -38,9 +39,23 @@ namespace
 		return EffectIds;
 	}
 
-	FGambitDebugItemSnapshot BuildItemSnapshot(const UGambitItemDefinition* ItemDefinition)
+	FGambitDebugItemSnapshot BuildItemSnapshot(
+		const UGambitItemDefinition* ItemDefinition,
+		const FGambitInventoryItemInstance* ItemInstance = nullptr)
 	{
 		FGambitDebugItemSnapshot Snapshot;
+		if (ItemInstance)
+		{
+			Snapshot.InventoryInstanceId = ItemInstance->InstanceId;
+			Snapshot.SourceStableId = ItemInstance->SourceStableId;
+			Snapshot.SourcePurchaseId = ItemInstance->SourcePurchaseId;
+			Snapshot.SourceEffectId = ItemInstance->SourceEffectId;
+			Snapshot.StackCount = ItemInstance->StackCount;
+			Snapshot.bEquipped = ItemInstance->bEquipped;
+			Snapshot.bActive = ItemInstance->bActive;
+			Snapshot.RuntimeTags = ItemInstance->RuntimeTags;
+		}
+
 		if (!ItemDefinition)
 		{
 			Snapshot.DisplayName = TEXT("None");
@@ -56,9 +71,11 @@ namespace
 		Snapshot.Tags = ItemDefinition->Tags;
 		Snapshot.EffectIds = BuildEffectIds(ItemDefinition->EffectDefinitions);
 		Snapshot.Summary = FString::Printf(
-			TEXT("%s [%s] Cost=%d Effects=%d"),
+			TEXT("%s [%s] Instance=%s Source=%s Cost=%d Effects=%d"),
 			*Snapshot.DisplayName,
 			*Snapshot.ItemId.ToString(),
+			*Snapshot.InventoryInstanceId.ToString(EGuidFormats::DigitsWithHyphens),
+			*Snapshot.SourceStableId.ToString(),
 			Snapshot.Cost,
 			Snapshot.EffectIds.Num());
 		return Snapshot;
@@ -597,6 +614,20 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugModuleSnapshot() const
 {
 	TArray<FGambitDebugItemSnapshot> Snapshots;
+	if (InventoryComponent)
+	{
+		const TArray<FGambitInventoryItemInstance> ModuleInstances = InventoryComponent->GetActiveModuleInstances();
+		if (ModuleInstances.Num() > 0 || GetActiveModulesRef().Num() == 0)
+		{
+			Snapshots.Reserve(ModuleInstances.Num());
+			for (const FGambitInventoryItemInstance& ModuleInstance : ModuleInstances)
+			{
+				Snapshots.Add(BuildItemSnapshot(InventoryComponent->GetItemDefinitionFromInstance(ModuleInstance), &ModuleInstance));
+			}
+			return Snapshots;
+		}
+	}
+
 	const TArray<TObjectPtr<UGambitModuleDefinition>>& Modules = GetActiveModulesRef();
 	Snapshots.Reserve(Modules.Num());
 	for (const TObjectPtr<UGambitModuleDefinition>& ModuleDefinition : Modules)
@@ -609,6 +640,20 @@ TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugModuleSnapshot() 
 TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugConsumableSnapshot() const
 {
 	TArray<FGambitDebugItemSnapshot> Snapshots;
+	if (InventoryComponent)
+	{
+		const TArray<FGambitInventoryItemInstance> ConsumableInstances = InventoryComponent->GetConsumableInstances();
+		if (ConsumableInstances.Num() > 0 || GetConsumableSlotsRef().Num() == 0)
+		{
+			Snapshots.Reserve(ConsumableInstances.Num());
+			for (const FGambitInventoryItemInstance& ConsumableInstance : ConsumableInstances)
+			{
+				Snapshots.Add(BuildItemSnapshot(InventoryComponent->GetItemDefinitionFromInstance(ConsumableInstance), &ConsumableInstance));
+			}
+			return Snapshots;
+		}
+	}
+
 	const TArray<FGambitConsumableRuntimeSlot>& Slots = GetConsumableSlotsRef();
 	Snapshots.Reserve(Slots.Num());
 	for (const FGambitConsumableRuntimeSlot& Slot : Slots)

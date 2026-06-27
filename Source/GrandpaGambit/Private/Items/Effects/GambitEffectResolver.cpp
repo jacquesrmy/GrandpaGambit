@@ -3461,7 +3461,10 @@ bool UGambitEffectResolver::ApplyUtilityEffect(
 		UGambitInventoryComponent* InventoryComponent = ResolvedTarget ? ResolvedTarget->InventoryComponent.Get() : nullptr;
 		if (InventoryComponent)
 		{
-			const bool bAdded = InventoryComponent->AddConsumable(ConsumableDefinition);
+			const bool bAdded = InventoryComponent->AddItemDefinitionWithSource(
+				ConsumableDefinition,
+				NAME_None,
+				GetEffectSourceId(EffectDefinition));
 			if (bAdded)
 			{
 				Context.GrantedConsumable = ConsumableDefinition;

@@ -6,6 +6,7 @@
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Data/GambitItemDefinition.h"
+#include "Items/DiceItems/GambitDiceItemDefinition.h"
 #include "Items/Modules/GambitModuleDefinition.h"
 
 namespace
@@ -29,6 +30,7 @@ UGambitInventoryComponent::UGambitInventoryComponent()
 
 void UGambitInventoryComponent::InitializeForMatch()
 {
+	OwnedItemInstances.Reset();
 	OwnedDiceDefinitions.Reset();
 	ActiveModules.Reset();
 	ConsumableSlots.Reset();
@@ -45,7 +47,12 @@ void UGambitInventoryComponent::InitializeForMatch()
 		{
 			if (DiceDefinition)
 			{
-				OwnedDiceDefinitions.Add(DiceDefinition);
+				AddOwnedDieDefinition(
+					DiceDefinition,
+					nullptr,
+					DiceDefinition->GetResolvedDiceId(),
+					NAME_None,
+					NAME_None);
 			}
 		}
 
@@ -61,7 +68,7 @@ void UGambitInventoryComponent::InitializeForMatch()
 				break;
 			}
 
-			ActiveModules.Add(ModuleDefinition);
+			AddModuleDefinition(ModuleDefinition, NAME_None, NAME_None);
 		}
 
 		for (UGambitConsumableDefinition* ConsumableDefinition : EffectiveLoadout->Loadout.StartingConsumables)
@@ -76,9 +83,7 @@ void UGambitInventoryComponent::InitializeForMatch()
 				break;
 			}
 
-			FGambitConsumableRuntimeSlot NewSlot;
-			NewSlot.Definition = ConsumableDefinition;
-			ConsumableSlots.Add(NewSlot);
+			AddConsumableDefinition(ConsumableDefinition, NAME_None, NAME_None);
 		}
 	}
 
@@ -92,50 +97,76 @@ void UGambitInventoryComponent::ResetRoundState()
 
 bool UGambitInventoryComponent::AddOwnedDie(UGambitDiceDefinition* DieDefinition)
 {
-	if (!DieDefinition)
+	if (!AddOwnedDieDefinition(
+		DieDefinition,
+		nullptr,
+		DieDefinition ? DieDefinition->GetResolvedDiceId() : NAME_None,
+		NAME_None,
+		NAME_None))
 	{
 		return false;
 	}
 
-	OwnedDiceDefinitions.Add(DieDefinition);
 	OnInventoryChanged.Broadcast();
 	return true;
 }
 
 bool UGambitInventoryComponent::AddModule(UGambitModuleDefinition* ModuleDefinition)
 {
-	if (!ModuleDefinition || ActiveModules.Contains(ModuleDefinition))
+	if (!AddModuleDefinition(ModuleDefinition, NAME_None, NAME_None))
 	{
 		return false;
 	}
 
-	if (!HasAvailableModuleSlot())
-	{
-		return false;
-	}
-
-	ActiveModules.Add(ModuleDefinition);
 	OnInventoryChanged.Broadcast();
 	return true;
 }
 
 bool UGambitInventoryComponent::AddConsumable(UGambitConsumableDefinition* ConsumableDefinition)
 {
-	if (!ConsumableDefinition)
+	if (!AddConsumableDefinition(ConsumableDefinition, NAME_None, NAME_None))
 	{
 		return false;
 	}
 
-	if (!HasAvailableConsumableSlot())
-	{
-		return false;
-	}
-
-	FGambitConsumableRuntimeSlot NewSlot;
-	NewSlot.Definition = ConsumableDefinition;
-	ConsumableSlots.Add(NewSlot);
 	OnInventoryChanged.Broadcast();
 	return true;
+}
+
+bool UGambitInventoryComponent::AddItemDefinition(UGambitItemDefinition* ItemDefinition)
+{
+	return AddItemDefinitionWithSource(ItemDefinition, NAME_None, NAME_None);
+}
+
+bool UGambitInventoryComponent::AddItemDefinitionWithSource(
+	UGambitItemDefinition* ItemDefinition,
+	const FName SourcePurchaseId,
+	const FName SourceEffectId)
+{
+	if (!ItemDefinition)
+	{
+		return false;
+	}
+
+	bool bAdded = false;
+	if (UGambitModuleDefinition* ModuleDefinition = Cast<UGambitModuleDefinition>(ItemDefinition))
+	{
+		bAdded = AddModuleDefinition(ModuleDefinition, SourcePurchaseId, SourceEffectId);
+	}
+	else if (UGambitConsumableDefinition* ConsumableDefinition = Cast<UGambitConsumableDefinition>(ItemDefinition))
+	{
+		bAdded = AddConsumableDefinition(ConsumableDefinition, SourcePurchaseId, SourceEffectId);
+	}
+	else if (UGambitDiceItemDefinition* DiceItemDefinition = Cast<UGambitDiceItemDefinition>(ItemDefinition))
+	{
+		bAdded = AddDiceItemDefinition(DiceItemDefinition, SourcePurchaseId, SourceEffectId);
+	}
+
+	if (bAdded)
+	{
+		OnInventoryChanged.Broadcast();
+	}
+	return bAdded;
 }
 
 bool UGambitInventoryComponent::RemoveOwnedDieAtIndex(
@@ -150,6 +181,7 @@ bool UGambitInventoryComponent::RemoveOwnedDieAtIndex(
 
 	OutRemovedDieDefinition = OwnedDiceDefinitions[DieIndex];
 	OwnedDiceDefinitions.RemoveAt(DieIndex);
+	RemoveDiceInventoryInstanceAtIndex(DieIndex);
 	OnInventoryChanged.Broadcast();
 	return true;
 }
@@ -167,6 +199,7 @@ bool UGambitInventoryComponent::RemoveModule(UGambitModuleDefinition* ModuleDefi
 		return false;
 	}
 
+	RemoveFirstInventoryInstanceByDefinition(ModuleDefinition);
 	OnInventoryChanged.Broadcast();
 	return true;
 }
@@ -182,6 +215,7 @@ bool UGambitInventoryComponent::RemoveConsumableAtSlot(
 	}
 
 	OutRemovedConsumableDefinition = ConsumableSlots[SlotIndex].Definition;
+	RemoveInventoryInstanceById(ConsumableSlots[SlotIndex].InventoryInstanceId);
 	ConsumableSlots.RemoveAt(SlotIndex);
 	OnInventoryChanged.Broadcast();
 	return OutRemovedConsumableDefinition != nullptr;
@@ -231,9 +265,283 @@ bool UGambitInventoryComponent::ConsumeConsumableDefinitionAtSlot(
 	}
 
 	OutDefinition = Slot.Definition;
+	RemoveInventoryInstanceById(Slot.InventoryInstanceId);
 	ConsumableSlots.RemoveAt(SlotIndex);
 	OnInventoryChanged.Broadcast();
 	return true;
+}
+
+FGambitInventoryItemInstance UGambitInventoryComponent::BuildItemInstance(
+	UGambitItemDefinition* ItemDefinition,
+	UGambitDiceDefinition* DiceDefinition,
+	const EGambitItemType ItemType,
+	FName SourceStableId,
+	const bool bEquipped,
+	const bool bActive,
+	const FName SourcePurchaseId,
+	const FName SourceEffectId) const
+{
+	if (SourceStableId.IsNone())
+	{
+		if (ItemDefinition)
+		{
+			SourceStableId = ItemDefinition->GetResolvedItemId();
+		}
+		else if (DiceDefinition)
+		{
+			SourceStableId = DiceDefinition->GetResolvedDiceId();
+		}
+	}
+
+	FGambitInventoryItemInstance Instance;
+	Instance.InstanceId = FGuid::NewGuid();
+	Instance.ItemDefinition = ItemDefinition;
+	Instance.DiceDefinition = DiceDefinition;
+	Instance.ItemType = ItemType;
+	Instance.SourceStableId = SourceStableId;
+	Instance.StackCount = 1;
+	Instance.bEquipped = bEquipped;
+	Instance.bActive = bActive;
+	Instance.SourcePurchaseId = SourcePurchaseId;
+	Instance.SourceEffectId = SourceEffectId;
+	return Instance;
+}
+
+bool UGambitInventoryComponent::AddDiceItemDefinition(
+	UGambitDiceItemDefinition* DiceItemDefinition,
+	const FName SourcePurchaseId,
+	const FName SourceEffectId)
+{
+	if (!DiceItemDefinition || !DiceItemDefinition->GrantedDiceDefinition)
+	{
+		return false;
+	}
+
+	return AddOwnedDieDefinition(
+		DiceItemDefinition->GrantedDiceDefinition,
+		DiceItemDefinition,
+		DiceItemDefinition->GetResolvedItemId(),
+		SourcePurchaseId,
+		SourceEffectId);
+}
+
+bool UGambitInventoryComponent::AddOwnedDieDefinition(
+	UGambitDiceDefinition* DieDefinition,
+	UGambitItemDefinition* SourceItemDefinition,
+	const FName SourceStableId,
+	const FName SourcePurchaseId,
+	const FName SourceEffectId)
+{
+	if (!DieDefinition)
+	{
+		return false;
+	}
+
+	OwnedDiceDefinitions.Add(DieDefinition);
+	OwnedItemInstances.Add(BuildItemInstance(
+		SourceItemDefinition,
+		DieDefinition,
+		EGambitItemType::Dice,
+		SourceStableId,
+		true,
+		true,
+		SourcePurchaseId,
+		SourceEffectId));
+	return true;
+}
+
+bool UGambitInventoryComponent::AddModuleDefinition(
+	UGambitModuleDefinition* ModuleDefinition,
+	const FName SourcePurchaseId,
+	const FName SourceEffectId)
+{
+	if (!ModuleDefinition || ActiveModules.Contains(ModuleDefinition))
+	{
+		return false;
+	}
+
+	if (!HasAvailableModuleSlot())
+	{
+		return false;
+	}
+
+	ActiveModules.Add(ModuleDefinition);
+	OwnedItemInstances.Add(BuildItemInstance(
+		ModuleDefinition,
+		nullptr,
+		EGambitItemType::Module,
+		ModuleDefinition->GetResolvedItemId(),
+		true,
+		true,
+		SourcePurchaseId,
+		SourceEffectId));
+	return true;
+}
+
+bool UGambitInventoryComponent::AddConsumableDefinition(
+	UGambitConsumableDefinition* ConsumableDefinition,
+	const FName SourcePurchaseId,
+	const FName SourceEffectId)
+{
+	if (!ConsumableDefinition)
+	{
+		return false;
+	}
+
+	if (!HasAvailableConsumableSlot())
+	{
+		return false;
+	}
+
+	FGambitInventoryItemInstance Instance = BuildItemInstance(
+		ConsumableDefinition,
+		nullptr,
+		EGambitItemType::Consumable,
+		ConsumableDefinition->GetResolvedItemId(),
+		true,
+		false,
+		SourcePurchaseId,
+		SourceEffectId);
+
+	FGambitConsumableRuntimeSlot NewSlot;
+	NewSlot.InventoryInstanceId = Instance.InstanceId;
+	NewSlot.Definition = ConsumableDefinition;
+
+	OwnedItemInstances.Add(Instance);
+	ConsumableSlots.Add(NewSlot);
+	return true;
+}
+
+bool UGambitInventoryComponent::RemoveInventoryInstanceById(const FGuid& InstanceId)
+{
+	if (!InstanceId.IsValid())
+	{
+		return false;
+	}
+
+	const int32 InstanceIndex = OwnedItemInstances.IndexOfByPredicate([&InstanceId](const FGambitInventoryItemInstance& Instance)
+	{
+		return Instance.InstanceId == InstanceId;
+	});
+	if (!OwnedItemInstances.IsValidIndex(InstanceIndex))
+	{
+		return false;
+	}
+
+	OwnedItemInstances.RemoveAt(InstanceIndex);
+	return true;
+}
+
+bool UGambitInventoryComponent::RemoveFirstInventoryInstanceByDefinition(const UGambitItemDefinition* ItemDefinition)
+{
+	if (!ItemDefinition)
+	{
+		return false;
+	}
+
+	const int32 InstanceIndex = OwnedItemInstances.IndexOfByPredicate([ItemDefinition](const FGambitInventoryItemInstance& Instance)
+	{
+		return Instance.ItemDefinition == ItemDefinition;
+	});
+	if (!OwnedItemInstances.IsValidIndex(InstanceIndex))
+	{
+		return false;
+	}
+
+	OwnedItemInstances.RemoveAt(InstanceIndex);
+	return true;
+}
+
+bool UGambitInventoryComponent::RemoveDiceInventoryInstanceAtIndex(const int32 DieIndex)
+{
+	if (DieIndex < 0)
+	{
+		return false;
+	}
+
+	int32 DiceInstanceIndex = 0;
+	for (int32 InstanceIndex = 0; InstanceIndex < OwnedItemInstances.Num(); ++InstanceIndex)
+	{
+		if (OwnedItemInstances[InstanceIndex].ItemType != EGambitItemType::Dice)
+		{
+			continue;
+		}
+
+		if (DiceInstanceIndex == DieIndex)
+		{
+			OwnedItemInstances.RemoveAt(InstanceIndex);
+			return true;
+		}
+		DiceInstanceIndex++;
+	}
+
+	return false;
+}
+
+const FGambitInventoryItemInstance* UGambitInventoryComponent::FindItemInstanceById(const FGuid& InstanceId) const
+{
+	if (!InstanceId.IsValid())
+	{
+		return nullptr;
+	}
+
+	return OwnedItemInstances.FindByPredicate([&InstanceId](const FGambitInventoryItemInstance& Instance)
+	{
+		return Instance.InstanceId == InstanceId;
+	});
+}
+
+const FGambitInventoryItemInstance* UGambitInventoryComponent::FindFirstItemInstanceByDefinition(
+	const UGambitItemDefinition* ItemDefinition) const
+{
+	if (!ItemDefinition)
+	{
+		return nullptr;
+	}
+
+	return OwnedItemInstances.FindByPredicate([ItemDefinition](const FGambitInventoryItemInstance& Instance)
+	{
+		return Instance.ItemDefinition == ItemDefinition;
+	});
+}
+
+TArray<FGambitInventoryItemInstance> UGambitInventoryComponent::GetActiveModuleInstances() const
+{
+	TArray<FGambitInventoryItemInstance> ModuleInstances;
+	for (const FGambitInventoryItemInstance& Instance : OwnedItemInstances)
+	{
+		if (Instance.ItemType == EGambitItemType::Module && Instance.bActive)
+		{
+			ModuleInstances.Add(Instance);
+		}
+	}
+
+	return ModuleInstances;
+}
+
+TArray<FGambitInventoryItemInstance> UGambitInventoryComponent::GetConsumableInstances() const
+{
+	TArray<FGambitInventoryItemInstance> ConsumableInstances;
+	for (const FGambitInventoryItemInstance& Instance : OwnedItemInstances)
+	{
+		if (Instance.ItemType == EGambitItemType::Consumable)
+		{
+			ConsumableInstances.Add(Instance);
+		}
+	}
+
+	return ConsumableInstances;
+}
+
+bool UGambitInventoryComponent::HasItemDefinition(UGambitItemDefinition* ItemDefinition) const
+{
+	return FindFirstItemInstanceByDefinition(ItemDefinition) != nullptr;
+}
+
+UGambitItemDefinition* UGambitInventoryComponent::GetItemDefinitionFromInstance(
+	const FGambitInventoryItemInstance& ItemInstance) const
+{
+	return ItemInstance.ItemDefinition.Get();
 }
 
 int32 UGambitInventoryComponent::GetDistinctOwnedDiceTypeCount() const
