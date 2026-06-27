@@ -914,3 +914,11 @@ easy to extend without rewriting core systems
 
 Every major system must be able to stand on its own with a clean API.
 Core components should not be entangled inside the same files or depend on each other in spaghetti ways.
+
+Unreal 5.7 is located at C:\Program Files (x86)\UE_5.7
+
+## Local validation script
+
+The canonical local validation entrypoint is `Scripts/Run-GambitValidation.ps1`.
+
+When adding, renaming, or materially changing project-level debug scripts, validation commandlets, generated audit outputs, or automation suites that should be part of the main local validation gate, update this script and `Scripts/README.md` in the same change.
