@@ -222,9 +222,38 @@ bool AGambitGameMode::RequestSetDieLocked(AGambitPlayerState* PlayerState, const
 	return RoundFlowComponent ? RoundFlowComponent->RequestSetDieLocked(PlayerState, DieIndex, bLocked) : false;
 }
 
+FGambitRoundCommandResult AGambitGameMode::RequestSetDieLockedDetailed(
+	AGambitPlayerState* PlayerState,
+	const int32 DieIndex,
+	const bool bLocked)
+{
+	FGambitRoundCommandResult Result;
+	if (!RoundFlowComponent)
+	{
+		Result.Status = EGambitRoundCommandStatus::Failed;
+		Result.Message = TEXT("Lock refused: missing round flow.");
+		return Result;
+	}
+
+	return RoundFlowComponent->RequestSetDieLockedDetailed(PlayerState, DieIndex, bLocked);
+}
+
 bool AGambitGameMode::RequestReroll(AGambitPlayerState* PlayerState)
 {
 	return RoundFlowComponent ? RoundFlowComponent->RequestReroll(PlayerState) : false;
+}
+
+FGambitRoundCommandResult AGambitGameMode::RequestRerollDetailed(AGambitPlayerState* PlayerState)
+{
+	FGambitRoundCommandResult Result;
+	if (!RoundFlowComponent)
+	{
+		Result.Status = EGambitRoundCommandStatus::Failed;
+		Result.Message = TEXT("Reroll refused: missing round flow.");
+		return Result;
+	}
+
+	return RoundFlowComponent->RequestRerollDetailed(PlayerState);
 }
 
 bool AGambitGameMode::RequestUseConsumable(AGambitPlayerState* PlayerState, const int32 SlotIndex)

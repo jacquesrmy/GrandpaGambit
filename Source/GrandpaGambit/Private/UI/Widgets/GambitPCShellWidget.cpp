@@ -4,12 +4,14 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Engine/World.h"
+#include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/Modes/GambitGameMode.h"
 #include "Game/States/GambitGameState.h"
 #include "Items/Data/GambitItemDefinition.h"
@@ -44,26 +46,34 @@ namespace
 			: ItemDefinition->DisplayName.ToString();
 	}
 
-	FString ShellDiceValues(const TArray<FGambitDieRuntimeState>& DiceStates)
-	{
-		TArray<FString> Values;
-		Values.Reserve(DiceStates.Num());
-		for (const FGambitDieRuntimeState& DieState : DiceStates)
-		{
-			Values.Add(FString::Printf(
-				TEXT("%d%s"),
-				DieState.EffectiveValue,
-				DieState.bLocked ? TEXT("L") : TEXT("")));
-		}
-
-		return Values.Num() > 0 ? FString::Join(Values, TEXT(", ")) : TEXT("-");
-	}
-
 	bool ShellIsReadyGatedPhase(const EGambitRoundPhase Phase)
 	{
 		return Phase == EGambitRoundPhase::SelectionReroll
 			|| Phase == EGambitRoundPhase::Action
 			|| Phase == EGambitRoundPhase::Shop;
+	}
+}
+
+void UGambitPCShellActionButton::ConfigureAction(
+	UGambitPCShellWidget* InOwnerShell,
+	const EGambitPCShellActionKind InActionKind,
+	AGambitPlayerState* InPlayerState,
+	const int32 InPlayerIndex,
+	const int32 InDieIndex)
+{
+	OwnerShell = InOwnerShell;
+	ActionKind = InActionKind;
+	PlayerState = InPlayerState;
+	PlayerIndex = InPlayerIndex;
+	DieIndex = InDieIndex;
+	OnClicked.AddUniqueDynamic(this, &UGambitPCShellActionButton::HandleClicked);
+}
+
+void UGambitPCShellActionButton::HandleClicked()
+{
+	if (UGambitPCShellWidget* Shell = OwnerShell.Get())
+	{
+		Shell->ExecutePlayerAction(ActionKind, PlayerState.Get(), PlayerIndex, DieIndex);
 	}
 }
 
@@ -137,6 +147,7 @@ void UGambitPCShellWidget::HandleMatchLifecycleChanged(
 	const EGambitMatchLifecycleState NewState)
 {
 	(void)OldState;
+	LastActionFeedback.Reset();
 	CachedLifecycleState = NewState;
 	RefreshShell();
 }
@@ -150,6 +161,7 @@ void UGambitPCShellWidget::HandleMatchSetupChanged(const FGambitMatchSetupConfig
 void UGambitPCShellWidget::HandlePhaseChanged(const EGambitRoundPhase OldPhase, const EGambitRoundPhase NewPhase)
 {
 	(void)OldPhase;
+	LastActionFeedback.Reset();
 	CachedPhase = NewPhase;
 	RefreshShell();
 }
@@ -232,6 +244,56 @@ void UGambitPCShellWidget::HandleReadyAllClicked()
 	{
 		GameMode->RequestReadyAllPlayersForCurrentPhase();
 	}
+	RefreshShell();
+}
+
+void UGambitPCShellWidget::ExecutePlayerAction(
+	const EGambitPCShellActionKind ActionKind,
+	AGambitPlayerState* PlayerState,
+	const int32 PlayerIndex,
+	const int32 DieIndex)
+{
+	FGambitRoundCommandResult Result;
+	Result.Phase = CachedPhase;
+	Result.PlayerIndex = PlayerIndex;
+	Result.DieIndex = DieIndex;
+
+	AGambitGameMode* GameMode = GetGambitGameMode();
+	if (!GameMode)
+	{
+		Result.Status = EGambitRoundCommandStatus::Failed;
+		Result.Message = TEXT("Action refused: missing GameMode.");
+		SetLastActionFeedback(Result);
+		RefreshShell();
+		return;
+	}
+
+	switch (ActionKind)
+	{
+	case EGambitPCShellActionKind::ToggleDieLock:
+	{
+		bool bTargetLocked = true;
+		if (PlayerState)
+		{
+			const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
+			if (DiceStates.IsValidIndex(DieIndex))
+			{
+				bTargetLocked = !DiceStates[DieIndex].bLocked;
+			}
+		}
+		Result = GameMode->RequestSetDieLockedDetailed(PlayerState, DieIndex, bTargetLocked);
+		break;
+	}
+	case EGambitPCShellActionKind::Reroll:
+		Result = GameMode->RequestRerollDetailed(PlayerState);
+		break;
+	default:
+		Result.Status = EGambitRoundCommandStatus::Failed;
+		Result.Message = TEXT("Action refused: unsupported shell command.");
+		break;
+	}
+
+	SetLastActionFeedback(Result);
 	RefreshShell();
 }
 
@@ -379,6 +441,13 @@ void UGambitPCShellWidget::BuildMatchHud()
 		CachedRoundIndex,
 		CachedMatchSetup.RoundCount));
 	AddText(FString::Printf(TEXT("Phase: %s"), *ShellPhaseToString(CachedPhase)));
+	if (!LastActionFeedback.IsEmpty())
+	{
+		AddText(
+			FString::Printf(TEXT("Feedback: %s"), *LastActionFeedback),
+			16.0f,
+			bLastActionSucceeded ? FLinearColor(0.35f, 0.95f, 0.45f) : FLinearColor(1.0f, 0.45f, 0.25f));
+	}
 	AddSpacerLine();
 
 	BuildPlayerRows();
@@ -438,19 +507,13 @@ void UGambitPCShellWidget::BuildPlayerRows()
 
 	for (int32 PlayerIndex = 0; PlayerIndex < Players.Num(); ++PlayerIndex)
 	{
-		const AGambitPlayerState* PlayerState = Players[PlayerIndex];
+		AGambitPlayerState* PlayerState = Players[PlayerIndex];
 		if (!PlayerState)
 		{
 			continue;
 		}
 
-		AddText(FString::Printf(
-			TEXT("P%d | VP %d | Score %d | Gold %d | Dice [%s]"),
-			PlayerIndex + 1,
-			PlayerState->GetTotalVictoryPoints(),
-			PlayerState->GetCurrentRoundScore(),
-			PlayerState->GetCurrentGold(),
-			*ShellDiceValues(PlayerState->GetDiceStatesRef())));
+		BuildPlayerRoundHud(PlayerIndex, PlayerState);
 
 		if (CachedPhase == EGambitRoundPhase::Shop)
 		{
@@ -465,6 +528,79 @@ void UGambitPCShellWidget::BuildPlayerRows()
 			}
 		}
 	}
+}
+
+void UGambitPCShellWidget::BuildPlayerRoundHud(const int32 PlayerIndex, AGambitPlayerState* PlayerState)
+{
+	if (!PlayerState)
+	{
+		return;
+	}
+
+	const UGambitRoundFlowComponent* RoundFlow = GetRoundFlowComponent();
+	const int32 RerollsUsed = RoundFlow ? RoundFlow->GetRerollsUsedForPlayer(PlayerState) : 0;
+	const int32 RerollLimit = RoundFlow ? RoundFlow->GetMaxRerollsForPlayer(PlayerState) : 0;
+	const int32 RerollsRemaining = FMath::Max(0, RerollLimit - RerollsUsed);
+
+	AddText(FString::Printf(
+		TEXT("P%d %s | Phase %s"),
+		PlayerIndex + 1,
+		*ResolvePlayerDisplayName(PlayerState, PlayerIndex),
+		*ShellPhaseToString(CachedPhase)),
+		20.0f);
+	AddText(FString::Printf(
+		TEXT("VP %d | Score %d | Gold %d | Rerolls %d/%d | Remaining %d"),
+		PlayerState->GetTotalVictoryPoints(),
+		PlayerState->GetCurrentRoundScore(),
+		PlayerState->GetCurrentGold(),
+		RerollsUsed,
+		RerollLimit,
+		RerollsRemaining),
+		16.0f);
+
+	const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
+	if (DiceStates.Num() == 0)
+	{
+		AddText(TEXT("Dice: -"), 16.0f);
+	}
+	else
+	{
+		UHorizontalBox* DiceBox = AddHorizontalBox(2.0f, 4.0f);
+		for (int32 DieIndex = 0; DieIndex < DiceStates.Num(); ++DieIndex)
+		{
+			const FGambitDieRuntimeState& DieState = DiceStates[DieIndex];
+			const FString LockState = DieState.bLocked ? TEXT("Locked") : TEXT("Open");
+			FString ButtonLabel = FString::Printf(
+				TEXT("D%d  %d  %s"),
+				DieIndex + 1,
+				DieState.EffectiveValue,
+				*LockState);
+			if (!DieState.bCanBeLocked)
+			{
+				ButtonLabel += TEXT("  NoLock");
+			}
+			if (!DieState.bCanBeRerolled)
+			{
+				ButtonLabel += TEXT("  NoReroll");
+			}
+
+			AddActionButtonToBox(
+				DiceBox,
+				ButtonLabel,
+				EGambitPCShellActionKind::ToggleDieLock,
+				PlayerState,
+				PlayerIndex,
+				DieIndex);
+		}
+	}
+
+	UHorizontalBox* ActionBox = AddHorizontalBox(0.0f, 8.0f);
+	AddActionButtonToBox(
+		ActionBox,
+		TEXT("Reroll Unlocked"),
+		EGambitPCShellActionKind::Reroll,
+		PlayerState,
+		PlayerIndex);
 }
 
 void UGambitPCShellWidget::BuildFinalRankingRows()
@@ -505,7 +641,25 @@ void UGambitPCShellWidget::ConfigureMatch(const int32 LocalPlayerCount, const in
 	RefreshShell();
 }
 
-UTextBlock* UGambitPCShellWidget::AddText(const FString& Text, const float FontSize)
+void UGambitPCShellWidget::SetLastActionFeedback(const FGambitRoundCommandResult& Result)
+{
+	bLastActionSucceeded = Result.bSuccess;
+	LastActionFeedback = Result.Message.IsEmpty()
+		? (Result.bSuccess ? TEXT("Action accepted.") : TEXT("Action refused."))
+		: Result.Message;
+}
+
+FString UGambitPCShellWidget::ResolvePlayerDisplayName(const AGambitPlayerState* PlayerState, const int32 PlayerIndex) const
+{
+	if (PlayerState && !PlayerState->GetPlayerName().IsEmpty())
+	{
+		return PlayerState->GetPlayerName();
+	}
+
+	return FString::Printf(TEXT("Player %d"), PlayerIndex + 1);
+}
+
+UTextBlock* UGambitPCShellWidget::AddText(const FString& Text, const float FontSize, const FLinearColor& Color)
 {
 	if (!RootContent || !WidgetTree)
 	{
@@ -515,7 +669,7 @@ UTextBlock* UGambitPCShellWidget::AddText(const FString& Text, const float FontS
 	UTextBlock* TextBlock = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	TextBlock->SetText(FText::FromString(Text));
 	TextBlock->SetAutoWrapText(true);
-	TextBlock->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	TextBlock->SetColorAndOpacity(FSlateColor(Color));
 
 	FSlateFontInfo Font = TextBlock->GetFont();
 	Font.Size = FMath::Max(8, FMath::RoundToInt(FontSize));
@@ -543,6 +697,68 @@ UButton* UGambitPCShellWidget::AddButton(const FString& Label)
 	return Button;
 }
 
+UHorizontalBox* UGambitPCShellWidget::AddHorizontalBox(const float TopPadding, const float BottomPadding)
+{
+	if (!RootContent || !WidgetTree)
+	{
+		return nullptr;
+	}
+
+	UHorizontalBox* Box = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+	if (UVerticalBoxSlot* BoxSlot = RootContent->AddChildToVerticalBox(Box))
+	{
+		BoxSlot->SetPadding(FMargin(0.0f, TopPadding, 0.0f, BottomPadding));
+	}
+	return Box;
+}
+
+UButton* UGambitPCShellWidget::AddButtonToBox(UHorizontalBox* Box, const FString& Label)
+{
+	if (!Box || !WidgetTree)
+	{
+		return nullptr;
+	}
+
+	UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	ButtonText->SetText(FText::FromString(Label));
+	ButtonText->SetAutoWrapText(true);
+	ButtonText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	Button->SetContent(ButtonText);
+	if (UHorizontalBoxSlot* ButtonSlot = Box->AddChildToHorizontalBox(Button))
+	{
+		ButtonSlot->SetPadding(FMargin(0.0f, 2.0f, 8.0f, 2.0f));
+	}
+	return Button;
+}
+
+UGambitPCShellActionButton* UGambitPCShellWidget::AddActionButtonToBox(
+	UHorizontalBox* Box,
+	const FString& Label,
+	const EGambitPCShellActionKind ActionKind,
+	AGambitPlayerState* PlayerState,
+	const int32 PlayerIndex,
+	const int32 DieIndex)
+{
+	if (!Box || !WidgetTree)
+	{
+		return nullptr;
+	}
+
+	UGambitPCShellActionButton* Button = WidgetTree->ConstructWidget<UGambitPCShellActionButton>(UGambitPCShellActionButton::StaticClass());
+	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+	ButtonText->SetText(FText::FromString(Label));
+	ButtonText->SetAutoWrapText(true);
+	ButtonText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	Button->SetContent(ButtonText);
+	Button->ConfigureAction(this, ActionKind, PlayerState, PlayerIndex, DieIndex);
+	if (UHorizontalBoxSlot* ButtonSlot = Box->AddChildToHorizontalBox(Button))
+	{
+		ButtonSlot->SetPadding(FMargin(0.0f, 2.0f, 8.0f, 2.0f));
+	}
+	return Button;
+}
+
 void UGambitPCShellWidget::AddSpacerLine()
 {
 	AddText(TEXT(" "));
@@ -566,4 +782,10 @@ AGambitGameState* UGambitPCShellWidget::GetGambitGameState() const
 {
 	const UWorld* World = GetWorld();
 	return World ? World->GetGameState<AGambitGameState>() : nullptr;
+}
+
+UGambitRoundFlowComponent* UGambitPCShellWidget::GetRoundFlowComponent() const
+{
+	const AGambitGameMode* GameMode = GetGambitGameMode();
+	return GameMode ? GameMode->GetRoundFlowComponent() : nullptr;
 }

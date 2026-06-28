@@ -41,7 +41,13 @@ public:
 	bool RequestSetDieLocked(AGambitPlayerState* PlayerState, int32 DieIndex, bool bLocked);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
+	FGambitRoundCommandResult RequestSetDieLockedDetailed(AGambitPlayerState* PlayerState, int32 DieIndex, bool bLocked);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
 	bool RequestReroll(AGambitPlayerState* PlayerState);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
+	FGambitRoundCommandResult RequestRerollDetailed(AGambitPlayerState* PlayerState);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
 	bool RequestUseConsumable(AGambitPlayerState* PlayerState, int32 SlotIndex);
@@ -126,6 +132,13 @@ private:
 	int32 GetEffectiveRerollLimit(AGambitPlayerState* PlayerState) const;
 	int32 GetRankForPlayer(AGambitPlayerState* PlayerState) const;
 	int32 ComputeBaseGoldReward(const AGambitPlayerState* PlayerState) const;
+	FGambitRoundCommandResult MakeCommandResult(
+		AGambitPlayerState* PlayerState,
+		EGambitRoundCommandStatus Status,
+		bool bSuccess,
+		const FString& Message,
+		int32 DieIndex = INDEX_NONE) const;
+	bool HasUnlockedRerollableDice(const AGambitPlayerState* PlayerState) const;
 
 	AGambitGameState* GetGambitGameState() const;
 	TArray<AGambitPlayerState*> GetAllPlayers() const;

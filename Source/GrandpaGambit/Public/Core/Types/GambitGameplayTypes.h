@@ -199,6 +199,50 @@ struct FGambitRerollDieDelta
 	}
 };
 
+UENUM(BlueprintType)
+enum class EGambitRoundCommandStatus : uint8
+{
+	Success,
+	Failed,
+	MissingGameState,
+	InvalidPlayer,
+	InvalidPhase,
+	InvalidDie,
+	DieCannotBeLocked,
+	NoUnlockedDice,
+	RerollLimitReached
+};
+
+USTRUCT(BlueprintType)
+struct FGambitRoundCommandResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	bool bSuccess = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	EGambitRoundCommandStatus Status = EGambitRoundCommandStatus::Failed;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	EGambitRoundPhase Phase = EGambitRoundPhase::None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 PlayerIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 DieIndex = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 RerollsUsed = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 RerollLimit = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	FString Message;
+};
+
 USTRUCT(BlueprintType)
 struct FGambitDiceCombinationResult
 {

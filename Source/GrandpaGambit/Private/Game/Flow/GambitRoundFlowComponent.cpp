@@ -534,12 +534,80 @@ void UGambitRoundFlowComponent::SetPlayerReady(AGambitPlayerState* PlayerState, 
 
 bool UGambitRoundFlowComponent::RequestSetDieLocked(AGambitPlayerState* PlayerState, const int32 DieIndex, const bool bLocked)
 {
+	return RequestSetDieLockedDetailed(PlayerState, DieIndex, bLocked).bSuccess;
+}
+
+FGambitRoundCommandResult UGambitRoundFlowComponent::RequestSetDieLockedDetailed(
+	AGambitPlayerState* PlayerState,
+	const int32 DieIndex,
+	const bool bLocked)
+{
 	AGambitGameState* GameState = GetGambitGameState();
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
-	bool bSuccess = false;
-	if (GameState && CurrentPhase == EGambitRoundPhase::SelectionReroll && PlayerState)
+	FGambitRoundCommandResult Result;
+
+	if (!GameState)
 	{
-		bSuccess = PlayerState->TrySetDieLocked(DieIndex, bLocked);
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::MissingGameState,
+			false,
+			TEXT("Lock refused: missing game state."),
+			DieIndex);
+	}
+	else if (!PlayerState)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidPlayer,
+			false,
+			TEXT("Lock refused: invalid player."),
+			DieIndex);
+	}
+	else if (CurrentPhase != EGambitRoundPhase::SelectionReroll)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidPhase,
+			false,
+			FString::Printf(
+				TEXT("Lock refused: current phase is %s, expected Selection / Reroll."),
+				*RoundFlowPhaseToString(CurrentPhase)),
+			DieIndex);
+	}
+	else
+	{
+		const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
+		if (!DiceStates.IsValidIndex(DieIndex))
+		{
+			Result = MakeCommandResult(
+				PlayerState,
+				EGambitRoundCommandStatus::InvalidDie,
+				false,
+				FString::Printf(TEXT("Lock refused: die %d does not exist."), DieIndex + 1),
+				DieIndex);
+		}
+		else if (bLocked && !DiceStates[DieIndex].bCanBeLocked)
+		{
+			Result = MakeCommandResult(
+				PlayerState,
+				EGambitRoundCommandStatus::DieCannotBeLocked,
+				false,
+				FString::Printf(TEXT("Lock refused: die %d cannot be locked."), DieIndex + 1),
+				DieIndex);
+		}
+		else
+		{
+			const bool bSuccess = PlayerState->TrySetDieLocked(DieIndex, bLocked);
+			Result = MakeCommandResult(
+				PlayerState,
+				bSuccess ? EGambitRoundCommandStatus::Success : EGambitRoundCommandStatus::Failed,
+				bSuccess,
+				bSuccess
+					? FString::Printf(TEXT("Die %d %s."), DieIndex + 1, bLocked ? TEXT("locked") : TEXT("unlocked"))
+					: FString::Printf(TEXT("Lock refused: die %d could not be updated."), DieIndex + 1),
+				DieIndex);
+		}
 	}
 
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
@@ -552,45 +620,107 @@ bool UGambitRoundFlowComponent::RequestSetDieLocked(AGambitPlayerState* PlayerSt
 		*RoundFlowPhaseToString(CurrentPhase),
 		DieIndex,
 		bLocked ? TEXT("true") : TEXT("false"),
-		bSuccess ? TEXT("Success") : TEXT("Failure"),
+		Result.bSuccess ? TEXT("Success") : TEXT("Failure"),
 		*DiceString);
-	return bSuccess;
+	return Result;
 }
 
 bool UGambitRoundFlowComponent::RequestReroll(AGambitPlayerState* PlayerState)
 {
+	return RequestRerollDetailed(PlayerState).bSuccess;
+}
+
+FGambitRoundCommandResult UGambitRoundFlowComponent::RequestRerollDetailed(AGambitPlayerState* PlayerState)
+{
 	AGambitGameState* GameState = GetGambitGameState();
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	const int32 UsedBefore = GetRerollCount(PlayerState);
-	bool bSuccess = false;
 	int32 EffectiveRerollLimit = GetEffectiveRerollLimit(PlayerState);
+	FGambitRoundCommandResult Result;
 
-	if (GameState && CurrentPhase == EGambitRoundPhase::SelectionReroll && PlayerState)
+	if (!GameState)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::MissingGameState,
+			false,
+			TEXT("Reroll refused: missing game state."));
+	}
+	else if (!PlayerState)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidPlayer,
+			false,
+			TEXT("Reroll refused: invalid player."));
+	}
+	else if (CurrentPhase != EGambitRoundPhase::SelectionReroll)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidPhase,
+			false,
+			FString::Printf(
+				TEXT("Reroll refused: current phase is %s, expected Selection / Reroll."),
+				*RoundFlowPhaseToString(CurrentPhase)));
+	}
+	else
 	{
 		FGambitEffectExecutionContext PreRerollContext = CreateEffectContext(EGambitEffectHook::PreReroll, PlayerState);
 		ExecuteActiveEffectsAndCommit(PreRerollContext);
 		EffectiveRerollLimit = GetEffectiveRerollLimit(PlayerState);
-	}
 
-	if (GameState && CurrentPhase == EGambitRoundPhase::SelectionReroll && PlayerState && UsedBefore < EffectiveRerollLimit)
-	{
-		const TArray<FGambitDieRuntimeState> DiceBefore = PlayerState->GetDiceStates();
-		if (PlayerState->TryRerollUnlockedDice(MatchRandomStream))
+		if (UsedBefore >= EffectiveRerollLimit)
 		{
-			TArray<FGambitRerollDieDelta> RerollDeltas = BuildRerollDeltas(DiceBefore, PlayerState->GetDiceStatesRef());
-			TrackRerollDeltas(PlayerState, RerollDeltas);
-			IncrementRerollCount(PlayerState);
-			bSuccess = true;
+			Result = MakeCommandResult(
+				PlayerState,
+				EGambitRoundCommandStatus::RerollLimitReached,
+				false,
+				FString::Printf(TEXT("Reroll refused: limit reached (%d/%d)."), UsedBefore, EffectiveRerollLimit));
+		}
+		else if (!HasUnlockedRerollableDice(PlayerState))
+		{
+			Result = MakeCommandResult(
+				PlayerState,
+				EGambitRoundCommandStatus::NoUnlockedDice,
+				false,
+				TEXT("Reroll refused: no unlocked rerollable dice."));
+		}
+		else
+		{
+			const TArray<FGambitDieRuntimeState> DiceBefore = PlayerState->GetDiceStates();
+			if (PlayerState->TryRerollUnlockedDice(MatchRandomStream))
+			{
+				TArray<FGambitRerollDieDelta> RerollDeltas = BuildRerollDeltas(DiceBefore, PlayerState->GetDiceStatesRef());
+				TrackRerollDeltas(PlayerState, RerollDeltas);
+				IncrementRerollCount(PlayerState);
 
-			FGambitEffectExecutionContext PostRerollContext = CreateEffectContext(EGambitEffectHook::PostReroll, PlayerState);
-			PostRerollContext.RerollDeltas = RerollDeltas;
-			ExecuteActiveEffectsAndCommit(PostRerollContext);
-			EffectiveRerollLimit = GetEffectiveRerollLimit(PlayerState);
+				FGambitEffectExecutionContext PostRerollContext = CreateEffectContext(EGambitEffectHook::PostReroll, PlayerState);
+				PostRerollContext.RerollDeltas = RerollDeltas;
+				ExecuteActiveEffectsAndCommit(PostRerollContext);
+				EffectiveRerollLimit = GetEffectiveRerollLimit(PlayerState);
+
+				Result = MakeCommandResult(
+					PlayerState,
+					EGambitRoundCommandStatus::Success,
+					true,
+					FString::Printf(TEXT("Reroll used %d/%d."), GetRerollCount(PlayerState), EffectiveRerollLimit));
+			}
+			else
+			{
+				Result = MakeCommandResult(
+					PlayerState,
+					EGambitRoundCommandStatus::Failed,
+					false,
+					TEXT("Reroll refused: unlocked dice could not be rerolled."));
+			}
 		}
 	}
 
 	const int32 UsedAfter = GetRerollCount(PlayerState);
-	if (bSuccess && PlayerState)
+	Result.RerollsUsed = UsedAfter;
+	Result.RerollLimit = EffectiveRerollLimit;
+	if (Result.bSuccess && PlayerState)
 	{
 		PlayerState->AddRoundEvent(MakeRoundFlowEvent(
 			GameState,
@@ -612,9 +742,9 @@ bool UGambitRoundFlowComponent::RequestReroll(AGambitPlayerState* PlayerState)
 		*RoundFlowPhaseToString(CurrentPhase),
 		UsedAfter,
 		EffectiveRerollLimit,
-		bSuccess ? TEXT("Success") : TEXT("Failure"),
+		Result.bSuccess ? TEXT("Success") : TEXT("Failure"),
 		*DiceString);
-	return bSuccess;
+	return Result;
 }
 
 bool UGambitRoundFlowComponent::RequestUseConsumable(AGambitPlayerState* PlayerState, const int32 SlotIndex)
@@ -1615,10 +1745,55 @@ int32 UGambitRoundFlowComponent::ComputeBaseGoldReward(const AGambitPlayerState*
 	return UGambitGameBalanceSettings::Get()->GetRoundGoldRewardFromScore(Score);
 }
 
+FGambitRoundCommandResult UGambitRoundFlowComponent::MakeCommandResult(
+	AGambitPlayerState* PlayerState,
+	const EGambitRoundCommandStatus Status,
+	const bool bSuccess,
+	const FString& Message,
+	const int32 DieIndex) const
+{
+	const AGambitGameState* GameState = GetGambitGameState();
+	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
+
+	FGambitRoundCommandResult Result;
+	Result.bSuccess = bSuccess;
+	Result.Status = Status;
+	Result.Phase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	Result.PlayerIndex = Players.IndexOfByKey(PlayerState);
+	Result.DieIndex = DieIndex;
+	Result.RerollsUsed = GetRerollCount(PlayerState);
+	Result.RerollLimit = GetEffectiveRerollLimit(PlayerState);
+	Result.Message = Message;
+	return Result;
+}
+
+bool UGambitRoundFlowComponent::HasUnlockedRerollableDice(const AGambitPlayerState* PlayerState) const
+{
+	if (!PlayerState)
+	{
+		return false;
+	}
+
+	for (const FGambitDieRuntimeState& DieState : PlayerState->GetDiceStatesRef())
+	{
+		if (!DieState.bLocked && DieState.bCanBeRerolled)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 AGambitGameState* UGambitRoundFlowComponent::GetGambitGameState() const
 {
 	const AGameModeBase* GameMode = Cast<AGameModeBase>(GetOwner());
-	return GameMode ? GameMode->GetGameState<AGambitGameState>() : nullptr;
+	if (GameMode)
+	{
+		return GameMode->GetGameState<AGambitGameState>();
+	}
+
+	return GetTypedOuter<AGambitGameState>();
 }
 
 TArray<AGambitPlayerState*> UGambitRoundFlowComponent::GetAllPlayers() const

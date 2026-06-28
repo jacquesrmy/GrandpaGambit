@@ -56,7 +56,13 @@ public:
 	bool RequestSetDieLocked(AGambitPlayerState* PlayerState, int32 DieIndex, bool bLocked);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
+	FGambitRoundCommandResult RequestSetDieLockedDetailed(AGambitPlayerState* PlayerState, int32 DieIndex, bool bLocked);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	bool RequestReroll(AGambitPlayerState* PlayerState);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
+	FGambitRoundCommandResult RequestRerollDetailed(AGambitPlayerState* PlayerState);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	bool RequestUseConsumable(AGambitPlayerState* PlayerState, int32 SlotIndex);

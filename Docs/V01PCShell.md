@@ -12,19 +12,22 @@ This pass adds the first minimal PC keyboard/mouse shell for a local match.
    - adjust the round count
    - continue to the lobby/table setup
    - start the match
-4. During the match, the shell shows the current round, phase, player VP, score, gold, dice values, and shop offers.
-5. Use `Continue Phase` to mark all players ready during the current ready-gated phase:
+4. During the match, the shell shows the current round, phase, player VP, score, gold, dice values, rerolls used/remaining, and shop offers.
+5. During `Selection / Reroll`, click dice to lock/unlock them and use `Reroll Unlocked` per player.
+6. Use `Continue Phase` to mark all players ready during the current ready-gated phase:
    - Selection / Reroll
    - Action
    - Shop
-6. When the configured final round ends, the shell shows the final ranking and winner.
+7. When the configured final round ends, the shell shows the final ranking and winner.
+
+See `Docs/V01RoundHUD.md` for the Roll / Lock / Reroll HUD contract and manual test path.
 
 ## Ownership
 
 - `AGambitGameMode` owns shell commands and match start/reset orchestration.
 - `AGambitGameState` owns visible lifecycle state, selected setup, current phase/round, and final ranking snapshots.
-- `UGambitRoundFlowComponent` owns round progression and final ranking generation.
-- `UGambitPCShellWidget` only displays state and sends commands.
+- `UGambitRoundFlowComponent` owns round progression, lock/reroll validation, reroll counters, and final ranking generation.
+- `UGambitPCShellWidget` only displays state, sends commands, and shows command feedback.
 
 ## Launch map
 
@@ -32,7 +35,8 @@ This pass adds the first minimal PC keyboard/mouse shell for a local match.
 
 ## Current limits
 
-- This is not the final dice/action/shop HUD.
+- This is not the final action/shop HUD.
+- Dice lock/reroll is playable but layout is not final presentation.
 - No gamepad/controller navigation was added.
 - No real multi-target UI was added.
 - No B6/B7/B8/B9 objects or DataAssets were added.
