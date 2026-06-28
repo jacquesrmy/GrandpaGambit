@@ -39,6 +39,36 @@ void AGambitGameState::SetRoundRankingSnapshot(const TArray<FGambitRankingEntry>
 	OnRankingUpdated.Broadcast();
 }
 
+void AGambitGameState::SetMatchLifecycleState(const EGambitMatchLifecycleState NewState)
+{
+	if (MatchLifecycleState == NewState)
+	{
+		return;
+	}
+
+	const EGambitMatchLifecycleState OldState = MatchLifecycleState;
+	MatchLifecycleState = NewState;
+	OnMatchLifecycleChanged.Broadcast(OldState, MatchLifecycleState);
+}
+
+void AGambitGameState::SetMatchSetupConfig(const FGambitMatchSetupConfig& NewSetup)
+{
+	if (MatchSetupConfig.LocalPlayerCount == NewSetup.LocalPlayerCount
+		&& MatchSetupConfig.RoundCount == NewSetup.RoundCount)
+	{
+		return;
+	}
+
+	MatchSetupConfig = NewSetup;
+	OnMatchSetupChanged.Broadcast(MatchSetupConfig);
+}
+
+void AGambitGameState::SetFinalRankingSnapshot(const TArray<FGambitFinalRankingEntry>& NewFinalRanking)
+{
+	FinalRankingSnapshot = NewFinalRanking;
+	OnFinalRankingUpdated.Broadcast();
+}
+
 TArray<AGambitPlayerState*> AGambitGameState::GetGambitPlayerStates() const
 {
 	TArray<AGambitPlayerState*> Result;

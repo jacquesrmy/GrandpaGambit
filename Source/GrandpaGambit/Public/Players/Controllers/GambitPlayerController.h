@@ -8,6 +8,7 @@
 class AGambitGameMode;
 class AGambitPlayerState;
 class UInputAction;
+class UGambitPCShellWidget;
 class UGambitDevMatchSandboxComponent;
 class UGambitMatchDebugComponent;
 class UGambitLocalMultiplayerSubsystem;
@@ -210,6 +211,7 @@ protected:
 	void HandleLockDie6Input(const FInputActionValue& Value);
 
 private:
+	void InitializePCShellWidget();
 	UInputAction* ResolveInputAction(UInputAction* PreferredAction, EGambitCoreInputAction FallbackAction) const;
 	void ToggleDieLockByIndex(int32 DieIndex);
 	const FGambitTargetSelectionOption* FindPendingTargetSelectionOption(int32 OptionId) const;
@@ -278,6 +280,12 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|Local Multiplayer Input", meta = (AllowPrivateAccess = "true"))
 	bool bOnlyPrimaryLocalPlayerCanManageRoster = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|PC Shell", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<UGambitPCShellWidget> PCShellWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UGambitPCShellWidget> PCShellWidget = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Gameplay Input", meta = (AllowPrivateAccess = "true"))
 	bool bReadyState = false;

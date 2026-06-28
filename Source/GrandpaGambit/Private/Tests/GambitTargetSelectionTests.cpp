@@ -95,7 +95,7 @@ namespace
 		return Context;
 	}
 
-	int32 CountRoundEvents(
+	int32 CountTargetSelectionRoundEvents(
 		const FGambitEffectExecutionContext& Context,
 		const EGambitRoundGameplayEventType EventType)
 	{
@@ -284,9 +284,9 @@ bool FGambitTargetSelectionAppliesAndReportsFeedbackTest::RunTest(const FString&
 	Resolver->ExecuteItemEffects(ConsumableDefinition, AppliedContext);
 	TestEqual(TEXT("confirmed target loses gold"), TargetPlayer->GetEconomyComponent()->GetCurrentGold(), 6);
 	TestEqual(TEXT("source gains stolen gold"), SourcePlayer->GetEconomyComponent()->GetCurrentGold(), 4);
-	TestTrue(TEXT("effect applied event is visible"), CountRoundEvents(AppliedContext, EGambitRoundGameplayEventType::EffectApplied) > 0);
-	TestTrue(TEXT("consumable used event is visible"), CountRoundEvents(AppliedContext, EGambitRoundGameplayEventType::ConsumableUsed) > 0);
-	TestTrue(TEXT("gold changed feedback is visible"), CountRoundEvents(AppliedContext, EGambitRoundGameplayEventType::GoldChanged) > 0);
+	TestTrue(TEXT("effect applied event is visible"), CountTargetSelectionRoundEvents(AppliedContext, EGambitRoundGameplayEventType::EffectApplied) > 0);
+	TestTrue(TEXT("consumable used event is visible"), CountTargetSelectionRoundEvents(AppliedContext, EGambitRoundGameplayEventType::ConsumableUsed) > 0);
+	TestTrue(TEXT("gold changed feedback is visible"), CountTargetSelectionRoundEvents(AppliedContext, EGambitRoundGameplayEventType::GoldChanged) > 0);
 
 	SourcePlayer->GetEconomyComponent()->InitializeForMatch();
 	TargetPlayer->GetEconomyComponent()->InitializeForMatch();
@@ -302,7 +302,7 @@ bool FGambitTargetSelectionAppliesAndReportsFeedbackTest::RunTest(const FString&
 	Resolver->ExecuteItemEffects(ConsumableDefinition, BlockedContext);
 	TestEqual(TEXT("blocked target keeps gold"), TargetPlayer->GetEconomyComponent()->GetCurrentGold(), 10);
 	TestEqual(TEXT("blocked source does not gain gold"), SourcePlayer->GetEconomyComponent()->GetCurrentGold(), 0);
-	TestTrue(TEXT("prevented feedback event is visible"), CountRoundEvents(BlockedContext, EGambitRoundGameplayEventType::EffectPrevented) > 0);
+	TestTrue(TEXT("prevented feedback event is visible"), CountTargetSelectionRoundEvents(BlockedContext, EGambitRoundGameplayEventType::EffectPrevented) > 0);
 	TestTrue(TEXT("prevented debug event is visible"), BlockedContext.DebugEffectEvents.ContainsByPredicate([](const FGambitDebugEffectEvent& Event)
 	{
 		return Event.bPrevented;

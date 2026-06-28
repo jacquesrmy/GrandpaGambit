@@ -24,6 +24,16 @@ enum class EGambitRoundPhase : uint8
 };
 
 UENUM(BlueprintType)
+enum class EGambitMatchLifecycleState : uint8
+{
+	MainMenu UMETA(DisplayName = "Main Menu"),
+	MatchSetup UMETA(DisplayName = "Match Setup"),
+	Lobby UMETA(DisplayName = "Lobby"),
+	InMatch UMETA(DisplayName = "In Match"),
+	MatchComplete UMETA(DisplayName = "Match Complete")
+};
+
+UENUM(BlueprintType)
 enum class EGambitItemRarity : uint8
 {
 	Common,
@@ -316,6 +326,45 @@ struct FGambitRankingEntry
 
 	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
 	int32 VictoryPointsGranted = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FGambitFinalRankingEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	int32 Rank = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	TObjectPtr<APlayerState> PlayerState = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	FString PlayerName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	int32 TotalVictoryPoints = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	int32 LastRoundScore = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	int32 Gold = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Ranking")
+	bool bWinner = false;
+};
+
+USTRUCT(BlueprintType)
+struct FGambitMatchSetupConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Match Setup")
+	int32 LocalPlayerCount = 2;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Match Setup")
+	int32 RoundCount = 8;
 };
 
 USTRUCT(BlueprintType)

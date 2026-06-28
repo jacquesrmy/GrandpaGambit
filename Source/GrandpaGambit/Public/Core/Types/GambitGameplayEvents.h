@@ -11,4 +11,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGambitRoundChanged, int32, NewRou
 UDELEGATE()
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnGambitRankingUpdated);
 UDELEGATE()
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnGambitMatchLifecycleChanged, EGambitMatchLifecycleState, OldState, EGambitMatchLifecycleState, NewState);
+UDELEGATE()
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGambitMatchSetupChanged, FGambitMatchSetupConfig, NewSetup);
+UDELEGATE()
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnGambitFinalRankingUpdated);
+UDELEGATE()
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGambitRoundFlowPhaseEntered, EGambitRoundPhase, EnteredPhase);

@@ -410,6 +410,9 @@ UGambitRoundFlowComponent::UGambitRoundFlowComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 	DiceEvaluatorClass = UGambitDiceCombinationEvaluator::StaticClass();
 	ScoreCalculatorClass = UGambitScoreCalculator::StaticClass();
+	const UGambitGameBalanceSettings* Settings = UGambitGameBalanceSettings::Get();
+	ActiveMatchSetup.LocalPlayerCount = Settings->MinLocalPlayers;
+	ActiveMatchSetup.RoundCount = Settings->RoundCount;
 }
 
 void UGambitRoundFlowComponent::BeginPlay()
@@ -441,6 +444,13 @@ void UGambitRoundFlowComponent::BeginPlay()
 	}
 }
 
+void UGambitRoundFlowComponent::ApplyMatchSetup(const FGambitMatchSetupConfig& NewMatchSetup)
+{
+	const UGambitGameBalanceSettings* Settings = UGambitGameBalanceSettings::Get();
+	ActiveMatchSetup.LocalPlayerCount = Settings->ClampLocalPlayerCount(NewMatchSetup.LocalPlayerCount);
+	ActiveMatchSetup.RoundCount = FMath::Max(1, NewMatchSetup.RoundCount);
+}
+
 void UGambitRoundFlowComponent::StartMatchFlow()
 {
 	AGambitGameState* GameState = GetGambitGameState();
@@ -452,18 +462,28 @@ void UGambitRoundFlowComponent::StartMatchFlow()
 
 	const UGambitGameBalanceSettings* Settings = UGambitGameBalanceSettings::Get();
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
+	if (ActiveMatchSetup.RoundCount <= 0)
+	{
+		ActiveMatchSetup.RoundCount = Settings->RoundCount;
+	}
+	if (ActiveMatchSetup.LocalPlayerCount <= 0)
+	{
+		ActiveMatchSetup.LocalPlayerCount = Settings->ClampLocalPlayerCount(Players.Num());
+	}
 	UE_LOG(
 		LogGambit,
 		Log,
 		TEXT("RoundFlow: StartMatchFlow Players=%d RoundCount=%d DefaultDiceCount=%d MaxRerolls=%d ShopOfferCount=%d"),
 		Players.Num(),
-		Settings->RoundCount,
+		ActiveMatchSetup.RoundCount,
 		Settings->DefaultActiveDiceCount,
 		Settings->MaxRerollsPerRound,
 		Settings->ShopOfferCount);
 
 	GameState->SetCurrentRoundIndex(0);
 	GameState->SetCurrentPhase(EGambitRoundPhase::None);
+	GameState->SetMatchSetupConfig(ActiveMatchSetup);
+	GameState->SetFinalRankingSnapshot({});
 
 	for (AGambitPlayerState* PlayerState : Players)
 	{
@@ -857,6 +877,11 @@ int32 UGambitRoundFlowComponent::GetMaxRerollsForPlayer(AGambitPlayerState* Play
 	return GetEffectiveRerollLimit(PlayerState);
 }
 
+int32 UGambitRoundFlowComponent::GetActiveRoundCount() const
+{
+	return FMath::Max(1, ActiveMatchSetup.RoundCount);
+}
+
 bool UGambitRoundFlowComponent::TransitionToPhase(const EGambitRoundPhase NewPhase)
 {
 	AGambitGameState* GameState = GetGambitGameState();
@@ -1197,7 +1222,7 @@ void UGambitRoundFlowComponent::EnterShopPhase()
 void UGambitRoundFlowComponent::EnterRoundEndPhase()
 {
 	UE_LOG(LogGambit, Log, TEXT("RoundFlow: EnterRoundEndPhase"));
-	const AGambitGameState* GameState = GetGambitGameState();
+	AGambitGameState* GameState = GetGambitGameState();
 	if (!GameState)
 	{
 		return;
@@ -1223,37 +1248,34 @@ void UGambitRoundFlowComponent::EnterRoundEndPhase()
 		}
 	}
 
-	const UGambitGameBalanceSettings* Settings = UGambitGameBalanceSettings::Get();
-	if (GameState->GetCurrentRoundIndex() >= Settings->RoundCount)
+	const int32 RoundCount = GetActiveRoundCount();
+	if (GameState->GetCurrentRoundIndex() >= RoundCount)
 	{
-		TArray<AGambitPlayerState*> FinalRanking = Players;
-		FinalRanking.Sort([](const AGambitPlayerState& A, const AGambitPlayerState& B)
-		{
-			if (A.GetTotalVictoryPoints() == B.GetTotalVictoryPoints())
-			{
-				return A.GetCurrentRoundScore() > B.GetCurrentRoundScore();
-			}
+		const TArray<FGambitFinalRankingEntry> FinalRanking = BuildFinalRankingSnapshot(Players);
+		GameState->SetFinalRankingSnapshot(FinalRanking);
+		GameState->SetMatchLifecycleState(EGambitMatchLifecycleState::MatchComplete);
 
-			return A.GetTotalVictoryPoints() > B.GetTotalVictoryPoints();
-		});
-
-		if (FinalRanking.Num() > 0 && FinalRanking[0])
+		if (FinalRanking.Num() > 0)
 		{
-			UE_LOG(LogGambit, Log, TEXT("RoundFlow: Match complete. Winner=%s VP=%d"), *BuildRoundFlowPlayerLabel(FinalRanking[0], Players), FinalRanking[0]->GetTotalVictoryPoints());
+			UE_LOG(
+				LogGambit,
+				Log,
+				TEXT("RoundFlow: Match complete. Winner=%s VP=%d"),
+				*FinalRanking[0].PlayerName,
+				FinalRanking[0].TotalVictoryPoints);
 		}
 
-		for (int32 Index = 0; Index < FinalRanking.Num(); ++Index)
+		for (const FGambitFinalRankingEntry& Entry : FinalRanking)
 		{
-			const AGambitPlayerState* PlayerState = FinalRanking[Index];
 			UE_LOG(
 				LogGambit,
 				Log,
 				TEXT("RoundFlow: FinalRank=%d Player=%s TotalVP=%d LastRoundScore=%d Gold=%d"),
-				Index + 1,
-				*BuildRoundFlowPlayerLabel(PlayerState, Players),
-				PlayerState ? PlayerState->GetTotalVictoryPoints() : 0,
-				PlayerState ? PlayerState->GetCurrentRoundScore() : 0,
-				PlayerState ? PlayerState->GetCurrentGold() : 0);
+				Entry.Rank,
+				*Entry.PlayerName,
+				Entry.TotalVictoryPoints,
+				Entry.LastRoundScore,
+				Entry.Gold);
 		}
 
 		TransitionToPhase(EGambitRoundPhase::None);
@@ -1265,8 +1287,51 @@ void UGambitRoundFlowComponent::EnterRoundEndPhase()
 		Log,
 		TEXT("RoundFlow: Preparing next round %d of %d"),
 		GameState->GetCurrentRoundIndex() + 1,
-		Settings->RoundCount);
+		RoundCount);
 	StartNextRound();
+}
+
+TArray<FGambitFinalRankingEntry> UGambitRoundFlowComponent::BuildFinalRankingSnapshot(
+	const TArray<AGambitPlayerState*>& Players) const
+{
+	TArray<AGambitPlayerState*> SortedPlayers = Players;
+	SortedPlayers.Sort([](const AGambitPlayerState& A, const AGambitPlayerState& B)
+	{
+		if (A.GetTotalVictoryPoints() == B.GetTotalVictoryPoints())
+		{
+			if (A.GetCurrentRoundScore() == B.GetCurrentRoundScore())
+			{
+				return A.GetPlayerId() < B.GetPlayerId();
+			}
+
+			return A.GetCurrentRoundScore() > B.GetCurrentRoundScore();
+		}
+
+		return A.GetTotalVictoryPoints() > B.GetTotalVictoryPoints();
+	});
+
+	TArray<FGambitFinalRankingEntry> FinalRanking;
+	FinalRanking.Reserve(SortedPlayers.Num());
+	for (int32 Index = 0; Index < SortedPlayers.Num(); ++Index)
+	{
+		const AGambitPlayerState* PlayerState = SortedPlayers[Index];
+		if (!PlayerState)
+		{
+			continue;
+		}
+
+		FGambitFinalRankingEntry Entry;
+		Entry.Rank = FinalRanking.Num() + 1;
+		Entry.PlayerState = const_cast<AGambitPlayerState*>(PlayerState);
+		Entry.PlayerName = BuildRoundFlowPlayerLabel(PlayerState, Players);
+		Entry.TotalVictoryPoints = PlayerState->GetTotalVictoryPoints();
+		Entry.LastRoundScore = PlayerState->GetCurrentRoundScore();
+		Entry.Gold = PlayerState->GetCurrentGold();
+		Entry.bWinner = FinalRanking.Num() == 0;
+		FinalRanking.Add(Entry);
+	}
+
+	return FinalRanking;
 }
 
 void UGambitRoundFlowComponent::AdvanceWhenAllPlayersReady()

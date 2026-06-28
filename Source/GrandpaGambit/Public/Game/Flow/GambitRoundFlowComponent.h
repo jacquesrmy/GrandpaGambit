@@ -32,6 +32,9 @@ public:
 	void StartMatchFlow();
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
+	void ApplyMatchSetup(const FGambitMatchSetupConfig& NewMatchSetup);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
 	void SetPlayerReady(AGambitPlayerState* PlayerState, bool bReady);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
@@ -73,6 +76,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
 	int32 GetMaxRerollsForPlayer(AGambitPlayerState* PlayerState) const;
 
+	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
+	FGambitMatchSetupConfig GetActiveMatchSetup() const { return ActiveMatchSetup; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
+	int32 GetActiveRoundCount() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|Round Flow")
 	FOnGambitRoundFlowPhaseEntered OnPhaseEntered;
 
@@ -93,6 +102,7 @@ private:
 	void EnterShopPhase();
 	void EnterRoundEndPhase();
 
+	TArray<FGambitFinalRankingEntry> BuildFinalRankingSnapshot(const TArray<AGambitPlayerState*>& Players) const;
 	void AdvanceWhenAllPlayersReady();
 	bool AreAllPlayersReady() const;
 	void ResetReadiness();
@@ -146,6 +156,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Gambit|Round Flow")
 	FRandomStream MatchRandomStream;
+
+	UPROPERTY(VisibleAnywhere, Category = "Gambit|Round Flow")
+	FGambitMatchSetupConfig ActiveMatchSetup;
 
 	UPROPERTY(VisibleAnywhere, Category = "Gambit|Round Flow")
 	TMap<TObjectPtr<AGambitPlayerState>, bool> PlayerReadyMap;

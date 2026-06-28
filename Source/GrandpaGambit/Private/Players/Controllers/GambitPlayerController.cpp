@@ -15,6 +15,7 @@
 #include "Items/Data/GambitItemDefinition.h"
 #include "Players/States/GambitPlayerState.h"
 #include "Players/Subsystems/GambitLocalMultiplayerSubsystem.h"
+#include "UI/Widgets/GambitPCShellWidget.h"
 
 namespace
 {
@@ -46,6 +47,8 @@ void AGambitPlayerController::BeginPlay()
 		{
 			LocalMultiplayer->RefreshInputMappings();
 		}
+
+		InitializePCShellWidget();
 	}
 }
 
@@ -904,6 +907,31 @@ UInputAction* AGambitPlayerController::ResolveInputAction(UInputAction* Preferre
 
 	const UGambitLocalMultiplayerSubsystem* LocalSubsystem = GetLocalMultiplayerSubsystem();
 	return LocalSubsystem ? LocalSubsystem->GetCoreInputAction(FallbackAction) : nullptr;
+}
+
+void AGambitPlayerController::InitializePCShellWidget()
+{
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	if (!LocalPlayer || LocalPlayer->GetLocalPlayerIndex() != 0 || PCShellWidget)
+	{
+		return;
+	}
+
+	TSubclassOf<UGambitPCShellWidget> WidgetClass = PCShellWidgetClass;
+	if (!WidgetClass)
+	{
+		WidgetClass = UGambitPCShellWidget::StaticClass();
+	}
+
+	PCShellWidget = CreateWidget<UGambitPCShellWidget>(this, WidgetClass);
+	if (!PCShellWidget)
+	{
+		return;
+	}
+
+	PCShellWidget->AddToViewport(100);
+	bShowMouseCursor = true;
+	SetInputMode(FInputModeGameAndUI());
 }
 
 void AGambitPlayerController::ToggleDieLockByIndex(const int32 DieIndex)

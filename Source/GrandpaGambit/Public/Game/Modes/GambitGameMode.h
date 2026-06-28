@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
+#include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitTargetSelectionTypes.h"
 #include "GambitGameMode.generated.h"
 
@@ -26,6 +27,27 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	void RestartMatchFlow();
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	void RequestMainMenu();
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	void RequestOpenMatchSetup();
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	bool RequestConfigureMatch(int32 LocalPlayerCount, int32 RoundCount);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	bool RequestEnterLobby();
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	bool RequestStartConfiguredMatch();
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	bool RequestReadyAllPlayersForCurrentPhase();
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode|PC Shell")
+	FGambitMatchSetupConfig GetPendingMatchSetup() const { return PendingMatchSetup; }
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	void SetPlayerReady(AGambitPlayerState* PlayerState, bool bReady);
@@ -73,6 +95,11 @@ public:
 	UGambitDevMatchSandboxComponent* GetDevMatchSandboxComponent() const { return DevMatchSandboxComponent; }
 
 private:
+	FGambitMatchSetupConfig BuildDefaultMatchSetup() const;
+	FGambitMatchSetupConfig BuildClampedMatchSetup(int32 LocalPlayerCount, int32 RoundCount) const;
+	void PublishMatchSetup() const;
+	void StartMatchWithSetup(const FGambitMatchSetupConfig& MatchSetup, bool bForceRestart);
+	void ResetMatchShellState(EGambitMatchLifecycleState NewState);
 	void InitializePlayerForMatch(APlayerController* PlayerController) const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode", meta = (AllowPrivateAccess = "true"))
@@ -83,6 +110,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UGambitDevMatchSandboxComponent> DevMatchSandboxComponent;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|GameMode|PC Shell", meta = (AllowPrivateAccess = "true"))
+	bool bAutoStartMatchOnBeginPlay = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode|PC Shell", meta = (AllowPrivateAccess = "true"))
+	FGambitMatchSetupConfig PendingMatchSetup;
 
 	bool bMatchFlowStarted = false;
 };

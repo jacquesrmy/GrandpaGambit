@@ -27,6 +27,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameState")
 	void SetRoundRankingSnapshot(const TArray<FGambitRankingEntry>& NewRanking);
 
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameState")
+	void SetMatchLifecycleState(EGambitMatchLifecycleState NewState);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameState")
+	void SetMatchSetupConfig(const FGambitMatchSetupConfig& NewSetup);
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameState")
+	void SetFinalRankingSnapshot(const TArray<FGambitFinalRankingEntry>& NewFinalRanking);
+
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameState")
 	EGambitRoundPhase GetCurrentPhase() const { return CurrentPhase; }
 
@@ -34,9 +43,20 @@ public:
 	int32 GetCurrentRoundIndex() const { return CurrentRoundIndex; }
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameState")
+	EGambitMatchLifecycleState GetMatchLifecycleState() const { return MatchLifecycleState; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|GameState")
+	FGambitMatchSetupConfig GetMatchSetupConfig() const { return MatchSetupConfig; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|GameState")
 	TArray<FGambitRankingEntry> GetRoundRankingSnapshot() const { return RoundRankingSnapshot; }
 
 	const TArray<FGambitRankingEntry>& GetRoundRankingSnapshotRef() const { return RoundRankingSnapshot; }
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|GameState")
+	TArray<FGambitFinalRankingEntry> GetFinalRankingSnapshot() const { return FinalRankingSnapshot; }
+
+	const TArray<FGambitFinalRankingEntry>& GetFinalRankingSnapshotRef() const { return FinalRankingSnapshot; }
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameState")
 	UGambitSharedPoolComponent* GetSharedPoolComponent() const { return SharedPoolComponent; }
@@ -56,6 +76,15 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|GameState")
 	FOnGambitRankingUpdated OnRankingUpdated;
 
+	UPROPERTY(BlueprintAssignable, Category = "Gambit|GameState")
+	FOnGambitMatchLifecycleChanged OnMatchLifecycleChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Gambit|GameState")
+	FOnGambitMatchSetupChanged OnMatchSetupChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Gambit|GameState")
+	FOnGambitFinalRankingUpdated OnFinalRankingUpdated;
+
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameState", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UGambitSharedPoolComponent> SharedPoolComponent;
@@ -71,4 +100,13 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameState", meta = (AllowPrivateAccess = "true"))
 	TArray<FGambitRankingEntry> RoundRankingSnapshot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameState", meta = (AllowPrivateAccess = "true"))
+	EGambitMatchLifecycleState MatchLifecycleState = EGambitMatchLifecycleState::MainMenu;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameState", meta = (AllowPrivateAccess = "true"))
+	FGambitMatchSetupConfig MatchSetupConfig;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameState", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitFinalRankingEntry> FinalRankingSnapshot;
 };
