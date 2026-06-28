@@ -214,6 +214,32 @@ namespace
 		ScoreBreakdown.FinalScore = static_cast<float>(Score);
 		Player->ApplyRoundScore(ScoreBreakdown);
 	}
+
+	template <typename AssetType>
+	AssetType* LoadGambitTestAsset(const TCHAR* ObjectPath)
+	{
+		return LoadObject<AssetType>(nullptr, ObjectPath);
+	}
+
+	UGambitItemEffectDefinition* MakeNegativeEffectDefinition(
+		UObject* Outer,
+		const TCHAR* EffectId,
+		const EGambitEffectHook Hook,
+		const EGambitItemEffectType EffectType,
+		const EGambitEffectTarget Target,
+		const float Amount,
+		const TArray<EGambitNegativeEffectCategory>& NegativeCategories,
+		const FName TargetRuleId = NAME_None)
+	{
+		UGambitItemEffectDefinition* EffectDefinition = MakeEffectDefinition(Outer, Hook, EffectType);
+		EffectDefinition->EffectId = FName(EffectId);
+		EffectDefinition->Target = Target;
+		EffectDefinition->TargetRuleId = TargetRuleId;
+		EffectDefinition->Amount = Amount;
+		EffectDefinition->bNegativeEffect = true;
+		EffectDefinition->NegativeEffectCategories = NegativeCategories;
+		return EffectDefinition;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -1285,6 +1311,365 @@ bool FGambitNegativeEffectProtectionValidationTest::RunTest(const FString& Param
 		TEXT("non-defense with prevention filter warns"),
 		HasValidationIssue(NonDefenseIssues, EGambitDataValidationSeverity::Warning, TEXT("not a PreventNegativeEffect defense")));
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitB61DataAssetsNegativeDefensesTest,
+	"GrandpaGambit.B6.DataAssets.NegativeDefenses",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitB61DataAssetsNegativeDefensesTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+
+	UGambitModuleDefinition* Shield = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Defense_Shield.DA_Item_Module_Defense_Shield"));
+	UGambitModuleDefinition* Safe = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Defense_Safe.DA_Item_Module_Defense_Safe"));
+	UGambitModuleDefinition* StableTable = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Defense_StableTable.DA_Item_Module_Defense_StableTable"));
+	UGambitModuleDefinition* RareProtection = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Defense_RareProtection.DA_Item_Module_Defense_RareProtection"));
+	UGambitModuleDefinition* Composure = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Competitive_Composure.DA_Item_Module_Competitive_Composure"));
+	UGambitModuleDefinition* Calm = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Defense_Calm.DA_Item_Module_Defense_Calm"));
+
+	if (!TestNotNull(TEXT("B6.1 shield asset exists"), Shield)
+		|| !TestNotNull(TEXT("B6.1 safe asset exists"), Safe)
+		|| !TestNotNull(TEXT("B6.1 stable table asset exists"), StableTable)
+		|| !TestNotNull(TEXT("B6.1 rare protection asset exists"), RareProtection)
+		|| !TestNotNull(TEXT("B6.1 composure asset exists"), Composure)
+		|| !TestNotNull(TEXT("B6.1 calm asset exists"), Calm))
+	{
+		return false;
+	}
+
+	TestTrue(TEXT("shield uses one full global block"), Shield->EffectDefinitions.IsValidIndex(0)
+		&& Shield->EffectDefinitions[0]->EffectType == EGambitItemEffectType::PreventNegativeEffect
+		&& Shield->EffectDefinitions[0]->PreventedNegativeEffectCategories.Num() == 0
+		&& Shield->EffectDefinitions[0]->PreventNegativeEffectBlockCount == 1);
+	TestTrue(TEXT("safe blocks gold steal and gold loss"), Safe->EffectDefinitions.IsValidIndex(0)
+		&& Safe->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::GoldSteal)
+		&& Safe->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::GoldLoss));
+	TestTrue(TEXT("stable table blocks lock and forced reroll categories"), StableTable->EffectDefinitions.IsValidIndex(0)
+		&& StableTable->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::LockModification)
+		&& StableTable->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::ForcedReroll));
+	TestTrue(TEXT("rare protection blocks all die removal categories without rarity filter"), RareProtection->EffectDefinitions.IsValidIndex(0)
+		&& RareProtection->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::DieDestroyOrRemove));
+	TestTrue(TEXT("composure blocks score penalty and steal"), Composure->EffectDefinitions.IsValidIndex(0)
+		&& Composure->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::ScorePenalty)
+		&& Composure->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::ScoreSteal));
+	TestTrue(TEXT("calm blocks die value reduction"), Calm->EffectDefinitions.IsValidIndex(0)
+		&& Calm->EffectDefinitions[0]->PreventedNegativeEffectCategories.Contains(EGambitNegativeEffectCategory::DieValueReduction));
+
+	{
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::RoundStart;
+		Context.CurrentPhase = EGambitRoundPhase::Roll;
+		Context.RoundNumber = 6;
+		TestEqual(TEXT("shield defense effect applies"), Resolver->ExecuteItemEffects(Shield, Context), 1);
+
+		UGambitItemEffectDefinition* FirstPenalty = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.shield.first_penalty"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::AddTemporaryScoreModifier,
+			EGambitEffectTarget::Source,
+			-10.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::ScorePenalty }));
+		TestFalse(TEXT("shield blocks the first negative effect fully"), Resolver->ExecuteEffectDefinition(FirstPenalty, Context));
+		TestEqual(TEXT("shield writes one prevented event"), CountRoundEvents(Context, EGambitRoundGameplayEventType::EffectPrevented), 1);
+		TestTrue(TEXT("shield prevented event is readable"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::EffectPrevented
+				&& Event.Outcome == EGambitRoundGameplayEventOutcome::Prevented
+				&& Event.NegativeCategoryIds.Contains(FName(TEXT("ScorePenalty")))
+				&& Event.Reason.Contains(TEXT("prevented by"));
+		}));
+
+		UGambitItemEffectDefinition* SecondPenalty = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.shield.second_penalty"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::AddTemporaryScoreModifier,
+			EGambitEffectTarget::Source,
+			-10.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::ScorePenalty }));
+		TestTrue(TEXT("shield single block is consumed before second negative"), Resolver->ExecuteEffectDefinition(SecondPenalty, Context));
+		TestEqual(TEXT("second penalty applies after shield charge is consumed"), Context.TemporaryScoreModifierDelta.AdditiveBonus, -10.0f);
+		TestTrue(TEXT("applied event ledger keeps a readable reason"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::EffectApplied
+				&& Event.Outcome == EGambitRoundGameplayEventOutcome::Applied
+				&& !Event.Reason.IsEmpty();
+		}));
+	}
+
+	{
+		FGambitGoldStealProtectionTestContext Context = MakeGoldStealProtectionTestContext();
+		Context.EffectContext.Hook = EGambitEffectHook::RoundStart;
+		TestEqual(TEXT("safe defense effect applies"), Resolver->ExecuteItemEffects(Safe, Context.EffectContext), 1);
+
+		UGambitItemEffectDefinition* GoldSteal = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.gold_steal"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::StealGold,
+			EGambitEffectTarget::Target,
+			4.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::GoldSteal }));
+		TestFalse(TEXT("safe blocks GoldSteal"), Resolver->ExecuteEffectDefinition(GoldSteal, Context.EffectContext));
+
+		UGambitItemEffectDefinition* GoldLoss = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.gold_loss"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::SpendGold,
+			EGambitEffectTarget::Target,
+			3.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::GoldLoss }));
+		TestFalse(TEXT("safe blocks GoldLoss"), Resolver->ExecuteEffectDefinition(GoldLoss, Context.EffectContext));
+		TestEqual(TEXT("safe leaves target gold unchanged after blocked gold harm"), Context.TargetEconomy->GetCurrentGold(), Context.TargetGoldBefore);
+		TestEqual(TEXT("safe records two prevented gold events"), CountRoundEvents(Context.EffectContext, EGambitRoundGameplayEventType::EffectPrevented), 2);
+	}
+
+	{
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::RoundStart;
+		TestEqual(TEXT("composure defense effect applies"), Resolver->ExecuteItemEffects(Composure, Context), 1);
+
+		UGambitItemEffectDefinition* ScorePenalty = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.score_penalty"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::AddTemporaryScoreModifier,
+			EGambitEffectTarget::Target,
+			-20.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::ScorePenalty }));
+		TestFalse(TEXT("composure blocks ScorePenalty"), Resolver->ExecuteEffectDefinition(ScorePenalty, Context));
+
+		UGambitItemEffectDefinition* ScoreSteal = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.score_steal"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::StealScore,
+			EGambitEffectTarget::Target,
+			5.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::ScoreSteal }));
+		TestFalse(TEXT("composure blocks ScoreSteal"), Resolver->ExecuteEffectDefinition(ScoreSteal, Context));
+		TestEqual(TEXT("composure prevents both score harm categories"), CountRoundEvents(Context, EGambitRoundGameplayEventType::EffectPrevented), 2);
+	}
+
+	{
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::RoundStart;
+		Context.SourceDice.Add(MakeTestDie(5));
+		Context.SourceDieHandIndex = 0;
+		TestEqual(TEXT("calm defense effect applies"), Resolver->ExecuteItemEffects(Calm, Context), 1);
+
+		UGambitItemEffectDefinition* DieReduction = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.die_value_reduction"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::ModifyDieValue,
+			EGambitEffectTarget::Source,
+			-2.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::DieValueReduction }));
+		TestFalse(TEXT("calm blocks DieValueReduction"), Resolver->ExecuteEffectDefinition(DieReduction, Context));
+		TestEqual(TEXT("calm leaves die value unchanged"), Context.SourceDice[0].EffectiveValue, 5);
+	}
+
+	{
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::RoundStart;
+		Context.SourceDice.Add(MakeTestDie(6));
+		Context.SourceDieHandIndex = 0;
+		Context.RandomStream.Initialize(61);
+		TestEqual(TEXT("rare protection defense effect applies"), Resolver->ExecuteItemEffects(RareProtection, Context), 1);
+
+		UGambitItemEffectDefinition* DieRemoval = MakeNegativeEffectDefinition(
+			TestOuter,
+			TEXT("effect.test.b61.die_removal"),
+			EGambitEffectHook::RoundStart,
+			EGambitItemEffectType::DestroyOrRemoveDiceChance,
+			EGambitEffectTarget::Source,
+			100.0f,
+			TArray<EGambitNegativeEffectCategory>({ EGambitNegativeEffectCategory::DieDestroyOrRemove }));
+		TestFalse(TEXT("rare protection blocks DieDestroyOrRemove"), Resolver->ExecuteEffectDefinition(DieRemoval, Context));
+		TestEqual(TEXT("rare protection leaves dice untouched for any rarity"), Context.SourceDice.Num(), 1);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitB61DataAssetsTaxEffectsTest,
+	"GrandpaGambit.B6.DataAssets.TaxEffects",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitB61DataAssetsTaxEffectsTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UGambitEffectResolver* Resolver = NewObject<UGambitEffectResolver>();
+	UGambitConsumableDefinition* TaxAudit = LoadGambitTestAsset<UGambitConsumableDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Consumables/DA_Consumable_TaxAudit.DA_Consumable_TaxAudit"));
+	UGambitModuleDefinition* LuxuryTax = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Competitive_LuxuryTax.DA_Item_Module_Competitive_LuxuryTax"));
+	UGambitModuleDefinition* Safe = LoadGambitTestAsset<UGambitModuleDefinition>(
+		TEXT("/Game/GrandpaGambit/Data/Items/Modules/DA_Item_Module_Defense_Safe.DA_Item_Module_Defense_Safe"));
+
+	if (!TestNotNull(TEXT("B6.1 tax audit asset exists"), TaxAudit)
+		|| !TestNotNull(TEXT("B6.1 luxury tax asset exists"), LuxuryTax)
+		|| !TestNotNull(TEXT("B6.1 safe asset exists for tax defense"), Safe))
+	{
+		return false;
+	}
+
+	TestTrue(TEXT("tax audit is fixed single-target GoldLoss"), TaxAudit->EffectDefinitions.IsValidIndex(0)
+		&& TaxAudit->EffectDefinitions[0]->EffectType == EGambitItemEffectType::SpendGold
+		&& TaxAudit->EffectDefinitions[0]->Amount == 5.0f
+		&& TaxAudit->EffectDefinitions[0]->TargetRuleId == GambitEffectTargetRules::TargetOpponent
+		&& TaxAudit->EffectDefinitions[0]->NegativeEffectCategories.Contains(EGambitNegativeEffectCategory::GoldLoss));
+	TestTrue(TEXT("luxury tax uses fixed richest-player loss and source gain"), LuxuryTax->EffectDefinitions.Num() == 2
+		&& LuxuryTax->EffectDefinitions[0]->EffectType == EGambitItemEffectType::SpendGold
+		&& LuxuryTax->EffectDefinitions[0]->Amount == 2.0f
+		&& LuxuryTax->EffectDefinitions[0]->TargetRuleId == GambitEffectTargetRules::RichestPlayer
+		&& LuxuryTax->EffectDefinitions[0]->NegativeEffectCategories.Contains(EGambitNegativeEffectCategory::GoldLoss)
+		&& LuxuryTax->EffectDefinitions[1]->EffectType == EGambitItemEffectType::AddGold
+		&& LuxuryTax->EffectDefinitions[1]->Amount == 1.0f);
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("B6.1 tax test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	TArray<AGambitPlayerState*> Players = SpawnTestPlayers(TestWorld, 3);
+	if (!TestTrue(TEXT("B6.1 tax tests spawn three local players"), Players.Num() == 3))
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	for (AGambitPlayerState* Player : Players)
+	{
+		if (Player)
+		{
+			Player->InitializeForMatch();
+		}
+	}
+
+	{
+		Players[1]->AddGold(12);
+		const int32 SourceGoldBefore = Players[0]->GetCurrentGold();
+		const int32 TargetGoldBefore = Players[1]->GetCurrentGold();
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.CurrentPhase = EGambitRoundPhase::Action;
+		Context.RoundNumber = 6;
+		Context.SourcePlayer = Players[0];
+		Context.TargetPlayer = Players[1];
+		Context.SourceEconomyComponent = Players[0]->GetEconomyComponent();
+		Context.TargetEconomyComponent = Players[1]->GetEconomyComponent();
+
+		TestEqual(TEXT("tax audit applies one fixed spend effect"), Resolver->ExecuteItemEffects(TaxAudit, Context), 1);
+		TestEqual(TEXT("tax audit does not charge the source beyond item ownership"), Players[0]->GetCurrentGold(), SourceGoldBefore);
+		TestEqual(TEXT("tax audit removes exactly 5 target gold"), Players[1]->GetCurrentGold(), TargetGoldBefore - 5);
+		TestTrue(TEXT("tax audit gold ledger records fixed negative delta"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::GoldChanged
+				&& Event.EffectId == FName(TEXT("effect.consumable.tax_audit.target_loss"))
+				&& Event.TargetRuleId == GambitEffectTargetRules::TargetOpponent
+				&& FMath::IsNearlyEqual(Event.NumericDelta, -5.0f);
+		}));
+	}
+
+	{
+		Players[1]->InitializeForMatch();
+		Players[1]->AddGold(12);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::RoundStart;
+		Context.CurrentPhase = EGambitRoundPhase::Roll;
+		Context.RoundNumber = 6;
+		Context.SourcePlayer = Players[0];
+		Context.SourceEconomyComponent = Players[0]->GetEconomyComponent();
+
+		TestEqual(TEXT("target safe applies before tax audit"), Resolver->ExecuteItemEffects(Safe, Context), 1);
+		Context.Hook = EGambitEffectHook::ConsumableUse;
+		Context.CurrentPhase = EGambitRoundPhase::Action;
+		Context.SourcePlayer = Players[1];
+		Context.TargetPlayer = Players[0];
+		Context.SourceEconomyComponent = Players[1]->GetEconomyComponent();
+		Context.TargetEconomyComponent = Players[0]->GetEconomyComponent();
+		TestEqual(TEXT("tax audit effect is prevented by safe"), Resolver->ExecuteItemEffects(TaxAudit, Context), 0);
+		TestEqual(TEXT("safe prevents tax audit gold loss"), Players[0]->GetCurrentGold(), 0);
+		TestTrue(TEXT("tax audit prevention ledger carries GoldLoss"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::EffectPrevented
+				&& Event.EffectId == FName(TEXT("effect.consumable.tax_audit.target_loss"))
+				&& Event.NegativeCategoryIds.Contains(FName(TEXT("GoldLoss")));
+		}));
+	}
+
+	{
+		for (AGambitPlayerState* Player : Players)
+		{
+			Player->InitializeForMatch();
+		}
+		Players[0]->AddGold(5);
+		Players[1]->AddGold(12);
+		Players[2]->AddGold(8);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::Reward;
+		Context.CurrentPhase = EGambitRoundPhase::Reward;
+		Context.RoundNumber = 6;
+		Context.SourcePlayer = Players[0];
+		Context.SourceEconomyComponent = Players[0]->GetEconomyComponent();
+		AddMatchPlayers(Context, Players);
+
+		TestEqual(TEXT("luxury tax applies spend and source gain"), Resolver->ExecuteItemEffects(LuxuryTax, Context), 2);
+		TestEqual(TEXT("luxury tax removes fixed amount from richest player"), Players[1]->GetCurrentGold(), 10);
+		TestEqual(TEXT("luxury tax gives fixed amount to source"), Players[0]->GetCurrentGold(), 6);
+		TestEqual(TEXT("luxury tax writes two gold ledger entries"), CountRoundEvents(Context, EGambitRoundGameplayEventType::GoldChanged), 2);
+	}
+
+	{
+		for (AGambitPlayerState* Player : Players)
+		{
+			Player->InitializeForMatch();
+		}
+		Players[0]->AddGold(20);
+		Players[1]->AddGold(10);
+		Players[2]->AddGold(8);
+
+		FGambitEffectExecutionContext Context;
+		Context.Hook = EGambitEffectHook::Reward;
+		Context.CurrentPhase = EGambitRoundPhase::Reward;
+		Context.RoundNumber = 6;
+		Context.SourcePlayer = Players[0];
+		Context.SourceEconomyComponent = Players[0]->GetEconomyComponent();
+		AddMatchPlayers(Context, Players);
+
+		TestEqual(TEXT("luxury tax source-richest case still executes both fixed effects"), Resolver->ExecuteItemEffects(LuxuryTax, Context), 2);
+		TestEqual(TEXT("luxury tax source-richest net is fixed -1 gold"), Players[0]->GetCurrentGold(), 19);
+		TestTrue(TEXT("luxury tax source-richest loss ledger targets source side"), Context.RoundEvents.ContainsByPredicate([](const FGambitRoundGameplayEvent& Event)
+		{
+			return Event.EventType == EGambitRoundGameplayEventType::GoldChanged
+				&& Event.EffectId == FName(TEXT("effect.module.competitive.luxury_tax.richest_loss"))
+				&& FMath::IsNearlyEqual(Event.NumericDelta, -2.0f);
+		}));
+	}
+
+	TestWorld->DestroyWorld(false);
 	return true;
 }
 

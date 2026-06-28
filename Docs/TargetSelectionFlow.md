@@ -64,6 +64,6 @@ Effect application feedback remains in the existing resolver/ledger path:
 ## Current limits
 
 - This is a debug/dev UI foundation, not final presentation.
-- No final animations, focus management, or controller navigation model is included.
+- No final animations, PC focus management, click/hover polish, or keyboard/mouse presentation model is included. Gamepad/controller navigation is future work outside V0.1 scope.
 - Multi-target persistent per-player selection is not implemented.
 - Automatic target rules can expose preview dice, but confirmation still passes one selected player/die context into the existing resolver.
