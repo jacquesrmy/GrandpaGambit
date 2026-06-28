@@ -9,6 +9,8 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Engine/World.h"
 #include "Game/Flow/GambitRoundFlowComponent.h"
@@ -34,6 +36,46 @@ namespace
 		return ShellEnumToString(StaticEnum<EGambitRoundPhase>(), static_cast<int64>(Phase));
 	}
 
+	FString ShellCombinationToString(const EGambitCombinationType Combination)
+	{
+		return ShellEnumToString(StaticEnum<EGambitCombinationType>(), static_cast<int64>(Combination));
+	}
+
+	FString ShellRoundEventTypeToString(const EGambitRoundGameplayEventType EventType)
+	{
+		if (const UEnum* Enum = StaticEnum<EGambitRoundGameplayEventType>())
+		{
+			return Enum->GetNameStringByValue(static_cast<int64>(EventType));
+		}
+
+		return TEXT("Unknown");
+	}
+
+	FString ShellFormatSignedInt(const int32 Value)
+	{
+		return FString::Printf(TEXT("%+d"), Value);
+	}
+
+	FString ShellFormatSignedFloat(const float Value)
+	{
+		return FString::Printf(TEXT("%+0.2f"), Value);
+	}
+
+	FString ShellJoinNames(const TArray<FName>& Names)
+	{
+		TArray<FString> Parts;
+		Parts.Reserve(Names.Num());
+		for (const FName Name : Names)
+		{
+			if (!Name.IsNone())
+			{
+				Parts.Add(Name.ToString());
+			}
+		}
+
+		return FString::Join(Parts, TEXT(", "));
+	}
+
 	FString ShellItemDisplayName(const UGambitItemDefinition* ItemDefinition)
 	{
 		if (!ItemDefinition)
@@ -51,6 +93,144 @@ namespace
 		return Phase == EGambitRoundPhase::SelectionReroll
 			|| Phase == EGambitRoundPhase::Action
 			|| Phase == EGambitRoundPhase::Shop;
+	}
+
+	bool ShellIsImportantLedgerEvent(const EGambitRoundGameplayEventType EventType)
+	{
+		switch (EventType)
+		{
+		case EGambitRoundGameplayEventType::EffectApplied:
+		case EGambitRoundGameplayEventType::EffectPrevented:
+		case EGambitRoundGameplayEventType::GoldChanged:
+		case EGambitRoundGameplayEventType::ScoreModifierApplied:
+		case EGambitRoundGameplayEventType::DieModified:
+		case EGambitRoundGameplayEventType::DieDestroyedOrRemoved:
+			return true;
+		default:
+			return false;
+		}
+	}
+
+	FString ShellFormatDebugScoreLine(const FGambitDebugScoreLine& Line)
+	{
+		const FString SourcePrefix = Line.SourceName.IsEmpty()
+			? FString()
+			: FString::Printf(TEXT("%s: "), *Line.SourceName);
+		if (!Line.Summary.IsEmpty())
+		{
+			return FString::Printf(TEXT("  - %s%s"), *SourcePrefix, *Line.Summary);
+		}
+
+		return FString::Printf(
+			TEXT("  - %s%s | Add %s | Dice %s | Mult x%0.2f | %.2f -> %.2f"),
+			*SourcePrefix,
+			*Line.Label,
+			*ShellFormatSignedFloat(Line.AdditiveDelta),
+			*ShellFormatSignedFloat(Line.DiceContributionDelta),
+			Line.MultiplierValue,
+			Line.ScoreBefore,
+			Line.ScoreAfter);
+	}
+
+	FString ShellFormatDebugGoldLine(const FGambitDebugGoldLine& Line)
+	{
+		if (!Line.Summary.IsEmpty())
+		{
+			return FString::Printf(
+				TEXT("  - %s | Actual %s | Gold %d -> %d%s"),
+				*Line.Summary,
+				*ShellFormatSignedInt(Line.ActualDelta),
+				Line.GoldBefore,
+				Line.GoldAfter,
+				Line.bClamped ? TEXT(" | clamped") : TEXT(""));
+		}
+
+		return FString::Printf(
+			TEXT("  - Gold %s | Requested %s | Gold %d -> %d%s"),
+			*ShellFormatSignedInt(Line.ActualDelta),
+			*ShellFormatSignedInt(Line.RequestedDelta),
+			Line.GoldBefore,
+			Line.GoldAfter,
+			Line.bClamped ? TEXT(" | clamped") : TEXT(""));
+	}
+
+	FString ShellFormatLedgerEvent(const FGambitRoundGameplayEvent& Event)
+	{
+		FString Details = Event.Reason;
+		if (Details.IsEmpty())
+		{
+			Details = !Event.EffectId.IsNone() ? Event.EffectId.ToString() : Event.EffectTypeId.ToString();
+		}
+		if (Details.IsEmpty())
+		{
+			Details = TEXT("No details");
+		}
+
+		FString TargetPart;
+		if (Event.SourcePlayerId != INDEX_NONE || Event.TargetPlayerId != INDEX_NONE)
+		{
+			TargetPart = FString::Printf(
+				TEXT(" | P%d -> P%d"),
+				Event.SourcePlayerId,
+				Event.TargetPlayerId);
+		}
+
+		FString DeltaPart;
+		if (!FMath::IsNearlyZero(Event.NumericDelta))
+		{
+			DeltaPart = FString::Printf(TEXT(" | Delta %s"), *ShellFormatSignedFloat(Event.NumericDelta));
+		}
+
+		FString DiePart;
+		if (Event.TargetDieHandIndex != INDEX_NONE)
+		{
+			DiePart = FString::Printf(TEXT(" | Die %d"), Event.TargetDieHandIndex + 1);
+		}
+
+		FString CategoryPart;
+		if (Event.NegativeCategoryIds.Num() > 0)
+		{
+			CategoryPart = FString::Printf(TEXT(" | Categories %s"), *ShellJoinNames(Event.NegativeCategoryIds));
+		}
+
+		return FString::Printf(
+			TEXT("  - %s: %s%s%s%s%s"),
+			*ShellRoundEventTypeToString(Event.EventType),
+			*Details,
+			*TargetPart,
+			*DeltaPart,
+			*DiePart,
+			*CategoryPart);
+	}
+
+	FString ShellResolveRankingPlayerName(const APlayerState* PlayerState, const int32 FallbackIndex)
+	{
+		if (PlayerState && !PlayerState->GetPlayerName().IsEmpty())
+		{
+			return PlayerState->GetPlayerName();
+		}
+
+		return FString::Printf(TEXT("Player %d"), FallbackIndex + 1);
+	}
+
+	int32 ShellFindVictoryPointsGrantedForPlayer(
+		const AGambitGameState* GameState,
+		const AGambitPlayerState* PlayerState)
+	{
+		if (!GameState || !PlayerState)
+		{
+			return INDEX_NONE;
+		}
+
+		for (const FGambitRankingEntry& Entry : GameState->GetRoundRankingSnapshotRef())
+		{
+			if (Entry.PlayerState == PlayerState)
+			{
+				return Entry.VictoryPointsGranted;
+			}
+		}
+
+		return INDEX_NONE;
 	}
 }
 
@@ -297,6 +477,147 @@ void UGambitPCShellWidget::ExecutePlayerAction(
 	RefreshShell();
 }
 
+TArray<FString> UGambitPCShellWidget::BuildScoreFeedbackLines(const AGambitPlayerState* PlayerState)
+{
+	TArray<FString> Lines;
+	if (!PlayerState || !PlayerState->HasEventThisRound(EGambitRoundGameplayEventType::RoundScored))
+	{
+		return Lines;
+	}
+
+	const FGambitScoreBreakdown Breakdown = PlayerState->GetLastScoreBreakdown();
+	Lines.Add(FString::Printf(
+		TEXT("Resolution: Combination %s | Raw %d | Final %d"),
+		*ShellCombinationToString(Breakdown.Combination),
+		Breakdown.RawScore,
+		Breakdown.FinalScore));
+	Lines.Add(FString::Printf(
+		TEXT("Score totals: Base %d | Dice %d | Dice Bonus %s | Add %s | Mult x%0.2f | Before Cap %0.2f | After Cap %0.2f"),
+		Breakdown.BaseCombinationScore,
+		Breakdown.DiceSum,
+		*ShellFormatSignedFloat(Breakdown.DiceContributionMultiplierBonus),
+		*ShellFormatSignedFloat(Breakdown.AdditiveBonus),
+		Breakdown.Multiplier,
+		Breakdown.ScoreBeforeCap,
+		Breakdown.ScoreAfterCap));
+
+	const TArray<FGambitDebugScoreLine> ScoreLines = PlayerState->GetDebugScoreLines();
+	if (ScoreLines.Num() > 0)
+	{
+		Lines.Add(TEXT("Scoring breakdown:"));
+		for (const FGambitDebugScoreLine& Line : ScoreLines)
+		{
+			Lines.Add(ShellFormatDebugScoreLine(Line));
+		}
+	}
+
+	return Lines;
+}
+
+TArray<FString> UGambitPCShellWidget::BuildRewardFeedbackLines(
+	const AGambitPlayerState* PlayerState,
+	const int32 VictoryPointsGranted)
+{
+	TArray<FString> Lines;
+	if (!PlayerState)
+	{
+		return Lines;
+	}
+
+	const TArray<FGambitDebugGoldLine> GoldLines = PlayerState->GetDebugGoldLines();
+	if (GoldLines.Num() == 0 && VictoryPointsGranted == INDEX_NONE)
+	{
+		return Lines;
+	}
+
+	int32 TotalGoldDelta = 0;
+	for (const FGambitDebugGoldLine& Line : GoldLines)
+	{
+		TotalGoldDelta += Line.ActualDelta;
+	}
+
+	const FString VictoryPointPart = VictoryPointsGranted == INDEX_NONE
+		? FString(TEXT(" | VP pending"))
+		: FString::Printf(TEXT(" | VP %s"), *ShellFormatSignedInt(VictoryPointsGranted));
+	Lines.Add(FString::Printf(
+		TEXT("Rewards: Gold %s%s | Current Gold %d"),
+		*ShellFormatSignedInt(TotalGoldDelta),
+		*VictoryPointPart,
+		PlayerState->GetCurrentGold()));
+
+	if (GoldLines.Num() > 0)
+	{
+		Lines.Add(TEXT("Gold breakdown:"));
+		for (const FGambitDebugGoldLine& Line : GoldLines)
+		{
+			Lines.Add(ShellFormatDebugGoldLine(Line));
+		}
+	}
+
+	return Lines;
+}
+
+TArray<FString> UGambitPCShellWidget::BuildRankingFeedbackLines(const AGambitGameState* GameState)
+{
+	TArray<FString> Lines;
+	if (!GameState || GameState->GetRoundRankingSnapshotRef().Num() == 0)
+	{
+		return Lines;
+	}
+
+	Lines.Add(TEXT("Round Ranking:"));
+	const TArray<FGambitRankingEntry>& Ranking = GameState->GetRoundRankingSnapshotRef();
+	for (int32 Index = 0; Index < Ranking.Num(); ++Index)
+	{
+		const FGambitRankingEntry& Entry = Ranking[Index];
+		const AGambitPlayerState* RankedPlayer = Cast<AGambitPlayerState>(Entry.PlayerState);
+		const int32 TotalVictoryPoints = RankedPlayer ? RankedPlayer->GetTotalVictoryPoints() : 0;
+		Lines.Add(FString::Printf(
+			TEXT("#%d %s | Score %d | VP %s | Total VP %d"),
+			Entry.Rank,
+			*ShellResolveRankingPlayerName(Entry.PlayerState, Index),
+			Entry.RoundScore,
+			*ShellFormatSignedInt(Entry.VictoryPointsGranted),
+			TotalVictoryPoints));
+	}
+
+	return Lines;
+}
+
+TArray<FString> UGambitPCShellWidget::BuildLedgerFeedbackLines(
+	const AGambitPlayerState* PlayerState,
+	const int32 MaxEvents)
+{
+	TArray<FString> Lines;
+	if (!PlayerState || MaxEvents <= 0)
+	{
+		return Lines;
+	}
+
+	TArray<const FGambitRoundGameplayEvent*> ImportantEvents;
+	for (const FGambitRoundGameplayEvent& Event : PlayerState->GetRoundEventsRef())
+	{
+		if (ShellIsImportantLedgerEvent(Event.EventType))
+		{
+			ImportantEvents.Add(&Event);
+		}
+	}
+
+	if (ImportantEvents.Num() == 0)
+	{
+		return Lines;
+	}
+
+	Lines.Add(TEXT("Ledger:"));
+	const int32 StartIndex = FMath::Max(0, ImportantEvents.Num() - MaxEvents);
+	for (int32 Index = StartIndex; Index < ImportantEvents.Num(); ++Index)
+	{
+		Lines.Add(ShellFormatLedgerEvent(*ImportantEvents[Index]));
+	}
+
+	return Lines;
+}
+
 void UGambitPCShellWidget::BindGameState(AGambitGameState* GameState)
 {
 	if (BoundGameState == GameState)
@@ -452,6 +773,16 @@ void UGambitPCShellWidget::BuildMatchHud()
 
 	BuildPlayerRows();
 
+	const TArray<FString> RankingLines = BuildRankingFeedbackLines(BoundGameState.Get());
+	if (RankingLines.Num() > 0)
+	{
+		AddSpacerLine();
+		for (int32 LineIndex = 0; LineIndex < RankingLines.Num(); ++LineIndex)
+		{
+			AddText(RankingLines[LineIndex], LineIndex == 0 ? 18.0f : 15.0f);
+		}
+	}
+
 	if (ShellIsReadyGatedPhase(CachedPhase))
 	{
 		UButton* ContinueButton = AddButton(TEXT("Continue Phase"));
@@ -557,6 +888,20 @@ void UGambitPCShellWidget::BuildPlayerRoundHud(const int32 PlayerIndex, AGambitP
 		RerollLimit,
 		RerollsRemaining),
 		16.0f);
+
+	const int32 VictoryPointsGranted = ShellFindVictoryPointsGrantedForPlayer(BoundGameState.Get(), PlayerState);
+	for (const FString& Line : BuildScoreFeedbackLines(PlayerState))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Resolution")) ? 15.0f : 14.0f);
+	}
+	for (const FString& Line : BuildRewardFeedbackLines(PlayerState, VictoryPointsGranted))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Rewards")) ? 15.0f : 14.0f);
+	}
+	for (const FString& Line : BuildLedgerFeedbackLines(PlayerState))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Ledger")) ? 15.0f : 14.0f);
+	}
 
 	const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
 	if (DiceStates.Num() == 0)

@@ -68,6 +68,11 @@ public:
 		int32 PlayerIndex,
 		int32 DieIndex);
 
+	static TArray<FString> BuildScoreFeedbackLines(const AGambitPlayerState* PlayerState);
+	static TArray<FString> BuildRewardFeedbackLines(const AGambitPlayerState* PlayerState, int32 VictoryPointsGranted);
+	static TArray<FString> BuildRankingFeedbackLines(const AGambitGameState* GameState);
+	static TArray<FString> BuildLedgerFeedbackLines(const AGambitPlayerState* PlayerState, int32 MaxEvents = 6);
+
 private:
 	UFUNCTION()
 	void HandleMatchLifecycleChanged(EGambitMatchLifecycleState OldState, EGambitMatchLifecycleState NewState);

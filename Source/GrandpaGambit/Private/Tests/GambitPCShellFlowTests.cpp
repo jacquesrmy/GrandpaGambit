@@ -4,11 +4,14 @@
 #include "Misc/AutomationTest.h"
 
 #include "Dice/Data/GambitDiceDefinition.h"
+#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "Core/Types/GambitRoundPhaseRules.h"
 #include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/States/GambitGameState.h"
 #include "Players/Components/GambitDiceComponent.h"
 #include "Players/States/GambitPlayerState.h"
+#include "UI/Widgets/GambitPCShellWidget.h"
 
 namespace
 {
@@ -77,6 +80,14 @@ namespace
 		}
 
 		return true;
+	}
+
+	bool ContainsShellLine(const TArray<FString>& Lines, const FString& Needle)
+	{
+		return Lines.ContainsByPredicate([&Needle](const FString& Line)
+		{
+			return Line.Contains(Needle);
+		});
 	}
 }
 
@@ -214,6 +225,227 @@ bool FGambitPCShellRoundHudCommandTest::RunTest(const FString& Parameters)
 	const FGambitRoundCommandResult RerollOutOfPhase = RoundFlow->RequestRerollDetailed(PlayerState);
 	TestFalse(TEXT("reroll command is refused outside Selection/Reroll"), RerollOutOfPhase.bSuccess);
 	TestEqual(TEXT("reroll outside phase refusal is typed"), RerollOutOfPhase.Status, EGambitRoundCommandStatus::InvalidPhase);
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellRoundHudResolutionFeedbackTest,
+	"GrandpaGambit.PCShell.RoundHud.ResolutionFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellRoundHudResolutionFeedbackTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 2, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* PlayerState = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	if (!TestNotNull(TEXT("player exists for resolution feedback smoke"), PlayerState))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	FGambitScoreBreakdown ProducedBreakdown;
+	ProducedBreakdown.Combination = EGambitCombinationType::FullHouse;
+	ProducedBreakdown.BaseCombinationScore = 25;
+	ProducedBreakdown.DiceSum = 18;
+	ProducedBreakdown.DiceContributionMultiplierBonus = 3.0f;
+	ProducedBreakdown.AdjustedDiceSum = 21.0f;
+	ProducedBreakdown.RawScore = 43;
+	ProducedBreakdown.AdditiveBonus = 7.0f;
+	ProducedBreakdown.Multiplier = 2.0f;
+	ProducedBreakdown.ScoreBeforeCap = 100.0f;
+	ProducedBreakdown.ScoreAfterCap = 90.0f;
+	ProducedBreakdown.FinalScore = 777;
+	PlayerState->ApplyRoundScore(ProducedBreakdown);
+
+	FGambitRoundGameplayEvent ScoredEvent;
+	ScoredEvent.EventType = EGambitRoundGameplayEventType::RoundScored;
+	ScoredEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	ScoredEvent.Reason = TEXT("Round score finalized at 777");
+	ScoredEvent.NumericDelta = 777.0f;
+	PlayerState->AddRoundEvent(ScoredEvent);
+
+	FGambitDebugScoreLine ScoreLine;
+	ScoreLine.LineType = EGambitDebugScoreLineType::Additive;
+	ScoreLine.SourceName = TEXT("Lucky module");
+	ScoreLine.Summary = TEXT("Lucky module adds +7 score");
+	PlayerState->AddDebugScoreLine(ScoreLine);
+
+	const TArray<FString> Lines = UGambitPCShellWidget::BuildScoreFeedbackLines(PlayerState);
+	TestTrue(TEXT("resolution line is visible once scoring is finalized"), ContainsShellLine(Lines, TEXT("Resolution:")));
+	TestTrue(TEXT("combination result is visible"), ContainsShellLine(Lines, TEXT("Full House")));
+	TestTrue(TEXT("raw score is read from produced breakdown"), ContainsShellLine(Lines, TEXT("Raw 43")));
+	TestTrue(TEXT("final score is read from produced breakdown"), ContainsShellLine(Lines, TEXT("Final 777")));
+	TestTrue(TEXT("score effect breakdown line is visible"), ContainsShellLine(Lines, TEXT("Lucky module adds +7 score")));
+	TestFalse(TEXT("HUD helper does not replace final score with raw score"), ContainsShellLine(Lines, TEXT("Final 43")));
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellRoundHudRewardRankingFeedbackTest,
+	"GrandpaGambit.PCShell.RoundHud.RewardRankingFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellRoundHudRewardRankingFeedbackTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 2, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* PlayerOne = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	AGambitPlayerState* PlayerTwo = TestWorld.Players.IsValidIndex(1) ? TestWorld.Players[1] : nullptr;
+	if (!TestNotNull(TEXT("player one exists for reward/ranking smoke"), PlayerOne)
+		|| !TestNotNull(TEXT("player two exists for reward/ranking smoke"), PlayerTwo))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	FGambitDebugGoldLine BaseRewardLine;
+	BaseRewardLine.LineType = EGambitDebugGoldLineType::BaseReward;
+	BaseRewardLine.ActualDelta = 4;
+	BaseRewardLine.RequestedDelta = 4;
+	BaseRewardLine.GoldBefore = 10;
+	BaseRewardLine.GoldAfter = 14;
+	BaseRewardLine.Summary = TEXT("Base reward from round score: +4 gold");
+	PlayerOne->AddDebugGoldLine(BaseRewardLine);
+
+	FGambitDebugGoldLine InterestLine;
+	InterestLine.LineType = EGambitDebugGoldLineType::Interest;
+	InterestLine.ActualDelta = 1;
+	InterestLine.RequestedDelta = 1;
+	InterestLine.GoldBefore = 14;
+	InterestLine.GoldAfter = 15;
+	InterestLine.Summary = TEXT("Interest from saved gold: +1 gold");
+	PlayerOne->AddDebugGoldLine(InterestLine);
+
+	PlayerOne->AddVictoryPoints(5);
+	PlayerTwo->AddVictoryPoints(3);
+
+	TArray<FGambitRankingEntry> Ranking;
+	FGambitRankingEntry FirstEntry;
+	FirstEntry.Rank = 1;
+	FirstEntry.PlayerState = PlayerOne;
+	FirstEntry.RoundScore = 90;
+	FirstEntry.VictoryPointsGranted = 5;
+	Ranking.Add(FirstEntry);
+
+	FGambitRankingEntry SecondEntry;
+	SecondEntry.Rank = 2;
+	SecondEntry.PlayerState = PlayerTwo;
+	SecondEntry.RoundScore = 40;
+	SecondEntry.VictoryPointsGranted = 3;
+	Ranking.Add(SecondEntry);
+	TestWorld.GameState->SetRoundRankingSnapshot(Ranking);
+
+	const TArray<FString> RewardLines = UGambitPCShellWidget::BuildRewardFeedbackLines(PlayerOne, 5);
+	TestTrue(TEXT("reward summary exposes total gold gained"), ContainsShellLine(RewardLines, TEXT("Gold +5")));
+	TestTrue(TEXT("reward summary exposes VP gained when available"), ContainsShellLine(RewardLines, TEXT("VP +5")));
+	TestTrue(TEXT("base reward line is visible"), ContainsShellLine(RewardLines, TEXT("Base reward from round score")));
+	TestTrue(TEXT("interest reward line is visible"), ContainsShellLine(RewardLines, TEXT("Interest from saved gold")));
+
+	const TArray<FString> RankingLines = UGambitPCShellWidget::BuildRankingFeedbackLines(TestWorld.GameState);
+	TestTrue(TEXT("round ranking header is visible"), ContainsShellLine(RankingLines, TEXT("Round Ranking")));
+	TestTrue(TEXT("rank one is visible"), ContainsShellLine(RankingLines, TEXT("#1 Player 1")));
+	TestTrue(TEXT("rank one score is visible"), ContainsShellLine(RankingLines, TEXT("Score 90")));
+	TestTrue(TEXT("rank one VP reward is visible"), ContainsShellLine(RankingLines, TEXT("VP +5")));
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellRoundHudLedgerFeedbackTest,
+	"GrandpaGambit.PCShell.RoundHud.LedgerFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellRoundHudLedgerFeedbackTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 2, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* PlayerState = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	if (!TestNotNull(TEXT("player exists for ledger feedback smoke"), PlayerState))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	FGambitRoundGameplayEvent IgnoredScoredEvent;
+	IgnoredScoredEvent.EventType = EGambitRoundGameplayEventType::RoundScored;
+	IgnoredScoredEvent.Reason = TEXT("Round scored should not be in important ledger summary");
+	PlayerState->AddRoundEvent(IgnoredScoredEvent);
+
+	FGambitRoundGameplayEvent AppliedEvent;
+	AppliedEvent.EventType = EGambitRoundGameplayEventType::EffectApplied;
+	AppliedEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	AppliedEvent.Reason = TEXT("Module applied effect");
+	PlayerState->AddRoundEvent(AppliedEvent);
+
+	FGambitRoundGameplayEvent PreventedEvent;
+	PreventedEvent.EventType = EGambitRoundGameplayEventType::EffectPrevented;
+	PreventedEvent.Outcome = EGambitRoundGameplayEventOutcome::Prevented;
+	PreventedEvent.Reason = TEXT("Gold loss prevented by Safe");
+	PreventedEvent.NegativeCategoryIds = { FName(TEXT("GoldLoss")) };
+	PlayerState->AddRoundEvent(PreventedEvent);
+
+	FGambitRoundGameplayEvent GoldChangedEvent;
+	GoldChangedEvent.EventType = EGambitRoundGameplayEventType::GoldChanged;
+	GoldChangedEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	GoldChangedEvent.Reason = TEXT("Reward changed gold");
+	GoldChangedEvent.NumericDelta = 3.0f;
+	PlayerState->AddRoundEvent(GoldChangedEvent);
+
+	FGambitRoundGameplayEvent ScoreModifierEvent;
+	ScoreModifierEvent.EventType = EGambitRoundGameplayEventType::ScoreModifierApplied;
+	ScoreModifierEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	ScoreModifierEvent.Reason = TEXT("Multiplier applied");
+	ScoreModifierEvent.NumericDelta = 2.0f;
+	PlayerState->AddRoundEvent(ScoreModifierEvent);
+
+	FGambitRoundGameplayEvent DieModifiedEvent;
+	DieModifiedEvent.EventType = EGambitRoundGameplayEventType::DieModified;
+	DieModifiedEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	DieModifiedEvent.Reason = TEXT("Die value modified");
+	DieModifiedEvent.TargetDieHandIndex = 1;
+	PlayerState->AddRoundEvent(DieModifiedEvent);
+
+	FGambitRoundGameplayEvent DieRemovedEvent;
+	DieRemovedEvent.EventType = EGambitRoundGameplayEventType::DieDestroyedOrRemoved;
+	DieRemovedEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	DieRemovedEvent.Reason = TEXT("Die removed");
+	DieRemovedEvent.TargetDieHandIndex = 2;
+	PlayerState->AddRoundEvent(DieRemovedEvent);
+
+	const TArray<FString> LedgerLines = UGambitPCShellWidget::BuildLedgerFeedbackLines(PlayerState, 10);
+	TestTrue(TEXT("effect applied event is visible"), ContainsShellLine(LedgerLines, TEXT("EffectApplied")));
+	TestTrue(TEXT("effect prevented event is visible"), ContainsShellLine(LedgerLines, TEXT("EffectPrevented")));
+	TestTrue(TEXT("B6.1 defense reason is visible when present"), ContainsShellLine(LedgerLines, TEXT("Gold loss prevented by Safe")));
+	TestTrue(TEXT("negative category is visible"), ContainsShellLine(LedgerLines, TEXT("GoldLoss")));
+	TestTrue(TEXT("gold changed event is visible"), ContainsShellLine(LedgerLines, TEXT("GoldChanged")));
+	TestTrue(TEXT("score modifier event is visible"), ContainsShellLine(LedgerLines, TEXT("ScoreModifierApplied")));
+	TestTrue(TEXT("die modified event is visible"), ContainsShellLine(LedgerLines, TEXT("DieModified")));
+	TestTrue(TEXT("die removed event is visible"), ContainsShellLine(LedgerLines, TEXT("DieDestroyedOrRemoved")));
+	TestFalse(TEXT("unimportant round scored event is not part of ledger summary"), ContainsShellLine(LedgerLines, TEXT("RoundScored")));
 
 	TestWorld.Destroy();
 	return true;
