@@ -929,9 +929,15 @@ void AGambitPlayerController::InitializePCShellWidget()
 		return;
 	}
 
-	PCShellWidget->AddToViewport(100);
+	PCShellWidget->AddToViewport(1000);
 	bShowMouseCursor = true;
-	SetInputMode(FInputModeGameAndUI());
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
 }
 
 void AGambitPlayerController::ToggleDieLockByIndex(const int32 DieIndex)

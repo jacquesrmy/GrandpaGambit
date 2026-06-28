@@ -7,6 +7,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Engine/World.h"
 #include "Game/Modes/GambitGameMode.h"
@@ -103,7 +104,8 @@ bool UGambitPCShellWidget::InitializeShellWidget()
 	}
 
 	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PCShellBackground"));
-	Background->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.02f, 0.88f));
+	Background->SetBrushColor(FLinearColor(0.015f, 0.015f, 0.015f, 0.94f));
+	Background->SetPadding(FMargin(32.0f, 28.0f));
 
 	UScrollBox* ScrollBox = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("PCShellScroll"));
 	RootContent = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PCShellRoot"));
@@ -361,7 +363,7 @@ void UGambitPCShellWidget::BuildLobby()
 		TEXT("%d local players, %d rounds"),
 		CachedMatchSetup.LocalPlayerCount,
 		CachedMatchSetup.RoundCount));
-	BuildPlayerRows();
+	BuildLobbyPlayerRows();
 
 	UButton* StartButton = AddButton(TEXT("Start Match"));
 	StartButton->OnClicked.AddDynamic(this, &UGambitPCShellWidget::HandleStartMatchClicked);
@@ -402,6 +404,26 @@ void UGambitPCShellWidget::BuildMatchComplete()
 
 	UButton* MainMenuButton = AddButton(TEXT("Main Menu"));
 	MainMenuButton->OnClicked.AddDynamic(this, &UGambitPCShellWidget::HandleBackToMainMenuClicked);
+}
+
+void UGambitPCShellWidget::BuildLobbyPlayerRows()
+{
+	const AGambitGameState* GameState = BoundGameState.Get();
+	const TArray<AGambitPlayerState*> Players = GameState ? GameState->GetGambitPlayerStates() : TArray<AGambitPlayerState*>();
+	if (Players.Num() == 0)
+	{
+		AddText(TEXT("No local players seated yet."));
+		return;
+	}
+
+	for (int32 PlayerIndex = 0; PlayerIndex < Players.Num(); ++PlayerIndex)
+	{
+		const AGambitPlayerState* PlayerState = Players[PlayerIndex];
+		const FString PlayerName = PlayerState && !PlayerState->GetPlayerName().IsEmpty()
+			? PlayerState->GetPlayerName()
+			: FString::Printf(TEXT("Player %d"), PlayerIndex + 1);
+		AddText(FString::Printf(TEXT("Seat %d: %s"), PlayerIndex + 1, *PlayerName));
+	}
 }
 
 void UGambitPCShellWidget::BuildPlayerRows()
@@ -485,7 +507,6 @@ void UGambitPCShellWidget::ConfigureMatch(const int32 LocalPlayerCount, const in
 
 UTextBlock* UGambitPCShellWidget::AddText(const FString& Text, const float FontSize)
 {
-	(void)FontSize;
 	if (!RootContent || !WidgetTree)
 	{
 		return nullptr;
@@ -494,7 +515,16 @@ UTextBlock* UGambitPCShellWidget::AddText(const FString& Text, const float FontS
 	UTextBlock* TextBlock = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	TextBlock->SetText(FText::FromString(Text));
 	TextBlock->SetAutoWrapText(true);
-	RootContent->AddChildToVerticalBox(TextBlock);
+	TextBlock->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+
+	FSlateFontInfo Font = TextBlock->GetFont();
+	Font.Size = FMath::Max(8, FMath::RoundToInt(FontSize));
+	TextBlock->SetFont(Font);
+
+	if (UVerticalBoxSlot* TextSlot = RootContent->AddChildToVerticalBox(TextBlock))
+	{
+		TextSlot->SetPadding(FMargin(0.0f, 2.0f, 0.0f, 2.0f));
+	}
 	return TextBlock;
 }
 
@@ -504,8 +534,12 @@ UButton* UGambitPCShellWidget::AddButton(const FString& Label)
 	UTextBlock* ButtonText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	ButtonText->SetText(FText::FromString(Label));
 	ButtonText->SetAutoWrapText(true);
+	ButtonText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	Button->SetContent(ButtonText);
-	RootContent->AddChildToVerticalBox(Button);
+	if (UVerticalBoxSlot* ButtonSlot = RootContent->AddChildToVerticalBox(Button))
+	{
+		ButtonSlot->SetPadding(FMargin(0.0f, 4.0f, 0.0f, 4.0f));
+	}
 	return Button;
 }
 

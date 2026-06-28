@@ -82,6 +82,7 @@ private:
 	void BuildLobby();
 	void BuildMatchHud();
 	void BuildMatchComplete();
+	void BuildLobbyPlayerRows();
 	void BuildPlayerRows();
 	void BuildFinalRankingRows();
 	void ConfigureMatch(int32 LocalPlayerCount, int32 RoundCount);

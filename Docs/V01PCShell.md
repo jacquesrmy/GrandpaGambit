@@ -4,7 +4,7 @@ This pass adds the first minimal PC keyboard/mouse shell for a local match.
 
 ## Flow
 
-1. Open the default map `Content/GrandpaGambit/Maps/L_Menu_DevMatch.umap`.
+1. Open the default map `Content/GrandpaGambit/Maps/Gambit.umap`.
 2. Press Play.
 3. Use the C++ PC shell overlay:
    - `New PC Match`
@@ -25,6 +25,10 @@ This pass adds the first minimal PC keyboard/mouse shell for a local match.
 - `AGambitGameState` owns visible lifecycle state, selected setup, current phase/round, and final ranking snapshots.
 - `UGambitRoundFlowComponent` owns round progression and final ranking generation.
 - `UGambitPCShellWidget` only displays state and sends commands.
+
+## Launch map
+
+`Config/DefaultEngine.ini` now points both `GameDefaultMap` and `EditorStartupMap` at `Gambit.umap`, the existing table scene. The older `L_Menu_DevMatch.umap` and `L_DevMatchSandbox.umap` remain available as debug/dev maps, but they are no longer the default PC shell entrypoint.
 
 ## Current limits
 

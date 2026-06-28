@@ -101,6 +101,11 @@ bool AGambitGameMode::RequestEnterLobby()
 	}
 
 	LocalMultiplayer->EnsureLocalPlayerCount(PendingMatchSetup.LocalPlayerCount);
+	if (LocalMultiplayer->GetLocalPlayerCount() != PendingMatchSetup.LocalPlayerCount)
+	{
+		return false;
+	}
+
 	LocalMultiplayer->RefreshLocalMultiplayerLayout();
 	ResetMatchShellState(EGambitMatchLifecycleState::Lobby);
 	return true;
