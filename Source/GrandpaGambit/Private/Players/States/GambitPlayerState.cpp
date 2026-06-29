@@ -319,6 +319,15 @@ FGambitShopPurchaseContext AGambitPlayerState::BuildShopPurchaseContext(
 		: FGambitShopPurchaseContext();
 }
 
+FGambitShopPurchaseContext AGambitPlayerState::BuildShopPurchasePreviewContext(
+	const int32 OfferId,
+	const UGambitSharedPoolComponent* SharedPoolComponent) const
+{
+	return ShopComponent
+		? ShopComponent->BuildPurchasePreviewContext(OfferId, EconomyComponent, InventoryComponent, SharedPoolComponent)
+		: FGambitShopPurchaseContext();
+}
+
 bool AGambitPlayerState::TryPurchaseOffer(const int32 OfferId, UGambitSharedPoolComponent* SharedPoolComponent)
 {
 	if (!ShopComponent || !EconomyComponent || !InventoryComponent)

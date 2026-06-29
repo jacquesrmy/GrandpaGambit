@@ -22,6 +22,7 @@
 #include "Players/Components/GambitInventoryComponent.h"
 #include "Players/Controllers/GambitPlayerController.h"
 #include "Players/States/GambitPlayerState.h"
+#include "Shop/Components/GambitShopComponent.h"
 
 namespace
 {
@@ -43,6 +44,21 @@ namespace
 	FString ShellCombinationToString(const EGambitCombinationType Combination)
 	{
 		return ShellEnumToString(StaticEnum<EGambitCombinationType>(), static_cast<int64>(Combination));
+	}
+
+	FString ShellItemTypeToString(const EGambitItemType ItemType)
+	{
+		return ShellEnumToString(StaticEnum<EGambitItemType>(), static_cast<int64>(ItemType));
+	}
+
+	FString ShellItemRarityToString(const EGambitItemRarity Rarity)
+	{
+		return ShellEnumToString(StaticEnum<EGambitItemRarity>(), static_cast<int64>(Rarity));
+	}
+
+	FString ShellSharedPoolStateToString(const EGambitSharedPoolAvailabilityState State)
+	{
+		return ShellEnumToString(StaticEnum<EGambitSharedPoolAvailabilityState>(), static_cast<int64>(State));
 	}
 
 	FString ShellTargetSelectionTypeToString(const EGambitTargetSelectionType SelectionType)
@@ -95,6 +111,82 @@ namespace
 		return ItemDefinition->DisplayName.IsEmpty()
 			? ItemDefinition->GetResolvedItemId().ToString()
 			: ItemDefinition->DisplayName.ToString();
+	}
+
+	FString ShellFormatShopOfferSnapshot(const FGambitShopOfferSnapshot& Snapshot)
+	{
+		const FString CostText = Snapshot.BasePrice != Snapshot.ResolvedPrice
+			? FString::Printf(TEXT("%d gold (base %d)"), Snapshot.ResolvedPrice, Snapshot.BasePrice)
+			: FString::Printf(TEXT("%d gold"), Snapshot.ResolvedPrice);
+		const FString StateText = Snapshot.bCanPurchase
+			? FString(TEXT("Buyable"))
+			: FString::Printf(
+				TEXT("Unavailable: %s"),
+				Snapshot.UnavailableReason.IsEmpty() ? TEXT("unknown reason") : *Snapshot.UnavailableReason);
+
+		FString Line = FString::Printf(
+			TEXT("  Offer %d (id %d): %s [%s] | Type %s | Rarity %s | Cost %s | %s"),
+			Snapshot.OfferId + 1,
+			Snapshot.OfferId,
+			Snapshot.ItemName.IsEmpty() ? TEXT("None") : *Snapshot.ItemName,
+			*Snapshot.ItemId.ToString(),
+			*ShellItemTypeToString(Snapshot.ItemType),
+			*ShellItemRarityToString(Snapshot.Rarity),
+			*CostText,
+			*StateText);
+
+		if (Snapshot.bUsesSharedPool)
+		{
+			Line += FString::Printf(
+				TEXT(" | Shared %s stock %d/%d reserved %d%s"),
+				*ShellSharedPoolStateToString(Snapshot.SharedPoolAvailability.State),
+				Snapshot.SharedPoolAvailability.AvailableStock,
+				Snapshot.SharedPoolAvailability.MaxStock,
+				Snapshot.SharedPoolAvailability.ReservedStock,
+				Snapshot.bHasSharedPoolReservation ? TEXT(" (reserved for offer)") : TEXT(""));
+		}
+
+		return Line;
+	}
+
+	FString ShellJoinDebugItemSnapshots(const TArray<FGambitDebugItemSnapshot>& Snapshots)
+	{
+		TArray<FString> Parts;
+		Parts.Reserve(Snapshots.Num());
+		for (const FGambitDebugItemSnapshot& Snapshot : Snapshots)
+		{
+			if (Snapshot.ItemId.IsNone() && Snapshot.DisplayName.IsEmpty())
+			{
+				continue;
+			}
+
+			const FString Label = Snapshot.DisplayName.IsEmpty()
+				? Snapshot.ItemId.ToString()
+				: Snapshot.DisplayName;
+			FString Part = FString::Printf(TEXT("%s [%s]"), *Label, *Snapshot.ItemId.ToString());
+			if (Snapshot.StackCount > 1)
+			{
+				Part += FString::Printf(TEXT(" x%d"), Snapshot.StackCount);
+			}
+			Parts.Add(Part);
+		}
+
+		return Parts.Num() > 0 ? FString::Join(Parts, TEXT(", ")) : FString(TEXT("None"));
+	}
+
+	FString ShellJoinDebugDiceSnapshots(const TArray<FGambitDebugDieSnapshot>& Snapshots)
+	{
+		TArray<FString> Parts;
+		Parts.Reserve(Snapshots.Num());
+		for (const FGambitDebugDieSnapshot& Snapshot : Snapshots)
+		{
+			const FString Label = Snapshot.DisplayName.IsEmpty()
+				? Snapshot.DiceId.ToString()
+				: Snapshot.DisplayName;
+			Parts.Add(FString::Printf(TEXT("%s [%s]"), *Label, *Snapshot.DiceId.ToString()));
+		}
+
+		return Parts.Num() > 0 ? FString::Join(Parts, TEXT(", ")) : FString(TEXT("None"));
 	}
 
 	bool ShellIsReadyGatedPhase(const EGambitRoundPhase Phase)
@@ -548,6 +640,9 @@ void UGambitPCShellWidget::ExecutePlayerAction(
 		RefreshShell();
 		return;
 	}
+	case EGambitPCShellActionKind::BuyShopOffer:
+		Result = GameMode->RequestPurchaseOfferDetailed(PlayerState, ActionIndex);
+		break;
 	case EGambitPCShellActionKind::SelectTargetSelectionOption:
 	{
 		AGambitPlayerController* PlayerController = ResolvePlayerControllerForPlayerState(PlayerState);
@@ -822,6 +917,61 @@ TArray<FString> UGambitPCShellWidget::BuildTargetSelectionFeedbackLines(const AG
 	return Lines;
 }
 
+TArray<FString> UGambitPCShellWidget::BuildShopFeedbackLines(
+	const AGambitPlayerState* PlayerState,
+	const TArray<FGambitShopOfferSnapshot>& OfferSnapshots)
+{
+	TArray<FString> Lines;
+	if (!PlayerState)
+	{
+		return Lines;
+	}
+
+	const UGambitShopComponent* ShopComponent = PlayerState->GetShopComponent();
+	const int32 PurchasesMade = ShopComponent ? ShopComponent->GetPurchasesMadeThisShop() : 0;
+	Lines.Add(FString::Printf(
+		TEXT("Shop: Gold %d | Purchases %d/1"),
+		PlayerState->GetCurrentGold(),
+		PurchasesMade));
+
+	if (OfferSnapshots.Num() == 0)
+	{
+		Lines.Add(PurchasesMade > 0
+			? TEXT("  Purchase completed. Continue Phase when ready.")
+			: TEXT("  No offers available."));
+		return Lines;
+	}
+
+	for (const FGambitShopOfferSnapshot& Snapshot : OfferSnapshots)
+	{
+		Lines.Add(ShellFormatShopOfferSnapshot(Snapshot));
+	}
+
+	return Lines;
+}
+
+TArray<FString> UGambitPCShellWidget::BuildInventorySummaryLines(const AGambitPlayerState* PlayerState)
+{
+	TArray<FString> Lines;
+	if (!PlayerState)
+	{
+		return Lines;
+	}
+
+	const FGambitPlayerSlotState SlotState = PlayerState->GetSlotState();
+	Lines.Add(FString::Printf(
+		TEXT("Inventory: Dice %d | Modules %d/%d | Consumables %d/%d"),
+		SlotState.OwnedDiceCount,
+		SlotState.ModuleSlotsUsed,
+		SlotState.ModuleSlotsCapacity,
+		SlotState.ConsumableSlotsUsed,
+		SlotState.ConsumableSlotsCapacity));
+	Lines.Add(FString::Printf(TEXT("  Dice: %s"), *ShellJoinDebugDiceSnapshots(PlayerState->BuildDebugDiceSnapshot())));
+	Lines.Add(FString::Printf(TEXT("  Modules: %s"), *ShellJoinDebugItemSnapshots(PlayerState->BuildDebugModuleSnapshot())));
+	Lines.Add(FString::Printf(TEXT("  Consumables: %s"), *ShellJoinDebugItemSnapshots(PlayerState->BuildDebugConsumableSnapshot())));
+	return Lines;
+}
+
 void UGambitPCShellWidget::BindGameState(AGambitGameState* GameState)
 {
 	if (BoundGameState == GameState)
@@ -1049,19 +1199,6 @@ void UGambitPCShellWidget::BuildPlayerRows()
 		}
 
 		BuildPlayerRoundHud(PlayerIndex, PlayerState);
-
-		if (CachedPhase == EGambitRoundPhase::Shop)
-		{
-			const TArray<FGambitShopOffer>& Offers = PlayerState->GetCurrentShopOffersRef();
-			for (const FGambitShopOffer& Offer : Offers)
-			{
-				AddText(FString::Printf(
-					TEXT("  Offer %d: %s - %d gold"),
-					Offer.OfferId + 1,
-					*ShellItemDisplayName(Offer.ItemDefinition),
-					Offer.Price));
-			}
-		}
 	}
 }
 
@@ -1109,6 +1246,10 @@ void UGambitPCShellWidget::BuildPlayerRoundHud(const int32 PlayerIndex, AGambitP
 	if (CachedPhase == EGambitRoundPhase::Action)
 	{
 		BuildPlayerActionHud(PlayerIndex, PlayerState);
+	}
+	else if (CachedPhase == EGambitRoundPhase::Shop)
+	{
+		BuildPlayerShopHud(PlayerIndex, PlayerState);
 	}
 
 	const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
@@ -1192,6 +1333,56 @@ void UGambitPCShellWidget::BuildPlayerActionHud(const int32 PlayerIndex, AGambit
 	}
 
 	BuildTargetSelectionHud(PlayerController, PlayerState, PlayerIndex);
+}
+
+void UGambitPCShellWidget::BuildPlayerShopHud(const int32 PlayerIndex, AGambitPlayerState* PlayerState)
+{
+	if (!PlayerState)
+	{
+		return;
+	}
+
+	TArray<FGambitShopOfferSnapshot> OfferSnapshots;
+	if (AGambitGameMode* GameMode = GetGambitGameMode())
+	{
+		OfferSnapshots = GameMode->BuildShopOfferSnapshots(PlayerState);
+	}
+	else if (UGambitRoundFlowComponent* RoundFlow = GetRoundFlowComponent())
+	{
+		OfferSnapshots = RoundFlow->BuildShopOfferSnapshots(PlayerState);
+	}
+
+	for (const FString& Line : BuildShopFeedbackLines(PlayerState, OfferSnapshots))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Shop:")) ? 15.0f : 14.0f);
+	}
+
+	for (const FString& Line : BuildInventorySummaryLines(PlayerState))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Inventory:")) ? 15.0f : 14.0f);
+	}
+
+	if (OfferSnapshots.Num() == 0)
+	{
+		return;
+	}
+
+	UHorizontalBox* OfferBox = AddHorizontalBox(2.0f, 6.0f);
+	for (const FGambitShopOfferSnapshot& Snapshot : OfferSnapshots)
+	{
+		const FString Label = FString::Printf(TEXT("Buy Offer %d"), Snapshot.OfferId + 1);
+		UGambitPCShellActionButton* Button = AddActionButtonToBox(
+			OfferBox,
+			Label,
+			EGambitPCShellActionKind::BuyShopOffer,
+			PlayerState,
+			PlayerIndex,
+			Snapshot.OfferId);
+		if (Button)
+		{
+			Button->SetIsEnabled(Snapshot.bCanPurchase);
+		}
+	}
 }
 
 void UGambitPCShellWidget::BuildTargetSelectionHud(

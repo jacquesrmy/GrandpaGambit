@@ -157,6 +157,69 @@ FGambitShopPurchaseContext UGambitShopComponent::BuildPurchaseContext(
 	return PurchaseContext;
 }
 
+FGambitShopPurchaseContext UGambitShopComponent::BuildPurchasePreviewContext(
+	const int32 OfferId,
+	const UGambitEconomyComponent* EconomyComponent,
+	const UGambitInventoryComponent* InventoryComponent,
+	const UGambitSharedPoolComponent* SharedPoolComponent) const
+{
+	FGambitShopPurchaseContext PurchaseContext = BuildPurchaseContext(OfferId, nullptr, SharedPoolComponent);
+	ResolvePurchasePrice(PurchaseContext);
+
+	PurchaseContext.bCanPurchase = false;
+	if (!PurchaseContext.ItemDefinition)
+	{
+		if (PurchaseContext.FailureReason.IsEmpty())
+		{
+			PurchaseContext.FailureReason = TEXT("Offer has no item definition");
+		}
+		return PurchaseContext;
+	}
+
+	FString InventoryFailureReason;
+	if (!ValidateInventoryCapacity(PurchaseContext.ItemDefinition.Get(), InventoryComponent, InventoryFailureReason))
+	{
+		PurchaseContext.FailureReason = InventoryFailureReason;
+		return PurchaseContext;
+	}
+
+	if (!EconomyComponent)
+	{
+		PurchaseContext.FailureReason = TEXT("Missing economy component");
+		return PurchaseContext;
+	}
+
+	if (!EconomyComponent->CanSpendGold(PurchaseContext.ResolvedPrice))
+	{
+		PurchaseContext.FailureReason = FString::Printf(
+			TEXT("Not enough gold: Gold=%d Price=%d MinGold=%d"),
+			EconomyComponent->GetCurrentGold(),
+			PurchaseContext.ResolvedPrice,
+			EconomyComponent->GetEffectiveMinimumGold());
+		return PurchaseContext;
+	}
+
+	if (PurchaseContext.bUsesSharedPool)
+	{
+		if (!SharedPoolComponent)
+		{
+			PurchaseContext.FailureReason = TEXT("Missing shared pool component");
+			return PurchaseContext;
+		}
+
+		PurchaseContext.SharedPoolAvailability = SharedPoolComponent->QueryItemAvailability(PurchaseContext.ItemDefinition.Get());
+		if (!PurchaseContext.bHasSharedPoolReservation && !PurchaseContext.SharedPoolAvailability.bAvailable)
+		{
+			PurchaseContext.FailureReason = PurchaseContext.SharedPoolAvailability.Reason;
+			return PurchaseContext;
+		}
+	}
+
+	PurchaseContext.FailureReason.Reset();
+	PurchaseContext.bCanPurchase = true;
+	return PurchaseContext;
+}
+
 void UGambitShopComponent::ResolvePurchasePrice(FGambitShopPurchaseContext& PurchaseContext) const
 {
 	const int32 OldPrice = PurchaseContext.ResolvedPrice;

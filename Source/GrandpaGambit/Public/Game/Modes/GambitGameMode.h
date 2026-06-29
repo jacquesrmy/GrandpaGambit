@@ -91,6 +91,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	bool RequestPurchaseOffer(AGambitPlayerState* PlayerState, int32 OfferId);
 
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
+	FGambitRoundCommandResult RequestPurchaseOfferDetailed(AGambitPlayerState* PlayerState, int32 OfferId);
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
+	TArray<FGambitShopOfferSnapshot> BuildShopOfferSnapshots(AGambitPlayerState* PlayerState) const;
+
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
 	UGambitRoundFlowComponent* GetRoundFlowComponent() const { return RoundFlowComponent; }
 

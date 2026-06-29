@@ -11,10 +11,15 @@
 #include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/States/GambitGameState.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
+#include "Items/Data/GambitItemDefinition.h"
+#include "Items/Modules/GambitModuleDefinition.h"
+#include "Managers/SharedPool/GambitSharedPoolComponent.h"
 #include "Players/Components/GambitDiceComponent.h"
+#include "Players/Components/GambitEconomyComponent.h"
 #include "Players/Components/GambitInventoryComponent.h"
 #include "Players/Controllers/GambitPlayerController.h"
 #include "Players/States/GambitPlayerState.h"
+#include "Shop/Components/GambitShopComponent.h"
 #include "UI/Widgets/GambitPCShellWidget.h"
 
 namespace
@@ -38,6 +43,36 @@ namespace
 		ConsumableDefinition->DisplayName = FText::FromString(DisplayName);
 		ConsumableDefinition->UsablePhases = UsablePhases;
 		return ConsumableDefinition;
+	}
+
+	UGambitModuleDefinition* MakePCShellFlowTestModule(
+		UObject* Outer,
+		const TCHAR* ItemId,
+		const TCHAR* DisplayName,
+		const int32 Cost,
+		const EGambitItemRarity Rarity = EGambitItemRarity::Common)
+	{
+		UGambitModuleDefinition* ModuleDefinition = NewObject<UGambitModuleDefinition>(Outer);
+		ModuleDefinition->ItemId = FName(ItemId);
+		ModuleDefinition->DisplayName = FText::FromString(DisplayName);
+		ModuleDefinition->Cost = Cost;
+		ModuleDefinition->Rarity = Rarity;
+		return ModuleDefinition;
+	}
+
+	FGambitShopOffer MakePCShellFlowTestOffer(
+		const int32 OfferId,
+		UGambitItemDefinition* ItemDefinition,
+		const int32 Price,
+		const bool bUsesSharedPool = false)
+	{
+		FGambitShopOffer Offer;
+		Offer.OfferId = OfferId;
+		Offer.ItemDefinition = ItemDefinition;
+		Offer.BasePrice = Price;
+		Offer.Price = Price;
+		Offer.bUsesSharedPool = bUsesSharedPool;
+		return Offer;
 	}
 
 	struct FGambitPCShellFlowWorld
@@ -596,6 +631,214 @@ bool FGambitPCShellRoundHudLedgerFeedbackTest::RunTest(const FString& Parameters
 	TestFalse(TEXT("unimportant round scored event is not part of ledger summary"), ContainsShellLine(LedgerLines, TEXT("RoundScored")));
 
 	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellRoundHudShopPurchaseTest,
+	"GrandpaGambit.PCShell.RoundHud.ShopPurchase",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellRoundHudShopPurchaseTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 4, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* Buyer = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	AGambitPlayerState* LowGoldPlayer = TestWorld.Players.IsValidIndex(1) ? TestWorld.Players[1] : nullptr;
+	AGambitPlayerState* SharedPoolPlayer = TestWorld.Players.IsValidIndex(2) ? TestWorld.Players[2] : nullptr;
+	AGambitPlayerState* FullInventoryPlayer = TestWorld.Players.IsValidIndex(3) ? TestWorld.Players[3] : nullptr;
+	if (!TestNotNull(TEXT("buyer exists for shop purchase smoke"), Buyer)
+		|| !TestNotNull(TEXT("low-gold player exists for shop refusal smoke"), LowGoldPlayer)
+		|| !TestNotNull(TEXT("shared-pool player exists for shop refusal smoke"), SharedPoolPlayer)
+		|| !TestNotNull(TEXT("full-inventory player exists for shop refusal smoke"), FullInventoryPlayer))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	UObject* TestOuter = GetTransientPackage();
+	UGambitModuleDefinition* CoffeeModule = MakePCShellFlowTestModule(TestOuter, TEXT("module.test.shop_coffee"), TEXT("Shop Coffee"), 5);
+	UGambitModuleDefinition* TeaModule = MakePCShellFlowTestModule(TestOuter, TEXT("module.test.shop_tea"), TEXT("Shop Tea"), 7, EGambitItemRarity::Uncommon);
+	UGambitModuleDefinition* BiscuitModule = MakePCShellFlowTestModule(TestOuter, TEXT("module.test.shop_biscuit"), TEXT("Shop Biscuit"), 9, EGambitItemRarity::Rare);
+
+	TestWorld.GameState->SetCurrentPhase(EGambitRoundPhase::Shop);
+	Buyer->GetEconomyComponent()->AddGold(20);
+	Buyer->GetShopComponent()->SetCurrentOffers({
+		MakePCShellFlowTestOffer(0, CoffeeModule, CoffeeModule->Cost),
+		MakePCShellFlowTestOffer(1, TeaModule, TeaModule->Cost),
+		MakePCShellFlowTestOffer(2, BiscuitModule, BiscuitModule->Cost)
+	});
+
+	const TArray<FGambitShopOfferSnapshot> BuyerSnapshotsBefore = TestWorld.RoundFlow->BuildShopOfferSnapshots(Buyer);
+	TestEqual(TEXT("shop snapshot exposes three offers"), BuyerSnapshotsBefore.Num(), 3);
+	const TArray<FString> ShopLinesBefore = UGambitPCShellWidget::BuildShopFeedbackLines(Buyer, BuyerSnapshotsBefore);
+	TestTrue(TEXT("shop header exposes current gold"), ContainsShellLine(ShopLinesBefore, TEXT("Shop: Gold 20")));
+	TestTrue(TEXT("offer name is visible"), ContainsShellLine(ShopLinesBefore, TEXT("Shop Coffee")));
+	TestTrue(TEXT("offer id is visible"), ContainsShellLine(ShopLinesBefore, TEXT("module.test.shop_coffee")));
+	TestTrue(TEXT("offer type is visible"), ContainsShellLine(ShopLinesBefore, TEXT("Type Module")));
+	TestTrue(TEXT("offer rarity is visible"), ContainsShellLine(ShopLinesBefore, TEXT("Rarity Common")));
+	TestTrue(TEXT("offer cost is visible"), ContainsShellLine(ShopLinesBefore, TEXT("Cost 5 gold")));
+	TestTrue(TEXT("buyable state is visible"), ContainsShellLine(ShopLinesBefore, TEXT("Buyable")));
+
+	const FGambitRoundCommandResult PurchaseResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(Buyer, 0);
+	TestTrue(TEXT("shop offer purchase succeeds during Shop"), PurchaseResult.bSuccess);
+	TestEqual(TEXT("shop purchase reports success"), PurchaseResult.Status, EGambitRoundCommandStatus::Success);
+	TestEqual(TEXT("purchase spends the offer cost"), Buyer->GetCurrentGold(), 15);
+	TestTrue(TEXT("purchased module is active"), Buyer->GetActiveModulesRef().Contains(CoffeeModule));
+	TestTrue(TEXT("purchased module definition is owned"), Buyer->GetInventoryComponent()->HasItemDefinition(CoffeeModule));
+	if (const FGambitInventoryItemInstance* PurchasedInstance = Buyer->GetInventoryComponent()->FindFirstItemInstanceByDefinition(CoffeeModule))
+	{
+		TestEqual(TEXT("runtime instance records shop purchase source"), PurchasedInstance->SourcePurchaseId, FName(TEXT("shop.offer.0")));
+	}
+	else
+	{
+		AddError(TEXT("shop purchase did not create a runtime inventory instance"));
+	}
+
+	const TArray<FString> InventoryLinesAfter = UGambitPCShellWidget::BuildInventorySummaryLines(Buyer);
+	TestTrue(TEXT("inventory summary exposes module count after purchase"), ContainsShellLine(InventoryLinesAfter, TEXT("Modules")));
+	TestTrue(TEXT("inventory summary includes purchased module"), ContainsShellLine(InventoryLinesAfter, TEXT("Shop Coffee")));
+
+	const TArray<FGambitShopOfferSnapshot> BuyerSnapshotsAfter = TestWorld.RoundFlow->BuildShopOfferSnapshots(Buyer);
+	TestTrue(TEXT("remaining offers are shown as unavailable after purchase"), BuyerSnapshotsAfter.ContainsByPredicate([](const FGambitShopOfferSnapshot& Snapshot)
+	{
+		return !Snapshot.bCanPurchase && Snapshot.UnavailableReason.Contains(TEXT("Purchase already made"));
+	}));
+	const FGambitRoundCommandResult SecondPurchaseResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(Buyer, 1);
+	TestFalse(TEXT("second purchase in same shop is refused"), SecondPurchaseResult.bSuccess);
+	TestEqual(TEXT("second purchase refusal is typed"), SecondPurchaseResult.Status, EGambitRoundCommandStatus::PurchaseAlreadyMade);
+	TestEqual(TEXT("second purchase does not spend gold"), Buyer->GetCurrentGold(), 15);
+
+	UGambitModuleDefinition* ExpensiveModule = MakePCShellFlowTestModule(TestOuter, TEXT("module.test.expensive"), TEXT("Expensive"), 50);
+	LowGoldPlayer->GetShopComponent()->SetCurrentOffers({ MakePCShellFlowTestOffer(0, ExpensiveModule, ExpensiveModule->Cost) });
+	const FGambitRoundCommandResult InvalidOfferResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(LowGoldPlayer, 9);
+	TestFalse(TEXT("invalid offer is refused"), InvalidOfferResult.bSuccess);
+	TestEqual(TEXT("invalid offer refusal is typed"), InvalidOfferResult.Status, EGambitRoundCommandStatus::InvalidShopOffer);
+
+	const FGambitRoundCommandResult NotEnoughGoldResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(LowGoldPlayer, 0);
+	TestFalse(TEXT("not enough gold is refused"), NotEnoughGoldResult.bSuccess);
+	TestEqual(TEXT("not enough gold refusal is typed"), NotEnoughGoldResult.Status, EGambitRoundCommandStatus::NotEnoughGold);
+	TestFalse(TEXT("not enough gold does not add item"), LowGoldPlayer->GetInventoryComponent()->HasItemDefinition(ExpensiveModule));
+
+	UGambitModuleDefinition* SharedModule = MakePCShellFlowTestModule(TestOuter, TEXT("module.test.shared_empty"), TEXT("Shared Empty"), 3);
+	SharedModule->bUsesSharedPool = true;
+	SharedModule->SharedPoolMaxStock = 1;
+	SharedModule->SharedPoolPurchaseLimit = 1;
+	FGambitSharedStockEntry SharedStock;
+	SharedStock.ItemDefinition = SharedModule;
+	SharedStock.MaxStock = 1;
+	SharedStock.GlobalPurchaseLimit = 1;
+	UGambitSharedPoolComponent* SharedPool = TestWorld.GameState->GetSharedPoolComponent();
+	TestNotNull(TEXT("shared pool exists for shop refusal smoke"), SharedPool);
+	if (SharedPool)
+	{
+		SharedPool->InitializeSharedStock({ SharedStock });
+		TestTrue(TEXT("test consumes shared stock before purchase"), SharedPool->ConsumeItemStock(SharedModule));
+	}
+	SharedPoolPlayer->GetEconomyComponent()->AddGold(20);
+	SharedPoolPlayer->GetShopComponent()->SetCurrentOffers({ MakePCShellFlowTestOffer(0, SharedModule, SharedModule->Cost, true) });
+	const FGambitRoundCommandResult SharedPoolResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(SharedPoolPlayer, 0);
+	TestFalse(TEXT("unavailable shared pool offer is refused"), SharedPoolResult.bSuccess);
+	TestEqual(TEXT("shared pool refusal is typed"), SharedPoolResult.Status, EGambitRoundCommandStatus::SharedPoolUnavailable);
+
+	while (FullInventoryPlayer->GetInventoryComponent()->HasAvailableModuleSlot())
+	{
+		const int32 FillIndex = FullInventoryPlayer->GetActiveModulesRef().Num();
+		UGambitModuleDefinition* FillerModule = MakePCShellFlowTestModule(
+			TestOuter,
+			*FString::Printf(TEXT("module.test.slot_fill_%d"), FillIndex),
+			*FString::Printf(TEXT("Slot Fill %d"), FillIndex),
+			1);
+		const bool bAddedFiller = FullInventoryPlayer->GetInventoryComponent()->AddModule(FillerModule);
+		TestTrue(TEXT("filler module can be added while slots remain"), bAddedFiller);
+		if (!bAddedFiller)
+		{
+			break;
+		}
+	}
+	UGambitModuleDefinition* OverflowModule = MakePCShellFlowTestModule(TestOuter, TEXT("module.test.overflow"), TEXT("Overflow"), 1);
+	FullInventoryPlayer->GetEconomyComponent()->AddGold(20);
+	FullInventoryPlayer->GetShopComponent()->SetCurrentOffers({ MakePCShellFlowTestOffer(0, OverflowModule, OverflowModule->Cost) });
+	const FGambitRoundCommandResult FullInventoryResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(FullInventoryPlayer, 0);
+	TestFalse(TEXT("full module slots refuse purchase"), FullInventoryResult.bSuccess);
+	TestEqual(TEXT("full inventory refusal is typed"), FullInventoryResult.Status, EGambitRoundCommandStatus::InventoryFull);
+
+	TestWorld.GameState->SetCurrentPhase(EGambitRoundPhase::Action);
+	const FGambitRoundCommandResult OutOfPhaseResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(LowGoldPlayer, 0);
+	TestFalse(TEXT("out-of-shop purchase is refused"), OutOfPhaseResult.bSuccess);
+	TestEqual(TEXT("out-of-shop purchase refusal is typed"), OutOfPhaseResult.Status, EGambitRoundCommandStatus::InvalidPhase);
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellShopContinueFlowTest,
+	"GrandpaGambit.PCShell.ShopContinueFlow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellShopContinueFlowTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	for (const int32 PlayerCount : {2, 3, 4})
+	{
+		FGambitPCShellFlowWorld TestWorld;
+		if (!BuildPCShellFlowWorld(*this, PlayerCount, TestWorld))
+		{
+			return false;
+		}
+
+		FGambitMatchSetupConfig MatchSetup;
+		MatchSetup.LocalPlayerCount = PlayerCount;
+		MatchSetup.RoundCount = 2;
+		TestWorld.RoundFlow->ApplyMatchSetup(MatchSetup);
+		TestWorld.RoundFlow->StartMatchFlow();
+		TestEqual(
+			FString::Printf(TEXT("%d-player match enters Selection/Reroll after automatic roll"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::SelectionReroll);
+
+		for (AGambitPlayerState* PlayerState : TestWorld.Players)
+		{
+			TestWorld.RoundFlow->SetPlayerReady(PlayerState, true);
+		}
+		TestEqual(
+			FString::Printf(TEXT("%d-player match advances to Action"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::Action);
+
+		for (AGambitPlayerState* PlayerState : TestWorld.Players)
+		{
+			TestWorld.RoundFlow->SetPlayerReady(PlayerState, true);
+		}
+		TestEqual(
+			FString::Printf(TEXT("%d-player match reaches Shop after auto resolution/reward/ranking"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::Shop);
+
+		for (AGambitPlayerState* PlayerState : TestWorld.Players)
+		{
+			TestWorld.RoundFlow->SetPlayerReady(PlayerState, true);
+		}
+		TestEqual(
+			FString::Printf(TEXT("%d-player shop continue reaches next round Selection/Reroll"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::SelectionReroll);
+		TestEqual(
+			FString::Printf(TEXT("%d-player shop continue increments round index"), PlayerCount),
+			TestWorld.GameState->GetCurrentRoundIndex(),
+			2);
+
+		TestWorld.Destroy();
+	}
+
 	return true;
 }
 

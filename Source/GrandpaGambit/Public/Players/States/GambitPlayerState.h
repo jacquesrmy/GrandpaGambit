@@ -88,6 +88,9 @@ public:
 	FGambitShopPurchaseContext BuildShopPurchaseContext(int32 OfferId, const UGambitSharedPoolComponent* SharedPoolComponent) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player")
+	FGambitShopPurchaseContext BuildShopPurchasePreviewContext(int32 OfferId, const UGambitSharedPoolComponent* SharedPoolComponent) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player")
 	bool TryPurchaseOffer(int32 OfferId, UGambitSharedPoolComponent* SharedPoolComponent);
 
 	bool TryPurchaseOfferWithContext(FGambitShopPurchaseContext& PurchaseContext, UGambitSharedPoolComponent* SharedPoolComponent);

@@ -76,6 +76,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
 	bool RequestPurchaseOffer(AGambitPlayerState* PlayerState, int32 OfferId);
 
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Round Flow")
+	FGambitRoundCommandResult RequestPurchaseOfferDetailed(AGambitPlayerState* PlayerState, int32 OfferId);
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
+	TArray<FGambitShopOfferSnapshot> BuildShopOfferSnapshots(AGambitPlayerState* PlayerState) const;
+
 	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
 	int32 GetRerollsUsedForPlayer(AGambitPlayerState* PlayerState) const;
 

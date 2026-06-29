@@ -403,6 +403,101 @@ namespace
 		Event.Reason = Reason;
 		return Event;
 	}
+
+	EGambitRoundCommandStatus ResolvePurchaseFailureStatus(const FGambitShopPurchaseContext& PurchaseContext)
+	{
+		if (PurchaseContext.bBlockedByEffect)
+		{
+			return EGambitRoundCommandStatus::PurchaseBlocked;
+		}
+
+		if (!PurchaseContext.ItemDefinition || PurchaseContext.FailureReason.Contains(TEXT("not found")))
+		{
+			return EGambitRoundCommandStatus::InvalidShopOffer;
+		}
+
+		if (PurchaseContext.FailureReason.Contains(TEXT("Not enough gold")))
+		{
+			return EGambitRoundCommandStatus::NotEnoughGold;
+		}
+
+		if (PurchaseContext.bUsesSharedPool
+			&& !PurchaseContext.bHasSharedPoolReservation
+			&& !PurchaseContext.SharedPoolAvailability.bAvailable)
+		{
+			return EGambitRoundCommandStatus::SharedPoolUnavailable;
+		}
+
+		if (PurchaseContext.FailureReason.Contains(TEXT("shared pool"), ESearchCase::IgnoreCase)
+			|| PurchaseContext.FailureReason.Contains(TEXT("stock"), ESearchCase::IgnoreCase)
+			|| PurchaseContext.FailureReason.Contains(TEXT("reserved"), ESearchCase::IgnoreCase)
+			|| PurchaseContext.FailureReason.Contains(TEXT("purchase limit"), ESearchCase::IgnoreCase))
+		{
+			return EGambitRoundCommandStatus::SharedPoolUnavailable;
+		}
+
+		if (PurchaseContext.FailureReason.Contains(TEXT("slot"), ESearchCase::IgnoreCase)
+			|| PurchaseContext.FailureReason.Contains(TEXT("inventory"), ESearchCase::IgnoreCase)
+			|| PurchaseContext.FailureReason.Contains(TEXT("dice item"), ESearchCase::IgnoreCase))
+		{
+			return EGambitRoundCommandStatus::InventoryFull;
+		}
+
+		return EGambitRoundCommandStatus::Failed;
+	}
+
+	FGambitShopOfferSnapshot BuildOfferSnapshotFromContext(
+		const FGambitShopOffer& Offer,
+		const FGambitShopPurchaseContext& PurchaseContext,
+		const AGambitPlayerState* PlayerState,
+		const EGambitRoundPhase CurrentPhase,
+		const int32 PurchasesMadeThisShop)
+	{
+		FGambitShopOfferSnapshot Snapshot;
+		Snapshot.OfferId = Offer.OfferId;
+		Snapshot.ItemDefinition = Offer.ItemDefinition;
+		Snapshot.BasePrice = Offer.BasePrice;
+		Snapshot.ResolvedPrice = PurchaseContext.ItemDefinition ? PurchaseContext.ResolvedPrice : Offer.Price;
+		Snapshot.CurrentGold = PlayerState ? PlayerState->GetCurrentGold() : 0;
+		Snapshot.SlotState = PlayerState ? PlayerState->GetSlotState() : FGambitPlayerSlotState();
+		Snapshot.PurchasesMadeThisShop = PurchasesMadeThisShop;
+		Snapshot.bUsesSharedPool = PurchaseContext.ItemDefinition ? PurchaseContext.bUsesSharedPool : Offer.bUsesSharedPool;
+		Snapshot.bHasSharedPoolReservation = PurchaseContext.ItemDefinition ? PurchaseContext.bHasSharedPoolReservation : Offer.bHasSharedPoolReservation;
+		Snapshot.SharedPoolAvailability = PurchaseContext.SharedPoolAvailability;
+
+		const UGambitItemDefinition* ItemDefinition = PurchaseContext.ItemDefinition
+			? PurchaseContext.ItemDefinition.Get()
+			: Offer.ItemDefinition.Get();
+		if (ItemDefinition)
+		{
+			Snapshot.ItemId = ItemDefinition->GetResolvedItemId();
+			Snapshot.ItemName = FormatRoundFlowItemName(ItemDefinition);
+			Snapshot.ItemType = ItemDefinition->ItemType;
+			Snapshot.Rarity = ItemDefinition->Rarity;
+		}
+
+		if (CurrentPhase != EGambitRoundPhase::Shop)
+		{
+			Snapshot.bCanPurchase = false;
+			Snapshot.UnavailableReason = FString::Printf(
+				TEXT("Current phase is %s, expected Shop"),
+				*RoundFlowPhaseToString(CurrentPhase));
+		}
+		else if (PurchasesMadeThisShop > 0)
+		{
+			Snapshot.bCanPurchase = false;
+			Snapshot.UnavailableReason = TEXT("Purchase already made this shop");
+		}
+		else
+		{
+			Snapshot.bCanPurchase = PurchaseContext.bCanPurchase;
+			Snapshot.UnavailableReason = PurchaseContext.bCanPurchase
+				? FString()
+				: PurchaseContext.FailureReason;
+		}
+
+		return Snapshot;
+	}
 }
 
 UGambitRoundFlowComponent::UGambitRoundFlowComponent()
@@ -880,6 +975,13 @@ bool UGambitRoundFlowComponent::RequestUseConsumableWithTargetSelectionResult(
 
 bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerState, const int32 OfferId)
 {
+	return RequestPurchaseOfferDetailed(PlayerState, OfferId).bSuccess;
+}
+
+FGambitRoundCommandResult UGambitRoundFlowComponent::RequestPurchaseOfferDetailed(
+	AGambitPlayerState* PlayerState,
+	const int32 OfferId)
+{
 	AGambitGameState* GameState = GetGambitGameState();
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	FGambitShopOffer OfferSnapshot;
@@ -897,8 +999,58 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 		}
 	}
 
-	bool bSuccess = false;
-	if (GameState && CurrentPhase == EGambitRoundPhase::Shop && PlayerState)
+	FGambitRoundCommandResult Result;
+	if (!GameState)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::MissingGameState,
+			false,
+			TEXT("Purchase refused: missing game state."));
+	}
+	else if (!PlayerState)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidPlayer,
+			false,
+			TEXT("Purchase refused: invalid player."));
+	}
+	else if (CurrentPhase != EGambitRoundPhase::Shop)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidPhase,
+			false,
+			FString::Printf(
+				TEXT("Purchase refused: current phase is %s, expected Shop."),
+				*RoundFlowPhaseToString(CurrentPhase)));
+	}
+	else if (!PlayerState->GetShopComponent())
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::Failed,
+			false,
+			TEXT("Purchase refused: missing shop component."));
+	}
+	else if (PlayerState->GetShopComponent()->GetPurchasesMadeThisShop() > 0)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::PurchaseAlreadyMade,
+			false,
+			TEXT("Purchase refused: this player already bought an offer this shop."));
+	}
+	else if (!bFoundOffer)
+	{
+		Result = MakeCommandResult(
+			PlayerState,
+			EGambitRoundCommandStatus::InvalidShopOffer,
+			false,
+			FString::Printf(TEXT("Purchase refused: offer %d was not found."), OfferId));
+	}
+	else
 	{
 		UGambitSharedPoolComponent* SharedPoolComponent = GameState->GetSharedPoolComponent();
 		FGambitShopPurchaseContext PurchaseContext = PlayerState->BuildShopPurchaseContext(OfferId, SharedPoolComponent);
@@ -921,7 +1073,7 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 		PurchaseContext = PrePurchaseContext.ShopPurchase;
 
 		const int32 GoldBeforePurchase = PlayerState->GetCurrentGold();
-		bSuccess = PlayerState->TryPurchaseOfferWithContext(PurchaseContext, SharedPoolComponent);
+		const bool bSuccess = PlayerState->TryPurchaseOfferWithContext(PurchaseContext, SharedPoolComponent);
 		const int32 GoldAfterPurchase = PlayerState->GetCurrentGold();
 		if (bSuccess && PurchaseContext.ItemDefinition)
 		{
@@ -979,9 +1131,24 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 				PlayerState->AddDebugGoldLine(PostPurchaseGoldLine);
 			}
 			PlayerState->AddDebugShopLine(BuildShopLineFromPurchaseContext(PurchaseContext, CurrentPhase, EGambitDebugShopLineType::PurchaseSuccess));
+
+			Result = MakeCommandResult(
+				PlayerState,
+				EGambitRoundCommandStatus::Success,
+				true,
+				FString::Printf(
+					TEXT("Purchased %s for %d gold. Gold %d -> %d."),
+					*FormatRoundFlowItemName(PurchaseContext.ItemDefinition.Get()),
+					PurchaseContext.ResolvedPrice,
+					GoldBeforePurchase,
+					PlayerState->GetCurrentGold()));
 		}
-		else if (!PurchaseContext.FailureReason.IsEmpty())
+		else
 		{
+			if (PurchaseContext.FailureReason.IsEmpty())
+			{
+				PurchaseContext.FailureReason = TEXT("Purchase rejected by shop.");
+			}
 			PlayerState->AddDebugShopLine(BuildShopLineFromPurchaseContext(PurchaseContext, CurrentPhase, EGambitDebugShopLineType::PurchaseFailure));
 			UE_LOG(
 				LogGambit,
@@ -990,7 +1157,19 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 				*BuildRoundFlowPlayerLabel(PlayerState, Players),
 				OfferId,
 				*PurchaseContext.FailureReason);
+
+			Result = MakeCommandResult(
+				PlayerState,
+				ResolvePurchaseFailureStatus(PurchaseContext),
+				false,
+				FString::Printf(
+					TEXT("Purchase refused: %s"),
+					*PurchaseContext.FailureReason));
 		}
+
+		Result.OfferId = OfferId;
+		Result.GoldBefore = GoldBeforePurchase;
+		Result.GoldAfter = PlayerState->GetCurrentGold();
 	}
 
 	const FString OfferString = bFoundOffer ? FormatRoundFlowOffer(OfferSnapshot) : FString::Printf(TEXT("OfferId=%d NotFound"), OfferId);
@@ -1001,9 +1180,36 @@ bool UGambitRoundFlowComponent::RequestPurchaseOffer(AGambitPlayerState* PlayerS
 		*BuildRoundFlowPlayerLabel(PlayerState, Players),
 		*RoundFlowPhaseToString(CurrentPhase),
 		*OfferString,
-		bSuccess ? TEXT("Success") : TEXT("Failure"),
+		Result.bSuccess ? TEXT("Success") : TEXT("Failure"),
 		PlayerState ? PlayerState->GetCurrentGold() : 0);
-	return bSuccess;
+	Result.OfferId = OfferId;
+	return Result;
+}
+
+TArray<FGambitShopOfferSnapshot> UGambitRoundFlowComponent::BuildShopOfferSnapshots(
+	AGambitPlayerState* PlayerState) const
+{
+	TArray<FGambitShopOfferSnapshot> Snapshots;
+	if (!PlayerState)
+	{
+		return Snapshots;
+	}
+
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	const UGambitSharedPoolComponent* SharedPoolComponent = GameState ? GameState->GetSharedPoolComponent() : nullptr;
+	const UGambitShopComponent* ShopComponent = PlayerState->GetShopComponent();
+	const int32 PurchasesMadeThisShop = ShopComponent ? ShopComponent->GetPurchasesMadeThisShop() : 0;
+	const TArray<FGambitShopOffer>& Offers = PlayerState->GetCurrentShopOffersRef();
+	Snapshots.Reserve(Offers.Num());
+
+	for (const FGambitShopOffer& Offer : Offers)
+	{
+		const FGambitShopPurchaseContext PurchaseContext = PlayerState->BuildShopPurchasePreviewContext(Offer.OfferId, SharedPoolComponent);
+		Snapshots.Add(BuildOfferSnapshotFromContext(Offer, PurchaseContext, PlayerState, CurrentPhase, PurchasesMadeThisShop));
+	}
+
+	return Snapshots;
 }
 
 int32 UGambitRoundFlowComponent::GetRerollsUsedForPlayer(AGambitPlayerState* PlayerState) const

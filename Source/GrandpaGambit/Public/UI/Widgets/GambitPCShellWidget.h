@@ -22,6 +22,7 @@ enum class EGambitPCShellActionKind : uint8
 	ToggleDieLock,
 	Reroll,
 	UseConsumable,
+	BuyShopOffer,
 	SelectTargetSelectionOption,
 	ConfirmTargetSelection,
 	CancelTargetSelection
@@ -79,6 +80,10 @@ public:
 	static TArray<FString> BuildRankingFeedbackLines(const AGambitGameState* GameState);
 	static TArray<FString> BuildLedgerFeedbackLines(const AGambitPlayerState* PlayerState, int32 MaxEvents = 6);
 	static TArray<FString> BuildTargetSelectionFeedbackLines(const AGambitPlayerController* PlayerController);
+	static TArray<FString> BuildShopFeedbackLines(
+		const AGambitPlayerState* PlayerState,
+		const TArray<FGambitShopOfferSnapshot>& OfferSnapshots);
+	static TArray<FString> BuildInventorySummaryLines(const AGambitPlayerState* PlayerState);
 
 private:
 	UFUNCTION()
@@ -139,6 +144,7 @@ private:
 	void BuildPlayerRows();
 	void BuildPlayerRoundHud(int32 PlayerIndex, AGambitPlayerState* PlayerState);
 	void BuildPlayerActionHud(int32 PlayerIndex, AGambitPlayerState* PlayerState);
+	void BuildPlayerShopHud(int32 PlayerIndex, AGambitPlayerState* PlayerState);
 	void BuildTargetSelectionHud(AGambitPlayerController* PlayerController, AGambitPlayerState* PlayerState, int32 PlayerIndex);
 	void BuildFinalRankingRows();
 	void ConfigureMatch(int32 LocalPlayerCount, int32 RoundCount);

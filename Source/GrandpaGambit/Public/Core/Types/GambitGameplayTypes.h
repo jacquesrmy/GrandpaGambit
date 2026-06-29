@@ -210,7 +210,13 @@ enum class EGambitRoundCommandStatus : uint8
 	InvalidDie,
 	DieCannotBeLocked,
 	NoUnlockedDice,
-	RerollLimitReached
+	RerollLimitReached,
+	InvalidShopOffer,
+	PurchaseAlreadyMade,
+	NotEnoughGold,
+	SharedPoolUnavailable,
+	InventoryFull,
+	PurchaseBlocked
 };
 
 USTRUCT(BlueprintType)
@@ -234,10 +240,19 @@ struct FGambitRoundCommandResult
 	int32 DieIndex = INDEX_NONE;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 OfferId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
 	int32 RerollsUsed = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
 	int32 RerollLimit = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 GoldBefore = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
+	int32 GoldAfter = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Round Command")
 	FString Message;
@@ -699,6 +714,60 @@ struct FGambitPlayerSlotState
 
 	UPROPERTY(BlueprintReadOnly, Category = "Slots")
 	int32 ConsumableSlotsCapacity = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FGambitShopOfferSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	int32 OfferId = INDEX_NONE;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	TObjectPtr<UGambitItemDefinition> ItemDefinition = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	FName ItemId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	FString ItemName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	EGambitItemType ItemType = EGambitItemType::None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	EGambitItemRarity Rarity = EGambitItemRarity::Common;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	int32 BasePrice = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	int32 ResolvedPrice = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	int32 CurrentGold = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	FGambitPlayerSlotState SlotState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	int32 PurchasesMadeThisShop = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	bool bUsesSharedPool = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	bool bHasSharedPoolReservation = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	FGambitSharedPoolAvailabilityResult SharedPoolAvailability;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	bool bCanPurchase = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop")
+	FString UnavailableReason;
 };
 
 USTRUCT(BlueprintType)

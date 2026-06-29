@@ -1,6 +1,6 @@
 # V0.1 PC round HUD
 
-This pass keeps the playable PC keyboard/mouse roll, lock, and reroll slice, keeps readable end-of-round feedback for resolution/rewards/ranking, and adds the first PC Action phase consumable + target-selection controls.
+This pass keeps the playable PC keyboard/mouse roll, lock, and reroll slice, keeps readable end-of-round feedback for resolution/rewards/ranking, keeps the first PC Action phase consumable + target-selection controls, and adds the minimal PC Shop purchase flow.
 
 ## Scope
 
@@ -20,20 +20,28 @@ This pass keeps the playable PC keyboard/mouse roll, lock, and reroll slice, kee
 - After resolution, each player row shows the scored combination, raw score, final score, score totals, and score debug breakdown lines already produced by scoring/effect systems.
 - After reward/ranking data exists, each player row shows round gold delta, gold breakdown lines, and VP gained when available.
 - After ranking exists, the HUD shows the round ranking snapshot from `AGambitGameState`.
+- During `Shop`, each player row shows that player's generated offers.
+- Shop offers show display name, stable item id, item type, rarity, gold cost, shared-pool state when relevant, and whether the offer is currently buyable.
+- Clicking `Buy Offer N` calls `AGambitGameMode::RequestPurchaseOfferDetailed`, which delegates to `UGambitRoundFlowComponent`.
+- Purchase validation remains gameplay-owned and refuses out-of-phase purchases, invalid offers, insufficient gold, shared-pool unavailability, full slots, effect-blocked purchases, and a second purchase in the same shop.
+- A successful purchase spends gold, commits shared-pool stock when needed, grants the item through `UGambitInventoryComponent`, records the runtime inventory instance, and updates shop/gold debug feedback.
+- During `Shop`, each player row also shows current gold and an inventory summary so gold and inventory changes are visible immediately after purchase.
 - Each player row shows a compact important ledger summary for effect applied, effect prevented, consumable used, gold changed, score modifier applied, die modified, die removed, target selection requested/cancelled, and target selection invalid events.
 - The widget does not evaluate dice or recalculate score. It only formats `PlayerState`/`GameState` snapshots and debug/event lines.
 
 ## Ownership
 
 - `UGambitRoundFlowComponent` owns phase validation, reroll limit validation, lock validation, reroll counters, effect hooks, and round events.
+- `UGambitRoundFlowComponent` owns shop purchase phase validation, one-purchase-per-shop V0.1 validation, purchase effect hooks, and shop offer snapshots for the HUD.
 - `AGambitGameMode` exposes detailed shell command APIs while keeping the old bool wrappers for debug and input callers.
 - `AGambitPlayerController` owns pending target-selection state and the select/confirm/cancel commands.
 - `UGambitTargetSelectionService` owns target request and option generation.
 - `UGambitDiceComponent` owns runtime dice state and performs lock/reroll mutation.
 - `UGambitInventoryComponent` owns consumable runtime slots and inventory instances.
+- `UGambitShopComponent` owns offer storage, purchase preview validation, price resolution, gold spend, shared-pool commit, and inventory grant mechanics.
 - `UGambitPlayerRoundStateComponent` owns the current round score, last score breakdown, debug score/gold lines, and round event ledger.
 - `AGambitGameState` owns the round ranking snapshot.
-- `UGambitPCShellWidget` displays state and sends player/die/consumable/target-selection command requests. It does not calculate gameplay truth.
+- `UGambitPCShellWidget` displays state and sends player/die/consumable/target-selection/shop command requests. It does not calculate gameplay truth.
 
 ## HUD contents
 
@@ -51,6 +59,9 @@ For each local player, the match HUD shows:
 - `Use Slot N` buttons for usable consumables during Action;
 - pending target-selection summary, selected option id, invalid reason if present, and service-built target options;
 - target option buttons plus `Confirm Target` and `Cancel` while a request is pending;
+- shop offers during Shop, including offer id, item label/id, type, rarity, cost, shared-pool state, and buyable/unavailable reason;
+- `Buy Offer N` buttons for buyable offers during Shop;
+- current shop purchase count, current gold, and inventory summary during Shop;
 - one clickable button per runtime die with value and locked/open state;
 - a per-player `Reroll Unlocked` button.
 
@@ -70,6 +81,9 @@ The HUD also shows a top-level feedback line after lock/reroll commands. Example
 - `Target option 0 selected.`
 - `Target confirmed.`
 - `Target selection cancelled.`
+- `Purchased Shop Coffee for 5 gold. Gold 20 -> 15.`
+- `Purchase refused: Not enough gold: Gold=0 Price=50 MinGold=0.`
+- `Purchase refused: this player already bought an offer this shop.`
 
 ## Testing from Gambit.umap
 
@@ -90,15 +104,20 @@ The HUD also shows a top-level feedback line after lock/reroll commands. Example
 11. If a player owns a target-rule consumable such as a `target.opponent` item, click `Use Slot N` and confirm the pending `Target Selection` section appears with service-built options.
 12. Click a target option, then `Confirm Target`; verify the effect applies to the selected player and the ledger shows applied/prevented/invalid feedback when produced.
 13. Repeat with a target consumable and click `Cancel`; verify the pending request clears and the consumable remains in inventory.
-14. Use `Continue Phase` to preserve the existing shell progression into Resolution, Reward, Ranking, Shop, and final match completion.
-15. After leaving Action, confirm the Shop phase still uses the existing `Continue Phase` flow and displays each player's resolved combination, raw/final score, scoring breakdown, gold reward details, VP gained, round ranking, and important ledger entries when present.
+14. Use `Continue Phase` to progress into Resolution, Reward, Ranking, and Shop.
+15. In `Shop`, inspect each player's offer section and verify every offer shows label/id/type/rarity/cost and a buyable or unavailable state.
+16. Click one buyable `Buy Offer N` button for a player.
+17. Confirm the feedback line reports the purchase, current gold decreases, the inventory summary updates, and the bought item has a runtime inventory instance through the existing inventory system.
+18. Try to buy a second offer for the same player and confirm the HUD refuses it as an already-completed shop purchase.
+19. If an offer is unaffordable or shared-pool unavailable, confirm the button is disabled or the command feedback reports the gameplay-owned refusal reason.
+20. Use `Continue Phase` in Shop and confirm the flow reaches the next round for 2, 3, and 4 player matches, or final match completion when the configured final round ends.
 
 ## Current limits
 
 - Layout is intentionally clear and testable, not final presentation.
 - No gamepad/controller navigation was added.
 - Target selection is single-option confirmation over existing request options; no real multi-target selection was added.
-- No real shop purchase flow was added to the PC shell.
+- Shop is the minimal V0.1 one-purchase flow only: no reroll shop, central market, auctions, reservation UI, non-gold costs, or advanced sell/replace flow.
 - No new objects or DataAssets were created.
-- Action, target-selection, resolution, reward, ranking, and ledger feedback is text-first debug/playability UI, not final presentation.
+- Action, target-selection, resolution, reward, ranking, shop, and ledger feedback is text-first debug/playability UI, not final presentation.
 - The shell still does not pause separately on automatic Resolution/Reward/Ranking phases; their results remain visible afterward, including during Shop.

@@ -44,6 +44,13 @@ public:
 		const UGambitSharedPoolComponent* SharedPoolComponent) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Shop")
+	FGambitShopPurchaseContext BuildPurchasePreviewContext(
+		int32 OfferId,
+		const UGambitEconomyComponent* EconomyComponent,
+		const UGambitInventoryComponent* InventoryComponent,
+		const UGambitSharedPoolComponent* SharedPoolComponent) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Shop")
 	void ResolvePurchasePrice(UPARAM(ref) FGambitShopPurchaseContext& PurchaseContext) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Shop")

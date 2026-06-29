@@ -12,7 +12,7 @@ This pass adds the first minimal PC keyboard/mouse shell for a local match.
    - adjust the round count
    - continue to the lobby/table setup
    - start the match
-4. During the match, the shell shows the current round, phase, player VP, score, gold, dice values, rerolls used/remaining, and shop offers.
+4. During the match, the shell shows the current round, phase, player VP, score, gold, dice values, rerolls used/remaining, shop offers, and minimal shop purchase feedback.
 5. During `Selection / Reroll`, click dice to lock/unlock them and use `Reroll Unlocked` per player.
 6. Use `Continue Phase` to mark all players ready during the current ready-gated phase:
    - Selection / Reroll
@@ -40,4 +40,4 @@ See `Docs/V01RoundHUD.md` for the Roll / Lock / Reroll HUD contract and manual t
 - No gamepad/controller navigation was added.
 - No real multi-target UI was added.
 - No B6/B7/B8/B9 objects or DataAssets were added.
-- Shop purchasing is still available through existing dev/debug paths; the shell only displays offers and skips shop via `Continue Phase`.
+- Shop purchasing is now available in the PC shell as the minimal V0.1 "choose 1 offer among 3" flow; advanced shop mechanics remain outside this pass.

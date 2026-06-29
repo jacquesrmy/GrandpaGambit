@@ -304,6 +304,29 @@ bool AGambitGameMode::RequestPurchaseOffer(AGambitPlayerState* PlayerState, cons
 	return RoundFlowComponent ? RoundFlowComponent->RequestPurchaseOffer(PlayerState, OfferId) : false;
 }
 
+FGambitRoundCommandResult AGambitGameMode::RequestPurchaseOfferDetailed(
+	AGambitPlayerState* PlayerState,
+	const int32 OfferId)
+{
+	FGambitRoundCommandResult Result;
+	if (!RoundFlowComponent)
+	{
+		Result.Status = EGambitRoundCommandStatus::Failed;
+		Result.OfferId = OfferId;
+		Result.Message = TEXT("Purchase refused: missing round flow.");
+		return Result;
+	}
+
+	return RoundFlowComponent->RequestPurchaseOfferDetailed(PlayerState, OfferId);
+}
+
+TArray<FGambitShopOfferSnapshot> AGambitGameMode::BuildShopOfferSnapshots(AGambitPlayerState* PlayerState) const
+{
+	return RoundFlowComponent
+		? RoundFlowComponent->BuildShopOfferSnapshots(PlayerState)
+		: TArray<FGambitShopOfferSnapshot>();
+}
+
 void AGambitGameMode::InitializePlayerForMatch(APlayerController* PlayerController) const
 {
 	if (!PlayerController)
