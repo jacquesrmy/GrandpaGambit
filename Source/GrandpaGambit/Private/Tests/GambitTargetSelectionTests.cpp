@@ -4,7 +4,9 @@
 #include "Engine/World.h"
 
 #include "Data/Assets/GambitItemEffectDefinition.h"
+#include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/Flow/GambitTargetSelectionService.h"
+#include "Game/States/GambitGameState.h"
 #include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Items/Effects/GambitEffectResolver.h"
 #include "Items/Effects/GambitEffectTargetRules.h"
@@ -40,6 +42,25 @@ namespace
 		UGambitConsumableDefinition* ConsumableDefinition = NewObject<UGambitConsumableDefinition>(Outer);
 		ConsumableDefinition->ItemId = FName(ItemId);
 		ConsumableDefinition->bCanTargetOpponent = bCanTargetOpponent;
+		ConsumableDefinition->UsablePhases.Add(EGambitRoundPhase::Action);
+		ConsumableDefinition->EffectDefinitions.Add(EffectDefinition);
+		return ConsumableDefinition;
+	}
+
+	UGambitConsumableDefinition* MakeSelfGoldConsumable(
+		UObject* Outer,
+		const TCHAR* ItemId,
+		const float Amount)
+	{
+		UGambitItemEffectDefinition* EffectDefinition = NewObject<UGambitItemEffectDefinition>(Outer);
+		EffectDefinition->Hook = EGambitEffectHook::ConsumableUse;
+		EffectDefinition->EffectType = EGambitItemEffectType::AddGold;
+		EffectDefinition->Target = EGambitEffectTarget::Source;
+		EffectDefinition->Amount = Amount;
+		EffectDefinition->EffectId = FName(*FString::Printf(TEXT("effect.test.%s.gold"), ItemId));
+
+		UGambitConsumableDefinition* ConsumableDefinition = NewObject<UGambitConsumableDefinition>(Outer);
+		ConsumableDefinition->ItemId = FName(ItemId);
 		ConsumableDefinition->UsablePhases.Add(EGambitRoundPhase::Action);
 		ConsumableDefinition->EffectDefinitions.Add(EffectDefinition);
 		return ConsumableDefinition;
@@ -93,6 +114,43 @@ namespace
 		}
 		Context.MatchPlayerCount = Players.Num();
 		return Context;
+	}
+
+	AGambitGameState* SpawnTargetSelectionGameState(UWorld* World, const TArray<AGambitPlayerState*>& Players)
+	{
+		AGambitGameState* GameState = World ? World->SpawnActor<AGambitGameState>() : nullptr;
+		if (!GameState)
+		{
+			return nullptr;
+		}
+
+		for (AGambitPlayerState* PlayerState : Players)
+		{
+			if (PlayerState)
+			{
+				GameState->AddPlayerState(PlayerState);
+			}
+		}
+		GameState->SetCurrentRoundIndex(1);
+		GameState->SetCurrentPhase(EGambitRoundPhase::Action);
+		return GameState;
+	}
+
+	FGambitTargetSelectionResult BuildConfirmedTargetSelectionResult(
+		const FGambitTargetSelectionRequest& Request,
+		const FGambitTargetSelectionOption& Option)
+	{
+		FGambitTargetSelectionResult Result;
+		Result.RequestId = Request.RequestId;
+		Result.bConfirmed = true;
+		Result.SourceConsumableSlotIndex = Request.SourceConsumableSlotIndex;
+		Result.SelectedOptionId = Option.OptionId;
+		Result.TargetPlayer = Option.TargetPlayer;
+		Result.TargetPlayerIndex = Option.TargetPlayerIndex;
+		Result.TargetDieHandIndex = Option.TargetDieHandIndex;
+		Result.TargetDieInstanceId = Option.TargetDieInstanceId;
+		Result.TargetRuleId = Option.TargetRuleId;
+		return Result;
 	}
 
 	int32 CountTargetSelectionRoundEvents(
@@ -159,6 +217,21 @@ bool FGambitTargetSelectionOpponentOptionsTest::RunTest(const FString& Parameter
 		return !Option.bValid;
 	}));
 
+	AGambitPlayerController* PlayerController = TestWorld->SpawnActor<AGambitPlayerController>();
+	if (!TestNotNull(TEXT("controller exists for pending opponent selection"), PlayerController))
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+	TestTrue(TEXT("controller starts pending opponent selection"), PlayerController->StartTargetSelection(Request));
+	TestTrue(TEXT("controller keeps pending opponent selection"), PlayerController->HasPendingTargetSelection());
+	TestEqual(
+		TEXT("pending opponent selection keeps service-built options"),
+		PlayerController->GetPendingTargetSelectionRequest().Options.Num(),
+		Request.Options.Num());
+	TestTrue(TEXT("pending opponent selection auto-selects a valid option"), PlayerController->GetPendingTargetSelectionSelectedOptionId() != INDEX_NONE);
+	TestTrue(TEXT("selection request feedback is visible"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::TargetSelectionRequested));
+
 	TestWorld->DestroyWorld(false);
 	return true;
 }
@@ -221,6 +294,145 @@ bool FGambitTargetSelectionDieOptionsAndCancelTest::RunTest(const FString& Param
 	TestFalse(TEXT("controller cleared pending selection"), PlayerController->HasPendingTargetSelection());
 	TestEqual(TEXT("cancel does not consume item"), SourcePlayer->GetConsumableSlotsRef().Num(), ConsumableCountBeforeCancel);
 	TestTrue(TEXT("cancel feedback is visible"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::TargetSelectionCancelled));
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitTargetSelectionRoundFlowSelfConsumableActionUseTest,
+	"GrandpaGambit.TargetSelection.RoundFlow.SelfConsumableActionUse",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitTargetSelectionRoundFlowSelfConsumableActionUseTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	TArray<AGambitPlayerState*> Players = SpawnInitializedPlayers(TestWorld, 2);
+	AGambitPlayerState* SourcePlayer = Players[0];
+	AGambitGameState* GameState = SpawnTargetSelectionGameState(TestWorld, Players);
+	UGambitRoundFlowComponent* RoundFlow = NewObject<UGambitRoundFlowComponent>(GameState);
+	if (!TestNotNull(TEXT("round flow exists for self consumable use"), RoundFlow)
+		|| !TestNotNull(TEXT("source player exists for self consumable use"), SourcePlayer)
+		|| !TestNotNull(TEXT("game state exists for self consumable use"), GameState))
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	UGambitConsumableDefinition* ConsumableDefinition = MakeSelfGoldConsumable(
+		GetTransientPackage(),
+		TEXT("item.test.self_gold_action"),
+		3.0f);
+	const int32 ConsumableSlotIndex = SourcePlayer->GetConsumableSlotsRef().Num();
+	TestTrue(TEXT("source receives self consumable"), SourcePlayer->GetInventoryComponent()->AddConsumable(ConsumableDefinition));
+	const int32 ConsumableCountBeforeUse = SourcePlayer->GetConsumableSlotsRef().Num();
+
+	GameState->SetCurrentPhase(EGambitRoundPhase::Action);
+	TestTrue(TEXT("self consumable succeeds during Action phase"), RoundFlow->RequestUseConsumable(SourcePlayer, ConsumableSlotIndex));
+	TestEqual(TEXT("self consumable grants gold through existing effect pipeline"), SourcePlayer->GetEconomyComponent()->GetCurrentGold(), 3);
+	TestEqual(TEXT("successful self consumable consumes one slot"), SourcePlayer->GetConsumableSlotsRef().Num(), ConsumableCountBeforeUse - 1);
+	TestTrue(TEXT("self consumable used event is visible"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::ConsumableUsed));
+	TestTrue(TEXT("self consumable effect applied event is visible"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::EffectApplied));
+	TestTrue(TEXT("self consumable gold feedback is visible"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::GoldChanged));
+
+	UGambitConsumableDefinition* OutOfPhaseConsumable = MakeSelfGoldConsumable(
+		GetTransientPackage(),
+		TEXT("item.test.self_gold_out_of_phase"),
+		5.0f);
+	TestTrue(TEXT("source receives out-of-phase consumable"), SourcePlayer->GetInventoryComponent()->AddConsumable(OutOfPhaseConsumable));
+	const int32 OutOfPhaseSlotIndex = SourcePlayer->GetConsumableSlotsRef().Num() - 1;
+	const int32 ConsumableCountBeforeRefusal = SourcePlayer->GetConsumableSlotsRef().Num();
+	GameState->SetCurrentPhase(EGambitRoundPhase::SelectionReroll);
+	TestFalse(TEXT("self consumable is refused outside Action phase"), RoundFlow->RequestUseConsumable(SourcePlayer, OutOfPhaseSlotIndex));
+	TestEqual(TEXT("out-of-phase refusal does not consume item"), SourcePlayer->GetConsumableSlotsRef().Num(), ConsumableCountBeforeRefusal);
+	TestEqual(TEXT("out-of-phase refusal does not apply gold"), SourcePlayer->GetEconomyComponent()->GetCurrentGold(), 3);
+
+	TestWorld->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitTargetSelectionRoundFlowConfirmedOpponentConsumableTest,
+	"GrandpaGambit.TargetSelection.RoundFlow.ConfirmedOpponentConsumable",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitTargetSelectionRoundFlowConfirmedOpponentConsumableTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	if (!TestNotNull(TEXT("test world is created"), TestWorld))
+	{
+		return false;
+	}
+
+	TArray<AGambitPlayerState*> Players = SpawnInitializedPlayers(TestWorld, 2);
+	AGambitPlayerState* SourcePlayer = Players[0];
+	AGambitPlayerState* TargetPlayer = Players[1];
+	AGambitGameState* GameState = SpawnTargetSelectionGameState(TestWorld, Players);
+	UGambitRoundFlowComponent* RoundFlow = NewObject<UGambitRoundFlowComponent>(GameState);
+	if (!TestNotNull(TEXT("round flow exists for confirmed opponent consumable"), RoundFlow)
+		|| !TestNotNull(TEXT("source player exists for confirmed opponent consumable"), SourcePlayer)
+		|| !TestNotNull(TEXT("target player exists for confirmed opponent consumable"), TargetPlayer)
+		|| !TestNotNull(TEXT("game state exists for confirmed opponent consumable"), GameState))
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	TargetPlayer->GetEconomyComponent()->AddGold(10);
+
+	UGambitItemEffectDefinition* EffectDefinition = MakeTargetSelectionEffect(
+		GetTransientPackage(),
+		EGambitItemEffectType::StealGold,
+		GambitEffectTargetRules::TargetOpponent);
+	EffectDefinition->Amount = 4.0f;
+	EffectDefinition->bNegativeEffect = true;
+	EffectDefinition->NegativeEffectCategories.Add(EGambitNegativeEffectCategory::GoldSteal);
+	UGambitConsumableDefinition* ConsumableDefinition = MakeTargetSelectionConsumable(
+		GetTransientPackage(),
+		TEXT("item.test.confirmed_bribe"),
+		EffectDefinition,
+		true);
+	const int32 ConsumableSlotIndex = SourcePlayer->GetConsumableSlotsRef().Num();
+	TestTrue(TEXT("source receives target consumable"), SourcePlayer->GetInventoryComponent()->AddConsumable(ConsumableDefinition));
+	const int32 ConsumableCountBeforeUse = SourcePlayer->GetConsumableSlotsRef().Num();
+
+	UGambitTargetSelectionService* SelectionService = NewObject<UGambitTargetSelectionService>();
+	FGambitTargetSelectionRequest Request;
+	TestTrue(TEXT("round-flow target request options are built by service"), SelectionService->BuildConsumableTargetSelectionRequest(
+		SourcePlayer,
+		ConsumableSlotIndex,
+		Players,
+		EGambitRoundPhase::Action,
+		MakeTargetSelectionContext(SourcePlayer, SourcePlayer, Players),
+		Request));
+
+	const FGambitTargetSelectionOption* TargetOption = Request.Options.FindByPredicate([TargetPlayer](const FGambitTargetSelectionOption& Option)
+	{
+		return Option.bValid && Option.TargetPlayer == TargetPlayer;
+	});
+	if (!TestNotNull(TEXT("confirmed target option exists for opponent"), TargetOption))
+	{
+		TestWorld->DestroyWorld(false);
+		return false;
+	}
+
+	const FGambitTargetSelectionResult Result = BuildConfirmedTargetSelectionResult(Request, *TargetOption);
+	TestTrue(TEXT("confirmed opponent consumable applies through round flow"), RoundFlow->RequestUseConsumableWithTargetSelectionResult(SourcePlayer, Result));
+	TestEqual(TEXT("confirmed target loses gold"), TargetPlayer->GetEconomyComponent()->GetCurrentGold(), 6);
+	TestEqual(TEXT("confirmed source gains stolen gold"), SourcePlayer->GetEconomyComponent()->GetCurrentGold(), 4);
+	TestEqual(TEXT("confirmed target consumable is consumed after successful confirmation"), SourcePlayer->GetConsumableSlotsRef().Num(), ConsumableCountBeforeUse - 1);
+	TestTrue(TEXT("confirmed use records consumable used"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::ConsumableUsed));
+	TestTrue(TEXT("confirmed use records effect applied"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::EffectApplied));
+	TestTrue(TEXT("confirmed use records gold changed"), SourcePlayer->HasEventThisRound(EGambitRoundGameplayEventType::GoldChanged));
 
 	TestWorld->DestroyWorld(false);
 	return true;

@@ -11,12 +11,16 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Core/Types/GambitDebugTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
+#include "Core/Types/GambitTargetSelectionTypes.h"
 #include "Dice/Data/GambitDiceDefinition.h"
 #include "Engine/World.h"
 #include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/Modes/GambitGameMode.h"
 #include "Game/States/GambitGameState.h"
 #include "Items/Data/GambitItemDefinition.h"
+#include "Items/Consumables/GambitConsumableDefinition.h"
+#include "Players/Components/GambitInventoryComponent.h"
+#include "Players/Controllers/GambitPlayerController.h"
 #include "Players/States/GambitPlayerState.h"
 
 namespace
@@ -39,6 +43,11 @@ namespace
 	FString ShellCombinationToString(const EGambitCombinationType Combination)
 	{
 		return ShellEnumToString(StaticEnum<EGambitCombinationType>(), static_cast<int64>(Combination));
+	}
+
+	FString ShellTargetSelectionTypeToString(const EGambitTargetSelectionType SelectionType)
+	{
+		return ShellEnumToString(StaticEnum<EGambitTargetSelectionType>(), static_cast<int64>(SelectionType));
 	}
 
 	FString ShellRoundEventTypeToString(const EGambitRoundGameplayEventType EventType)
@@ -101,14 +110,52 @@ namespace
 		{
 		case EGambitRoundGameplayEventType::EffectApplied:
 		case EGambitRoundGameplayEventType::EffectPrevented:
+		case EGambitRoundGameplayEventType::ConsumableUsed:
 		case EGambitRoundGameplayEventType::GoldChanged:
 		case EGambitRoundGameplayEventType::ScoreModifierApplied:
 		case EGambitRoundGameplayEventType::DieModified:
 		case EGambitRoundGameplayEventType::DieDestroyedOrRemoved:
+		case EGambitRoundGameplayEventType::TargetSelectionRequested:
+		case EGambitRoundGameplayEventType::TargetSelectionCancelled:
+		case EGambitRoundGameplayEventType::TargetSelectionInvalid:
 			return true;
 		default:
 			return false;
 		}
+	}
+
+	bool ShellIsConsumableUsableInPhase(const FGambitConsumableRuntimeSlot& Slot, const EGambitRoundPhase Phase)
+	{
+		return Slot.Definition && Slot.Definition->CanBeUsedDuringPhase(Phase);
+	}
+
+	FString ShellFormatConsumableLine(
+		const AGambitPlayerState* PlayerState,
+		const FGambitConsumableRuntimeSlot& Slot,
+		const int32 SlotIndex,
+		const EGambitRoundPhase Phase)
+	{
+		const UGambitConsumableDefinition* Definition = Slot.Definition.Get();
+		const FName ItemId = Definition ? Definition->GetResolvedItemId() : NAME_None;
+		const FString ItemName = Definition
+			? (Definition->DisplayName.IsEmpty() ? Definition->GetResolvedItemId().ToString() : Definition->DisplayName.ToString())
+			: FString(TEXT("None"));
+		const FGambitInventoryItemInstance* Instance = nullptr;
+		if (const UGambitInventoryComponent* InventoryComponent = PlayerState ? PlayerState->GetInventoryComponent() : nullptr)
+		{
+			Instance = InventoryComponent->FindItemInstanceById(Slot.InventoryInstanceId);
+		}
+
+		const int32 StackCount = Instance ? FMath::Max(1, Instance->StackCount) : 1;
+		const bool bUsable = ShellIsConsumableUsableInPhase(Slot, Phase);
+		const FString StateText = bUsable ? TEXT("Ready") : TEXT("Unavailable in phase");
+		return FString::Printf(
+			TEXT("  Slot %d: %s [%s] | Stack %d | Uses 1 | %s"),
+			SlotIndex + 1,
+			*ItemName,
+			*ItemId.ToString(),
+			StackCount,
+			*StateText);
 	}
 
 	FString ShellFormatDebugScoreLine(const FGambitDebugScoreLine& Line)
@@ -239,13 +286,13 @@ void UGambitPCShellActionButton::ConfigureAction(
 	const EGambitPCShellActionKind InActionKind,
 	AGambitPlayerState* InPlayerState,
 	const int32 InPlayerIndex,
-	const int32 InDieIndex)
+	const int32 InActionIndex)
 {
 	OwnerShell = InOwnerShell;
 	ActionKind = InActionKind;
 	PlayerState = InPlayerState;
 	PlayerIndex = InPlayerIndex;
-	DieIndex = InDieIndex;
+	ActionIndex = InActionIndex;
 	OnClicked.AddUniqueDynamic(this, &UGambitPCShellActionButton::HandleClicked);
 }
 
@@ -253,7 +300,7 @@ void UGambitPCShellActionButton::HandleClicked()
 {
 	if (UGambitPCShellWidget* Shell = OwnerShell.Get())
 	{
-		Shell->ExecutePlayerAction(ActionKind, PlayerState.Get(), PlayerIndex, DieIndex);
+		Shell->ExecutePlayerAction(ActionKind, PlayerState.Get(), PlayerIndex, ActionIndex);
 	}
 }
 
@@ -431,12 +478,12 @@ void UGambitPCShellWidget::ExecutePlayerAction(
 	const EGambitPCShellActionKind ActionKind,
 	AGambitPlayerState* PlayerState,
 	const int32 PlayerIndex,
-	const int32 DieIndex)
+	const int32 ActionIndex)
 {
 	FGambitRoundCommandResult Result;
 	Result.Phase = CachedPhase;
 	Result.PlayerIndex = PlayerIndex;
-	Result.DieIndex = DieIndex;
+	Result.DieIndex = ActionIndex;
 
 	AGambitGameMode* GameMode = GetGambitGameMode();
 	if (!GameMode)
@@ -456,17 +503,83 @@ void UGambitPCShellWidget::ExecutePlayerAction(
 		if (PlayerState)
 		{
 			const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
-			if (DiceStates.IsValidIndex(DieIndex))
+			if (DiceStates.IsValidIndex(ActionIndex))
 			{
-				bTargetLocked = !DiceStates[DieIndex].bLocked;
+				bTargetLocked = !DiceStates[ActionIndex].bLocked;
 			}
 		}
-		Result = GameMode->RequestSetDieLockedDetailed(PlayerState, DieIndex, bTargetLocked);
+		Result = GameMode->RequestSetDieLockedDetailed(PlayerState, ActionIndex, bTargetLocked);
 		break;
 	}
 	case EGambitPCShellActionKind::Reroll:
 		Result = GameMode->RequestRerollDetailed(PlayerState);
 		break;
+	case EGambitPCShellActionKind::UseConsumable:
+	{
+		AGambitPlayerController* PlayerController = ResolvePlayerControllerForPlayerState(PlayerState);
+		if (!PlayerController)
+		{
+			SetLastActionFeedbackMessage(false, TEXT("Consumable use refused: missing player controller."));
+			RefreshShell();
+			return;
+		}
+
+		const bool bSuccess = PlayerController->RequestUseConsumable(ActionIndex);
+		if (PlayerController->HasPendingTargetSelection())
+		{
+			const FGambitTargetSelectionRequest Request = PlayerController->GetPendingTargetSelectionRequest();
+			const bool bHasValidOptions = Request.HasValidOptions();
+			SetLastActionFeedbackMessage(
+				bSuccess && bHasValidOptions,
+				bHasValidOptions
+					? FString::Printf(TEXT("Target selection opened for slot %d."), ActionIndex + 1)
+					: FString::Printf(
+						TEXT("Target selection has no valid option: %s"),
+						Request.InvalidReason.IsEmpty() ? TEXT("unknown reason") : *Request.InvalidReason));
+		}
+		else
+		{
+			SetLastActionFeedbackMessage(
+				bSuccess,
+				bSuccess
+					? FString::Printf(TEXT("Consumable slot %d used."), ActionIndex + 1)
+					: FString::Printf(TEXT("Consumable slot %d refused."), ActionIndex + 1));
+		}
+		RefreshShell();
+		return;
+	}
+	case EGambitPCShellActionKind::SelectTargetSelectionOption:
+	{
+		AGambitPlayerController* PlayerController = ResolvePlayerControllerForPlayerState(PlayerState);
+		const bool bSuccess = PlayerController && PlayerController->RequestSelectTargetSelectionOption(ActionIndex);
+		SetLastActionFeedbackMessage(
+			bSuccess,
+			bSuccess
+				? FString::Printf(TEXT("Target option %d selected."), ActionIndex)
+				: FString::Printf(TEXT("Target option %d refused."), ActionIndex));
+		RefreshShell();
+		return;
+	}
+	case EGambitPCShellActionKind::ConfirmTargetSelection:
+	{
+		AGambitPlayerController* PlayerController = ResolvePlayerControllerForPlayerState(PlayerState);
+		const bool bSuccess = PlayerController && PlayerController->RequestConfirmTargetSelection();
+		SetLastActionFeedbackMessage(
+			bSuccess,
+			bSuccess ? TEXT("Target confirmed.") : TEXT("Target confirmation refused."));
+		RefreshShell();
+		return;
+	}
+	case EGambitPCShellActionKind::CancelTargetSelection:
+	{
+		AGambitPlayerController* PlayerController = ResolvePlayerControllerForPlayerState(PlayerState);
+		const bool bSuccess = PlayerController && PlayerController->RequestCancelTargetSelection();
+		SetLastActionFeedbackMessage(
+			bSuccess,
+			bSuccess ? TEXT("Target selection cancelled.") : TEXT("Target cancellation refused."));
+		RefreshShell();
+		return;
+	}
 	default:
 		Result.Status = EGambitRoundCommandStatus::Failed;
 		Result.Message = TEXT("Action refused: unsupported shell command.");
@@ -475,6 +588,37 @@ void UGambitPCShellWidget::ExecutePlayerAction(
 
 	SetLastActionFeedback(Result);
 	RefreshShell();
+}
+
+TArray<FString> UGambitPCShellWidget::BuildConsumableFeedbackLines(
+	const AGambitPlayerState* PlayerState,
+	const EGambitRoundPhase CurrentPhase)
+{
+	TArray<FString> Lines;
+	if (!PlayerState)
+	{
+		return Lines;
+	}
+
+	const FGambitPlayerSlotState SlotState = PlayerState->GetSlotState();
+	Lines.Add(FString::Printf(
+		TEXT("Consumables: %d/%d"),
+		SlotState.ConsumableSlotsUsed,
+		SlotState.ConsumableSlotsCapacity));
+
+	const TArray<FGambitConsumableRuntimeSlot>& ConsumableSlots = PlayerState->GetConsumableSlotsRef();
+	if (ConsumableSlots.Num() == 0)
+	{
+		Lines.Add(TEXT("  None"));
+		return Lines;
+	}
+
+	for (int32 SlotIndex = 0; SlotIndex < ConsumableSlots.Num(); ++SlotIndex)
+	{
+		Lines.Add(ShellFormatConsumableLine(PlayerState, ConsumableSlots[SlotIndex], SlotIndex, CurrentPhase));
+	}
+
+	return Lines;
 }
 
 TArray<FString> UGambitPCShellWidget::BuildScoreFeedbackLines(const AGambitPlayerState* PlayerState)
@@ -613,6 +757,66 @@ TArray<FString> UGambitPCShellWidget::BuildLedgerFeedbackLines(
 	for (int32 Index = StartIndex; Index < ImportantEvents.Num(); ++Index)
 	{
 		Lines.Add(ShellFormatLedgerEvent(*ImportantEvents[Index]));
+	}
+
+	return Lines;
+}
+
+TArray<FString> UGambitPCShellWidget::BuildTargetSelectionFeedbackLines(const AGambitPlayerController* PlayerController)
+{
+	TArray<FString> Lines;
+	if (!PlayerController || !PlayerController->HasPendingTargetSelection())
+	{
+		return Lines;
+	}
+
+	const FGambitTargetSelectionRequest Request = PlayerController->GetPendingTargetSelectionRequest();
+	const int32 SelectedOptionId = PlayerController->GetPendingTargetSelectionSelectedOptionId();
+	const FString SourceName = ShellItemDisplayName(Request.SourceItemDefinition);
+	const FString RequestSummary = Request.DebugText.IsEmpty()
+		? FString::Printf(TEXT("%s requires target selection."), *SourceName)
+		: Request.DebugText;
+
+	Lines.Add(FString::Printf(
+		TEXT("Target Selection: %s | Type %s | Selected %s"),
+		*RequestSummary,
+		*ShellTargetSelectionTypeToString(Request.SelectionType),
+		SelectedOptionId == INDEX_NONE ? TEXT("None") : *FString::FromInt(SelectedOptionId)));
+
+	if (!Request.InvalidReason.IsEmpty())
+	{
+		Lines.Add(FString::Printf(TEXT("Target Selection Invalid: %s"), *Request.InvalidReason));
+	}
+
+	if (Request.Options.Num() == 0)
+	{
+		Lines.Add(TEXT("  No target options."));
+		return Lines;
+	}
+
+	for (const FGambitTargetSelectionOption& Option : Request.Options)
+	{
+		const FString SelectedPrefix = Option.OptionId == SelectedOptionId ? TEXT("[Selected] ") : TEXT("");
+		const FString ValidText = Option.bValid ? TEXT("Valid") : TEXT("Invalid");
+		FString Line = FString::Printf(
+			TEXT("  %sOption %d: %s | %s"),
+			*SelectedPrefix,
+			Option.OptionId,
+			*Option.Label,
+			*ValidText);
+		if (!Option.TargetRuleId.IsNone())
+		{
+			Line += FString::Printf(TEXT(" | Rule %s"), *Option.TargetRuleId.ToString());
+		}
+		if (Option.TargetDieHandIndex != INDEX_NONE)
+		{
+			Line += FString::Printf(TEXT(" | Die %d"), Option.TargetDieHandIndex + 1);
+		}
+		if (!Option.DebugText.IsEmpty())
+		{
+			Line += FString::Printf(TEXT(" | %s"), *Option.DebugText);
+		}
+		Lines.Add(Line);
 	}
 
 	return Lines;
@@ -902,6 +1106,10 @@ void UGambitPCShellWidget::BuildPlayerRoundHud(const int32 PlayerIndex, AGambitP
 	{
 		AddText(Line, Line.StartsWith(TEXT("Ledger")) ? 15.0f : 14.0f);
 	}
+	if (CachedPhase == EGambitRoundPhase::Action)
+	{
+		BuildPlayerActionHud(PlayerIndex, PlayerState);
+	}
 
 	const TArray<FGambitDieRuntimeState>& DiceStates = PlayerState->GetDiceStatesRef();
 	if (DiceStates.Num() == 0)
@@ -944,6 +1152,103 @@ void UGambitPCShellWidget::BuildPlayerRoundHud(const int32 PlayerIndex, AGambitP
 		ActionBox,
 		TEXT("Reroll Unlocked"),
 		EGambitPCShellActionKind::Reroll,
+		PlayerState,
+		PlayerIndex);
+}
+
+void UGambitPCShellWidget::BuildPlayerActionHud(const int32 PlayerIndex, AGambitPlayerState* PlayerState)
+{
+	if (!PlayerState)
+	{
+		return;
+	}
+
+	AGambitPlayerController* PlayerController = ResolvePlayerControllerForPlayerState(PlayerState);
+	const TArray<FGambitConsumableRuntimeSlot>& ConsumableSlots = PlayerState->GetConsumableSlotsRef();
+	for (const FString& Line : BuildConsumableFeedbackLines(PlayerState, CachedPhase))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Consumables")) ? 15.0f : 14.0f);
+	}
+
+	if (ConsumableSlots.Num() > 0)
+	{
+		UHorizontalBox* ConsumableBox = AddHorizontalBox(2.0f, 6.0f);
+		for (int32 SlotIndex = 0; SlotIndex < ConsumableSlots.Num(); ++SlotIndex)
+		{
+			const FGambitConsumableRuntimeSlot& ConsumableSlot = ConsumableSlots[SlotIndex];
+			const FString Label = FString::Printf(TEXT("Use Slot %d"), SlotIndex + 1);
+			UGambitPCShellActionButton* Button = AddActionButtonToBox(
+				ConsumableBox,
+				Label,
+				EGambitPCShellActionKind::UseConsumable,
+				PlayerState,
+				PlayerIndex,
+				SlotIndex);
+			if (Button)
+			{
+				Button->SetIsEnabled(PlayerController && ShellIsConsumableUsableInPhase(ConsumableSlot, CachedPhase));
+			}
+		}
+	}
+
+	BuildTargetSelectionHud(PlayerController, PlayerState, PlayerIndex);
+}
+
+void UGambitPCShellWidget::BuildTargetSelectionHud(
+	AGambitPlayerController* PlayerController,
+	AGambitPlayerState* PlayerState,
+	const int32 PlayerIndex)
+{
+	if (!PlayerController || !PlayerController->HasPendingTargetSelection())
+	{
+		return;
+	}
+
+	for (const FString& Line : BuildTargetSelectionFeedbackLines(PlayerController))
+	{
+		AddText(Line, Line.StartsWith(TEXT("Target Selection")) ? 15.0f : 14.0f);
+	}
+
+	const FGambitTargetSelectionRequest Request = PlayerController->GetPendingTargetSelectionRequest();
+	const int32 SelectedOptionId = PlayerController->GetPendingTargetSelectionSelectedOptionId();
+	if (Request.Options.Num() > 0)
+	{
+		UHorizontalBox* OptionsBox = AddHorizontalBox(2.0f, 4.0f);
+		for (const FGambitTargetSelectionOption& Option : Request.Options)
+		{
+			const FString Label = FString::Printf(
+				TEXT("%sOption %d"),
+				Option.OptionId == SelectedOptionId ? TEXT("* ") : TEXT(""),
+				Option.OptionId);
+			UGambitPCShellActionButton* Button = AddActionButtonToBox(
+				OptionsBox,
+				Label,
+				EGambitPCShellActionKind::SelectTargetSelectionOption,
+				PlayerState,
+				PlayerIndex,
+				Option.OptionId);
+			if (Button)
+			{
+				Button->SetIsEnabled(Option.bValid);
+			}
+		}
+	}
+
+	UHorizontalBox* ConfirmBox = AddHorizontalBox(0.0f, 8.0f);
+	UGambitPCShellActionButton* ConfirmButton = AddActionButtonToBox(
+		ConfirmBox,
+		TEXT("Confirm Target"),
+		EGambitPCShellActionKind::ConfirmTargetSelection,
+		PlayerState,
+		PlayerIndex);
+	if (ConfirmButton)
+	{
+		ConfirmButton->SetIsEnabled(Request.HasValidOptions() && SelectedOptionId != INDEX_NONE);
+	}
+	AddActionButtonToBox(
+		ConfirmBox,
+		TEXT("Cancel"),
+		EGambitPCShellActionKind::CancelTargetSelection,
 		PlayerState,
 		PlayerIndex);
 }
@@ -992,6 +1297,14 @@ void UGambitPCShellWidget::SetLastActionFeedback(const FGambitRoundCommandResult
 	LastActionFeedback = Result.Message.IsEmpty()
 		? (Result.bSuccess ? TEXT("Action accepted.") : TEXT("Action refused."))
 		: Result.Message;
+}
+
+void UGambitPCShellWidget::SetLastActionFeedbackMessage(const bool bSuccess, const FString& Message)
+{
+	bLastActionSucceeded = bSuccess;
+	LastActionFeedback = Message.IsEmpty()
+		? (bSuccess ? TEXT("Action accepted.") : TEXT("Action refused."))
+		: Message;
 }
 
 FString UGambitPCShellWidget::ResolvePlayerDisplayName(const AGambitPlayerState* PlayerState, const int32 PlayerIndex) const
@@ -1083,7 +1396,7 @@ UGambitPCShellActionButton* UGambitPCShellWidget::AddActionButtonToBox(
 	const EGambitPCShellActionKind ActionKind,
 	AGambitPlayerState* PlayerState,
 	const int32 PlayerIndex,
-	const int32 DieIndex)
+	const int32 ActionIndex)
 {
 	if (!Box || !WidgetTree)
 	{
@@ -1096,7 +1409,7 @@ UGambitPCShellActionButton* UGambitPCShellWidget::AddActionButtonToBox(
 	ButtonText->SetAutoWrapText(true);
 	ButtonText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	Button->SetContent(ButtonText);
-	Button->ConfigureAction(this, ActionKind, PlayerState, PlayerIndex, DieIndex);
+	Button->ConfigureAction(this, ActionKind, PlayerState, PlayerIndex, ActionIndex);
 	if (UHorizontalBoxSlot* ButtonSlot = Box->AddChildToHorizontalBox(Button))
 	{
 		ButtonSlot->SetPadding(FMargin(0.0f, 2.0f, 8.0f, 2.0f));
@@ -1133,4 +1446,35 @@ UGambitRoundFlowComponent* UGambitPCShellWidget::GetRoundFlowComponent() const
 {
 	const AGambitGameMode* GameMode = GetGambitGameMode();
 	return GameMode ? GameMode->GetRoundFlowComponent() : nullptr;
+}
+
+AGambitPlayerController* UGambitPCShellWidget::ResolvePlayerControllerForPlayerState(
+	const AGambitPlayerState* PlayerState) const
+{
+	if (!PlayerState)
+	{
+		return nullptr;
+	}
+
+	if (AGambitPlayerController* OwningController = Cast<AGambitPlayerController>(PlayerState->GetOwner()))
+	{
+		return OwningController;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		AGambitPlayerController* PlayerController = Cast<AGambitPlayerController>(It->Get());
+		if (PlayerController && PlayerController->GetPlayerState<AGambitPlayerState>() == PlayerState)
+		{
+			return PlayerController;
+		}
+	}
+
+	return nullptr;
 }

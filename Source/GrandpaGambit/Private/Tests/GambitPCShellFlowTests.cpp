@@ -7,9 +7,13 @@
 #include "Core/Types/GambitDebugTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "Core/Types/GambitRoundPhaseRules.h"
+#include "Data/Assets/GambitItemEffectDefinition.h"
 #include "Game/Flow/GambitRoundFlowComponent.h"
 #include "Game/States/GambitGameState.h"
+#include "Items/Consumables/GambitConsumableDefinition.h"
 #include "Players/Components/GambitDiceComponent.h"
+#include "Players/Components/GambitInventoryComponent.h"
+#include "Players/Controllers/GambitPlayerController.h"
 #include "Players/States/GambitPlayerState.h"
 #include "UI/Widgets/GambitPCShellWidget.h"
 
@@ -21,6 +25,19 @@ namespace
 		DiceDefinition->DiceId = FName(DiceId);
 		DiceDefinition->Faces = Faces;
 		return DiceDefinition;
+	}
+
+	UGambitConsumableDefinition* MakePCShellFlowTestConsumable(
+		UObject* Outer,
+		const TCHAR* ItemId,
+		const TCHAR* DisplayName,
+		const TArray<EGambitRoundPhase>& UsablePhases)
+	{
+		UGambitConsumableDefinition* ConsumableDefinition = NewObject<UGambitConsumableDefinition>(Outer);
+		ConsumableDefinition->ItemId = FName(ItemId);
+		ConsumableDefinition->DisplayName = FText::FromString(DisplayName);
+		ConsumableDefinition->UsablePhases = UsablePhases;
+		return ConsumableDefinition;
 	}
 
 	struct FGambitPCShellFlowWorld
@@ -231,6 +248,123 @@ bool FGambitPCShellRoundHudCommandTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellRoundHudActionConsumableFeedbackTest,
+	"GrandpaGambit.PCShell.RoundHud.ActionConsumableFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellRoundHudActionConsumableFeedbackTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 2, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* PlayerState = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	if (!TestNotNull(TEXT("player exists for consumable feedback smoke"), PlayerState))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	UGambitConsumableDefinition* ConsumableDefinition = MakePCShellFlowTestConsumable(
+		GetTransientPackage(),
+		TEXT("consumable.test.action_feedback"),
+		TEXT("Action Coffee"),
+		{ EGambitRoundPhase::Action });
+	TestTrue(TEXT("player receives action consumable"), PlayerState->GetInventoryComponent()->AddConsumable(ConsumableDefinition));
+
+	const TArray<FString> ActionLines = UGambitPCShellWidget::BuildConsumableFeedbackLines(PlayerState, EGambitRoundPhase::Action);
+	TestTrue(TEXT("consumable section is visible"), ContainsShellLine(ActionLines, TEXT("Consumables:")));
+	TestTrue(TEXT("consumable display name is visible"), ContainsShellLine(ActionLines, TEXT("Action Coffee")));
+	TestTrue(TEXT("consumable id is visible"), ContainsShellLine(ActionLines, TEXT("consumable.test.action_feedback")));
+	TestTrue(TEXT("stack count is visible"), ContainsShellLine(ActionLines, TEXT("Stack 1")));
+	TestTrue(TEXT("usable state is visible during action"), ContainsShellLine(ActionLines, TEXT("Ready")));
+
+	const TArray<FString> RewardLines = UGambitPCShellWidget::BuildConsumableFeedbackLines(PlayerState, EGambitRoundPhase::Reward);
+	TestTrue(TEXT("unusable phase state is visible"), ContainsShellLine(RewardLines, TEXT("Unavailable in phase")));
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellRoundHudTargetSelectionFeedbackTest,
+	"GrandpaGambit.PCShell.RoundHud.TargetSelectionFeedback",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellRoundHudTargetSelectionFeedbackTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 2, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* PlayerOne = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	AGambitPlayerState* PlayerTwo = TestWorld.Players.IsValidIndex(1) ? TestWorld.Players[1] : nullptr;
+	if (!TestNotNull(TEXT("player one exists for target selection HUD smoke"), PlayerOne)
+		|| !TestNotNull(TEXT("player two exists for target selection HUD smoke"), PlayerTwo))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	UGambitConsumableDefinition* ConsumableDefinition = MakePCShellFlowTestConsumable(
+		GetTransientPackage(),
+		TEXT("consumable.test.target_feedback"),
+		TEXT("Target Coffee"),
+		{ EGambitRoundPhase::Action });
+
+	FGambitTargetSelectionRequest Request;
+	Request.RequestId = FGuid::NewGuid();
+	Request.RequestingPlayer = PlayerOne;
+	Request.SourceConsumableSlotIndex = 0;
+	Request.SourceItemDefinition = ConsumableDefinition;
+	Request.SourceItemId = ConsumableDefinition->GetResolvedItemId();
+	Request.TargetRuleId = TEXT("target.opponent");
+	Request.SelectionType = EGambitTargetSelectionType::Player;
+	Request.CurrentPhase = EGambitRoundPhase::Action;
+	Request.bRequiresExplicitSelection = true;
+	Request.bHasValidOptions = true;
+	Request.DebugText = TEXT("Target Coffee requires one opponent.");
+
+	FGambitTargetSelectionOption Option;
+	Option.OptionId = 7;
+	Option.SelectionType = EGambitTargetSelectionType::Player;
+	Option.TargetPlayer = PlayerTwo;
+	Option.TargetPlayerIndex = 1;
+	Option.TargetRuleId = TEXT("target.opponent");
+	Option.bValid = true;
+	Option.Label = TEXT("P2 Player 2");
+	Option.DebugText = TEXT("Validated by target.opponent");
+	Request.Options.Add(Option);
+
+	AGambitPlayerController* PlayerController = TestWorld.World->SpawnActor<AGambitPlayerController>();
+	if (!TestNotNull(TEXT("controller exists for target selection HUD smoke"), PlayerController))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	TestTrue(TEXT("controller starts target selection"), PlayerController->StartTargetSelection(Request));
+	const TArray<FString> Lines = UGambitPCShellWidget::BuildTargetSelectionFeedbackLines(PlayerController);
+	TestTrue(TEXT("target selection header is visible"), ContainsShellLine(Lines, TEXT("Target Selection:")));
+	TestTrue(TEXT("target request summary is visible"), ContainsShellLine(Lines, TEXT("Target Coffee requires one opponent")));
+	TestTrue(TEXT("selected option is visible"), ContainsShellLine(Lines, TEXT("Selected 7")));
+	TestTrue(TEXT("target option label is visible"), ContainsShellLine(Lines, TEXT("P2 Player 2")));
+	TestTrue(TEXT("target rule is visible"), ContainsShellLine(Lines, TEXT("target.opponent")));
+	TestTrue(TEXT("selection requested event is recorded"), PlayerOne->HasEventThisRound(EGambitRoundGameplayEventType::TargetSelectionRequested));
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGambitPCShellRoundHudResolutionFeedbackTest,
 	"GrandpaGambit.PCShell.RoundHud.ResolutionFeedback",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -401,6 +535,12 @@ bool FGambitPCShellRoundHudLedgerFeedbackTest::RunTest(const FString& Parameters
 	AppliedEvent.Reason = TEXT("Module applied effect");
 	PlayerState->AddRoundEvent(AppliedEvent);
 
+	FGambitRoundGameplayEvent ConsumableUsedEvent;
+	ConsumableUsedEvent.EventType = EGambitRoundGameplayEventType::ConsumableUsed;
+	ConsumableUsedEvent.Outcome = EGambitRoundGameplayEventOutcome::Applied;
+	ConsumableUsedEvent.Reason = TEXT("Consumable used in Action phase");
+	PlayerState->AddRoundEvent(ConsumableUsedEvent);
+
 	FGambitRoundGameplayEvent PreventedEvent;
 	PreventedEvent.EventType = EGambitRoundGameplayEventType::EffectPrevented;
 	PreventedEvent.Outcome = EGambitRoundGameplayEventOutcome::Prevented;
@@ -436,8 +576,15 @@ bool FGambitPCShellRoundHudLedgerFeedbackTest::RunTest(const FString& Parameters
 	DieRemovedEvent.TargetDieHandIndex = 2;
 	PlayerState->AddRoundEvent(DieRemovedEvent);
 
+	FGambitRoundGameplayEvent TargetInvalidEvent;
+	TargetInvalidEvent.EventType = EGambitRoundGameplayEventType::TargetSelectionInvalid;
+	TargetInvalidEvent.Outcome = EGambitRoundGameplayEventOutcome::Failed;
+	TargetInvalidEvent.Reason = TEXT("Target option invalid");
+	PlayerState->AddRoundEvent(TargetInvalidEvent);
+
 	const TArray<FString> LedgerLines = UGambitPCShellWidget::BuildLedgerFeedbackLines(PlayerState, 10);
 	TestTrue(TEXT("effect applied event is visible"), ContainsShellLine(LedgerLines, TEXT("EffectApplied")));
+	TestTrue(TEXT("consumable used event is visible"), ContainsShellLine(LedgerLines, TEXT("ConsumableUsed")));
 	TestTrue(TEXT("effect prevented event is visible"), ContainsShellLine(LedgerLines, TEXT("EffectPrevented")));
 	TestTrue(TEXT("B6.1 defense reason is visible when present"), ContainsShellLine(LedgerLines, TEXT("Gold loss prevented by Safe")));
 	TestTrue(TEXT("negative category is visible"), ContainsShellLine(LedgerLines, TEXT("GoldLoss")));
@@ -445,6 +592,7 @@ bool FGambitPCShellRoundHudLedgerFeedbackTest::RunTest(const FString& Parameters
 	TestTrue(TEXT("score modifier event is visible"), ContainsShellLine(LedgerLines, TEXT("ScoreModifierApplied")));
 	TestTrue(TEXT("die modified event is visible"), ContainsShellLine(LedgerLines, TEXT("DieModified")));
 	TestTrue(TEXT("die removed event is visible"), ContainsShellLine(LedgerLines, TEXT("DieDestroyedOrRemoved")));
+	TestTrue(TEXT("target invalid event is visible"), ContainsShellLine(LedgerLines, TEXT("TargetSelectionInvalid")));
 	TestFalse(TEXT("unimportant round scored event is not part of ledger summary"), ContainsShellLine(LedgerLines, TEXT("RoundScored")));
 
 	TestWorld.Destroy();

@@ -95,6 +95,7 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	void EnsureRuntimeServices();
 	bool TransitionToPhase(EGambitRoundPhase NewPhase);
 	bool IsTransitionAllowed(EGambitRoundPhase CurrentPhase, EGambitRoundPhase NextPhase) const;
 

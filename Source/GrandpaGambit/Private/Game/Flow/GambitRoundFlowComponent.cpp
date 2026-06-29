@@ -420,6 +420,11 @@ void UGambitRoundFlowComponent::BeginPlay()
 	Super::BeginPlay();
 
 	MatchRandomStream.Initialize(RandomSeed);
+	EnsureRuntimeServices();
+}
+
+void UGambitRoundFlowComponent::EnsureRuntimeServices()
+{
 	if (!DiceEvaluator)
 	{
 		DiceEvaluator = NewObject<UGambitDiceEvaluatorContract>(this, DiceEvaluatorClass);
@@ -453,6 +458,8 @@ void UGambitRoundFlowComponent::ApplyMatchSetup(const FGambitMatchSetupConfig& N
 
 void UGambitRoundFlowComponent::StartMatchFlow()
 {
+	EnsureRuntimeServices();
+
 	AGambitGameState* GameState = GetGambitGameState();
 	if (!GameState)
 	{
@@ -766,6 +773,8 @@ bool UGambitRoundFlowComponent::RequestUseConsumableOnTargetSelectedDie(
 	AGambitPlayerState* TargetPlayerState,
 	const int32 SelectedDieIndex)
 {
+	EnsureRuntimeServices();
+
 	AGambitGameState* GameState = GetGambitGameState();
 	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
 	bool bSuccess = false;
@@ -1570,6 +1579,8 @@ FGambitScoreModifierContext UGambitRoundFlowComponent::BuildScoreModifierForReso
 	AGambitPlayerState* PlayerState,
 	const FGambitDiceCombinationResult& CombinationResult)
 {
+	EnsureRuntimeServices();
+
 	if (EffectPipeline)
 	{
 		FGambitRoundScoreModifierEffectRequest Request;

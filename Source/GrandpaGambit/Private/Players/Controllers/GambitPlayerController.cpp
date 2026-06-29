@@ -138,37 +138,39 @@ void AGambitPlayerController::RequestReroll()
 	ServerRequestReroll();
 }
 
-void AGambitPlayerController::RequestUseConsumable(const int32 SlotIndex)
+bool AGambitPlayerController::RequestUseConsumable(const int32 SlotIndex)
 {
 	if (RequestBeginConsumableTargetSelection(SlotIndex))
 	{
-		return;
+		return true;
 	}
 
 	if (HasAuthority())
 	{
 		if (AGambitGameMode* GameMode = GetGambitGameMode())
 		{
-			GameMode->RequestUseConsumable(GetGambitPlayerState(), SlotIndex);
+			return GameMode->RequestUseConsumable(GetGambitPlayerState(), SlotIndex);
 		}
-		return;
+		return false;
 	}
 
 	ServerRequestUseConsumable(SlotIndex);
+	return true;
 }
 
-void AGambitPlayerController::RequestUseConsumableOnSelectedDie(const int32 SlotIndex, const int32 SelectedDieIndex)
+bool AGambitPlayerController::RequestUseConsumableOnSelectedDie(const int32 SlotIndex, const int32 SelectedDieIndex)
 {
 	if (HasAuthority())
 	{
 		if (AGambitGameMode* GameMode = GetGambitGameMode())
 		{
-			GameMode->RequestUseConsumableOnTargetSelectedDie(GetGambitPlayerState(), SlotIndex, GetGambitPlayerState(), SelectedDieIndex);
+			return GameMode->RequestUseConsumableOnTargetSelectedDie(GetGambitPlayerState(), SlotIndex, GetGambitPlayerState(), SelectedDieIndex);
 		}
-		return;
+		return false;
 	}
 
 	ServerRequestUseConsumableOnSelectedDie(SlotIndex, SelectedDieIndex);
+	return true;
 }
 
 bool AGambitPlayerController::RequestBeginConsumableTargetSelection(const int32 SlotIndex)

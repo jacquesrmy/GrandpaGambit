@@ -8,6 +8,7 @@
 
 class AGambitGameMode;
 class AGambitGameState;
+class AGambitPlayerController;
 class AGambitPlayerState;
 class UGambitRoundFlowComponent;
 class UGambitPCShellWidget;
@@ -19,7 +20,11 @@ UENUM()
 enum class EGambitPCShellActionKind : uint8
 {
 	ToggleDieLock,
-	Reroll
+	Reroll,
+	UseConsumable,
+	SelectTargetSelectionOption,
+	ConfirmTargetSelection,
+	CancelTargetSelection
 };
 
 UCLASS()
@@ -33,7 +38,7 @@ public:
 		EGambitPCShellActionKind InActionKind,
 		AGambitPlayerState* InPlayerState,
 		int32 InPlayerIndex,
-		int32 InDieIndex = INDEX_NONE);
+		int32 InActionIndex = INDEX_NONE);
 
 private:
 	UFUNCTION()
@@ -43,7 +48,7 @@ private:
 	TWeakObjectPtr<AGambitPlayerState> PlayerState;
 	EGambitPCShellActionKind ActionKind = EGambitPCShellActionKind::ToggleDieLock;
 	int32 PlayerIndex = INDEX_NONE;
-	int32 DieIndex = INDEX_NONE;
+	int32 ActionIndex = INDEX_NONE;
 };
 
 UCLASS(BlueprintType, Blueprintable)
@@ -66,12 +71,14 @@ public:
 		EGambitPCShellActionKind ActionKind,
 		AGambitPlayerState* PlayerState,
 		int32 PlayerIndex,
-		int32 DieIndex);
+		int32 ActionIndex);
 
+	static TArray<FString> BuildConsumableFeedbackLines(const AGambitPlayerState* PlayerState, EGambitRoundPhase CurrentPhase);
 	static TArray<FString> BuildScoreFeedbackLines(const AGambitPlayerState* PlayerState);
 	static TArray<FString> BuildRewardFeedbackLines(const AGambitPlayerState* PlayerState, int32 VictoryPointsGranted);
 	static TArray<FString> BuildRankingFeedbackLines(const AGambitGameState* GameState);
 	static TArray<FString> BuildLedgerFeedbackLines(const AGambitPlayerState* PlayerState, int32 MaxEvents = 6);
+	static TArray<FString> BuildTargetSelectionFeedbackLines(const AGambitPlayerController* PlayerController);
 
 private:
 	UFUNCTION()
@@ -131,9 +138,12 @@ private:
 	void BuildLobbyPlayerRows();
 	void BuildPlayerRows();
 	void BuildPlayerRoundHud(int32 PlayerIndex, AGambitPlayerState* PlayerState);
+	void BuildPlayerActionHud(int32 PlayerIndex, AGambitPlayerState* PlayerState);
+	void BuildTargetSelectionHud(AGambitPlayerController* PlayerController, AGambitPlayerState* PlayerState, int32 PlayerIndex);
 	void BuildFinalRankingRows();
 	void ConfigureMatch(int32 LocalPlayerCount, int32 RoundCount);
 	void SetLastActionFeedback(const FGambitRoundCommandResult& Result);
+	void SetLastActionFeedbackMessage(bool bSuccess, const FString& Message);
 	FString ResolvePlayerDisplayName(const AGambitPlayerState* PlayerState, int32 PlayerIndex) const;
 
 	UTextBlock* AddText(const FString& Text, float FontSize = 18.0f, const FLinearColor& Color = FLinearColor::White);
@@ -146,13 +156,14 @@ private:
 		EGambitPCShellActionKind ActionKind,
 		AGambitPlayerState* PlayerState,
 		int32 PlayerIndex,
-		int32 DieIndex = INDEX_NONE);
+		int32 ActionIndex = INDEX_NONE);
 	void AddSpacerLine();
 	void ClearRoot();
 
 	AGambitGameMode* GetGambitGameMode() const;
 	AGambitGameState* GetGambitGameState() const;
 	UGambitRoundFlowComponent* GetRoundFlowComponent() const;
+	AGambitPlayerController* ResolvePlayerControllerForPlayerState(const AGambitPlayerState* PlayerState) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<AGambitGameState> BoundGameState = nullptr;

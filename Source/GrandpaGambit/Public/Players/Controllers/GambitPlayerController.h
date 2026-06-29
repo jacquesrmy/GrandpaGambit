@@ -33,10 +33,10 @@ public:
 	void RequestReroll();
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Input")
-	void RequestUseConsumable(int32 SlotIndex);
+	bool RequestUseConsumable(int32 SlotIndex);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Input")
-	void RequestUseConsumableOnSelectedDie(int32 SlotIndex, int32 SelectedDieIndex);
+	bool RequestUseConsumableOnSelectedDie(int32 SlotIndex, int32 SelectedDieIndex);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Target Selection")
 	bool RequestBeginConsumableTargetSelection(int32 SlotIndex);
