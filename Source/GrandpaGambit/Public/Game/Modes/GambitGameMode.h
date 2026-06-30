@@ -7,8 +7,10 @@
 #include "GambitGameMode.generated.h"
 
 class AGambitPlayerState;
+#if !UE_BUILD_SHIPPING
 class UGambitDevMatchSandboxComponent;
 class UGambitMatchDebugComponent;
+#endif
 class UGambitRoundFlowComponent;
 
 UCLASS()
@@ -100,11 +102,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
 	UGambitRoundFlowComponent* GetRoundFlowComponent() const { return RoundFlowComponent; }
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
+#if !UE_BUILD_SHIPPING
 	UGambitMatchDebugComponent* GetMatchDebugComponent() const { return MatchDebugComponent; }
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
 	UGambitDevMatchSandboxComponent* GetDevMatchSandboxComponent() const { return DevMatchSandboxComponent; }
+#endif
 
 private:
 	FGambitMatchSetupConfig BuildDefaultMatchSetup() const;
@@ -117,11 +119,11 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UGambitRoundFlowComponent> RoundFlowComponent;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UGambitMatchDebugComponent> MatchDebugComponent;
+#if !UE_BUILD_SHIPPING
+	UGambitMatchDebugComponent* MatchDebugComponent = nullptr;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UGambitDevMatchSandboxComponent> DevMatchSandboxComponent;
+	UGambitDevMatchSandboxComponent* DevMatchSandboxComponent = nullptr;
+#endif
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|GameMode|PC Shell", meta = (AllowPrivateAccess = "true"))
 	bool bAutoStartMatchOnBeginPlay = false;

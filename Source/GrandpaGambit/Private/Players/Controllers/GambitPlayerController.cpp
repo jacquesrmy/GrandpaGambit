@@ -1,9 +1,6 @@
 #include "Players/Controllers/GambitPlayerController.h"
 
-#include "Debug/GambitDevMatchSandboxComponent.h"
-#include "Debug/GambitDevMatchSandboxTypes.h"
 #include "Core/Logging/GambitLog.h"
-#include "Debug/GambitMatchDebugComponent.h"
 #include "Engine/GameInstance.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
@@ -16,6 +13,12 @@
 #include "Players/States/GambitPlayerState.h"
 #include "Players/Subsystems/GambitLocalMultiplayerSubsystem.h"
 #include "UI/Widgets/GambitPCShellWidget.h"
+
+#if !UE_BUILD_SHIPPING
+#include "Debug/GambitDevMatchSandboxComponent.h"
+#include "Debug/GambitDevMatchSandboxTypes.h"
+#include "Debug/GambitMatchDebugComponent.h"
+#endif
 
 namespace
 {
@@ -35,6 +38,13 @@ namespace
 	{
 		return PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE;
 	}
+
+#if UE_BUILD_SHIPPING
+	void LogControllerDevCommandUnavailable(const TCHAR* CommandName)
+	{
+		UE_LOG(LogGambit, Warning, TEXT("%s is unavailable in Shipping builds."), CommandName);
+	}
+#endif
 }
 
 void AGambitPlayerController::BeginPlay()
@@ -398,6 +408,7 @@ bool AGambitPlayerController::RequestLeaveThisLocalPlayer()
 	return LocalMultiplayer->RequestLeaveLocalPlayer(LocalPlayer->GetLocalPlayerIndex());
 }
 
+#if !UE_BUILD_SHIPPING
 void AGambitPlayerController::GambitPrintMatch()
 {
 	if (AGambitGameMode* GameMode = GetGambitGameMode())
@@ -772,6 +783,74 @@ void AGambitPlayerController::GambitDevAIDecide()
 
 	UE_LOG(LogGambit, Log, TEXT("DevSandbox: GambitDevAIDecide failed, missing sandbox component"));
 }
+#else
+#define GAMBIT_SHIPPING_DEV_COMMAND_0(FuncName) \
+	void AGambitPlayerController::FuncName() \
+	{ \
+		LogControllerDevCommandUnavailable(TEXT(#FuncName)); \
+	}
+
+#define GAMBIT_SHIPPING_DEV_COMMAND_1(FuncName, ArgDecl, ArgName) \
+	void AGambitPlayerController::FuncName(ArgDecl) \
+	{ \
+		(void)ArgName; \
+		LogControllerDevCommandUnavailable(TEXT(#FuncName)); \
+	}
+
+#define GAMBIT_SHIPPING_DEV_COMMAND_2(FuncName, ArgDeclA, ArgNameA, ArgDeclB, ArgNameB) \
+	void AGambitPlayerController::FuncName(ArgDeclA, ArgDeclB) \
+	{ \
+		(void)ArgNameA; \
+		(void)ArgNameB; \
+		LogControllerDevCommandUnavailable(TEXT(#FuncName)); \
+	}
+
+#define GAMBIT_SHIPPING_DEV_COMMAND_3(FuncName, ArgDeclA, ArgNameA, ArgDeclB, ArgNameB, ArgDeclC, ArgNameC) \
+	void AGambitPlayerController::FuncName(ArgDeclA, ArgDeclB, ArgDeclC) \
+	{ \
+		(void)ArgNameA; \
+		(void)ArgNameB; \
+		(void)ArgNameC; \
+		LogControllerDevCommandUnavailable(TEXT(#FuncName)); \
+	}
+
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitPrintMatch)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitValidateData)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitPrintInventory)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitPrintSharedPool)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitReadyAll)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAutoAdvance)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAutoToShop)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitBuyFirstOfferAll)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitSkipShop)
+GAMBIT_SHIPPING_DEV_COMMAND_0(Gambit)
+GAMBIT_SHIPPING_DEV_COMMAND_1(GambitGrantGold, const int32 Amount, Amount)
+GAMBIT_SHIPPING_DEV_COMMAND_2(GambitGrantConsumable, const int32 PlayerIndex, PlayerIndex, const FString& ConsumableId, ConsumableId)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitPrintShop)
+GAMBIT_SHIPPING_DEV_COMMAND_2(GambitBuyOffer, const int32 PlayerIndex, PlayerIndex, const int32 OfferId, OfferId)
+GAMBIT_SHIPPING_DEV_COMMAND_1(GambitRerollPlayer, const int32 PlayerIndex, PlayerIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_2(GambitLockDie, const int32 PlayerIndex, PlayerIndex, const int32 DieIndex, DieIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_2(GambitUseConsumable, const int32 PlayerIndex, PlayerIndex, const int32 SlotIndex, SlotIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_3(GambitUseConsumableOnDie, const int32 PlayerIndex, PlayerIndex, const int32 SlotIndex, SlotIndex, const int32 DieIndex, DieIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAutoFullMatch)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAIDecideRerolls)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAIDecideActions)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAIDecideShop)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAIFullRound)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitAIFullMatch)
+GAMBIT_SHIPPING_DEV_COMMAND_1(GambitDevStart, const int32 DesiredLocalPlayerCount, DesiredLocalPlayerCount)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitDevSnapshot)
+GAMBIT_SHIPPING_DEV_COMMAND_1(GambitDevInspect, const int32 PlayerIndex, PlayerIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_1(GambitDevHuman, const int32 PlayerIndex, PlayerIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_1(GambitDevAI, const int32 PlayerIndex, PlayerIndex)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitDevAdvance)
+GAMBIT_SHIPPING_DEV_COMMAND_0(GambitDevAIDecide)
+
+#undef GAMBIT_SHIPPING_DEV_COMMAND_0
+#undef GAMBIT_SHIPPING_DEV_COMMAND_1
+#undef GAMBIT_SHIPPING_DEV_COMMAND_2
+#undef GAMBIT_SHIPPING_DEV_COMMAND_3
+#endif
 
 void AGambitPlayerController::ServerRequestPlayerReady_Implementation(const bool bReady)
 {
@@ -1058,6 +1137,7 @@ AGambitGameMode* AGambitPlayerController::GetGambitGameMode() const
 	return GetWorld() ? GetWorld()->GetAuthGameMode<AGambitGameMode>() : nullptr;
 }
 
+#if !UE_BUILD_SHIPPING
 UGambitMatchDebugComponent* AGambitPlayerController::GetMatchDebugComponent() const
 {
 	const AGambitGameMode* GameMode = GetGambitGameMode();
@@ -1069,6 +1149,7 @@ UGambitDevMatchSandboxComponent* AGambitPlayerController::GetDevMatchSandboxComp
 	const AGambitGameMode* GameMode = GetGambitGameMode();
 	return GameMode ? GameMode->GetDevMatchSandboxComponent() : nullptr;
 }
+#endif
 
 UGambitLocalMultiplayerSubsystem* AGambitPlayerController::GetLocalMultiplayerSubsystem() const
 {

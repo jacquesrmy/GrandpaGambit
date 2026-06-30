@@ -1,7 +1,5 @@
 #include "Game/Modes/GambitGameMode.h"
 
-#include "Debug/GambitDevMatchSandboxComponent.h"
-#include "Debug/GambitMatchDebugComponent.h"
 #include "Core/Settings/GambitGameBalanceSettings.h"
 #include "Engine/GameInstance.h"
 #include "Game/Flow/GambitRoundFlowComponent.h"
@@ -10,6 +8,11 @@
 #include "Players/States/GambitPlayerState.h"
 #include "Players/Subsystems/GambitLocalMultiplayerSubsystem.h"
 
+#if !UE_BUILD_SHIPPING
+#include "Debug/GambitDevMatchSandboxComponent.h"
+#include "Debug/GambitMatchDebugComponent.h"
+#endif
+
 AGambitGameMode::AGambitGameMode()
 {
 	GameStateClass = AGambitGameState::StaticClass();
@@ -17,8 +20,10 @@ AGambitGameMode::AGambitGameMode()
 	PlayerControllerClass = AGambitPlayerController::StaticClass();
 
 	RoundFlowComponent = CreateDefaultSubobject<UGambitRoundFlowComponent>(TEXT("RoundFlowComponent"));
+#if !UE_BUILD_SHIPPING
 	MatchDebugComponent = CreateDefaultSubobject<UGambitMatchDebugComponent>(TEXT("MatchDebugComponent"));
 	DevMatchSandboxComponent = CreateDefaultSubobject<UGambitDevMatchSandboxComponent>(TEXT("DevMatchSandboxComponent"));
+#endif
 }
 
 void AGambitGameMode::BeginPlay()

@@ -261,7 +261,11 @@ FGambitDevSandboxActionResult UGambitDevMatchSandboxWidget::MakeMissingSandboxRe
 
 UGambitDevMatchSandboxComponent* UGambitDevMatchSandboxWidget::ResolveSandboxComponent() const
 {
+#if !UE_BUILD_SHIPPING
 	const UWorld* World = GetWorld();
 	AGambitGameMode* GameMode = World ? World->GetAuthGameMode<AGambitGameMode>() : nullptr;
 	return GameMode ? GameMode->GetDevMatchSandboxComponent() : nullptr;
+#else
+	return nullptr;
+#endif
 }

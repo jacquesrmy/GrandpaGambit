@@ -9,8 +9,10 @@ class AGambitGameMode;
 class AGambitPlayerState;
 class UInputAction;
 class UGambitPCShellWidget;
+#if !UE_BUILD_SHIPPING
 class UGambitDevMatchSandboxComponent;
 class UGambitMatchDebugComponent;
+#endif
 class UGambitLocalMultiplayerSubsystem;
 enum class EGambitCoreInputAction : uint8;
 struct FInputActionValue;
@@ -77,97 +79,97 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|Target Selection")
 	FOnGambitTargetSelectionChanged OnTargetSelectionChanged;
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitPrintMatch();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitValidateData();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitPrintInventory();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitPrintSharedPool();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitReadyAll();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAutoAdvance();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAutoToShop();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitBuyFirstOfferAll();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitSkipShop();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void Gambit();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitGrantGold(int32 Amount);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitGrantConsumable(int32 PlayerIndex, const FString& ConsumableId);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitPrintShop();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitBuyOffer(int32 PlayerIndex, int32 OfferId);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitRerollPlayer(int32 PlayerIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitLockDie(int32 PlayerIndex, int32 DieIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitUseConsumable(int32 PlayerIndex, int32 SlotIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitUseConsumableOnDie(int32 PlayerIndex, int32 SlotIndex, int32 DieIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAutoFullMatch();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAIDecideRerolls();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAIDecideActions();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAIDecideShop();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAIFullRound();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitAIFullMatch();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevStart(int32 DesiredLocalPlayerCount);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevSnapshot();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevInspect(int32 PlayerIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevHuman(int32 PlayerIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevAI(int32 PlayerIndex);
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevAdvance();
 
-	UFUNCTION(Exec)
+	UFUNCTION(Exec, meta = (DevelopmentOnly))
 	void GambitDevAIDecide();
 
 protected:
@@ -226,8 +228,10 @@ private:
 
 	AGambitPlayerState* GetGambitPlayerState() const;
 	AGambitGameMode* GetGambitGameMode() const;
+#if !UE_BUILD_SHIPPING
 	UGambitMatchDebugComponent* GetMatchDebugComponent() const;
 	UGambitDevMatchSandboxComponent* GetDevMatchSandboxComponent() const;
+#endif
 	UGambitLocalMultiplayerSubsystem* GetLocalMultiplayerSubsystem() const;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|Local Multiplayer Input", meta = (AllowPrivateAccess = "true"))
