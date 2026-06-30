@@ -9,7 +9,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "Core/Types/GambitTargetSelectionTypes.h"
 #include "Dice/Data/GambitDiceDefinition.h"
@@ -149,11 +149,11 @@ namespace
 		return Line;
 	}
 
-	FString ShellJoinDebugItemSnapshots(const TArray<FGambitDebugItemSnapshot>& Snapshots)
+	FString ShellJoinItemSnapshots(const TArray<FGambitItemSnapshot>& Snapshots)
 	{
 		TArray<FString> Parts;
 		Parts.Reserve(Snapshots.Num());
-		for (const FGambitDebugItemSnapshot& Snapshot : Snapshots)
+		for (const FGambitItemSnapshot& Snapshot : Snapshots)
 		{
 			if (Snapshot.ItemId.IsNone() && Snapshot.DisplayName.IsEmpty())
 			{
@@ -174,11 +174,11 @@ namespace
 		return Parts.Num() > 0 ? FString::Join(Parts, TEXT(", ")) : FString(TEXT("None"));
 	}
 
-	FString ShellJoinDebugDiceSnapshots(const TArray<FGambitDebugDieSnapshot>& Snapshots)
+	FString ShellJoinDiceSnapshots(const TArray<FGambitDiceSnapshot>& Snapshots)
 	{
 		TArray<FString> Parts;
 		Parts.Reserve(Snapshots.Num());
-		for (const FGambitDebugDieSnapshot& Snapshot : Snapshots)
+		for (const FGambitDiceSnapshot& Snapshot : Snapshots)
 		{
 			const FString Label = Snapshot.DisplayName.IsEmpty()
 				? Snapshot.DiceId.ToString()
@@ -250,7 +250,7 @@ namespace
 			*StateText);
 	}
 
-	FString ShellFormatDebugScoreLine(const FGambitDebugScoreLine& Line)
+	FString ShellFormatScoreBreakdownLine(const FGambitScoreBreakdownLine& Line)
 	{
 		const FString SourcePrefix = Line.SourceName.IsEmpty()
 			? FString()
@@ -271,7 +271,7 @@ namespace
 			Line.ScoreAfter);
 	}
 
-	FString ShellFormatDebugGoldLine(const FGambitDebugGoldLine& Line)
+	FString ShellFormatGoldBreakdownLine(const FGambitGoldBreakdownLine& Line)
 	{
 		if (!Line.Summary.IsEmpty())
 		{
@@ -740,13 +740,13 @@ TArray<FString> UGambitPCShellWidget::BuildScoreFeedbackLines(const AGambitPlaye
 		Breakdown.ScoreBeforeCap,
 		Breakdown.ScoreAfterCap));
 
-	const TArray<FGambitDebugScoreLine> ScoreLines = PlayerState->GetDebugScoreLines();
+	const TArray<FGambitScoreBreakdownLine> ScoreLines = PlayerState->GetScoreBreakdownLines();
 	if (ScoreLines.Num() > 0)
 	{
 		Lines.Add(TEXT("Scoring breakdown:"));
-		for (const FGambitDebugScoreLine& Line : ScoreLines)
+		for (const FGambitScoreBreakdownLine& Line : ScoreLines)
 		{
-			Lines.Add(ShellFormatDebugScoreLine(Line));
+			Lines.Add(ShellFormatScoreBreakdownLine(Line));
 		}
 	}
 
@@ -763,14 +763,14 @@ TArray<FString> UGambitPCShellWidget::BuildRewardFeedbackLines(
 		return Lines;
 	}
 
-	const TArray<FGambitDebugGoldLine> GoldLines = PlayerState->GetDebugGoldLines();
+	const TArray<FGambitGoldBreakdownLine> GoldLines = PlayerState->GetGoldBreakdownLines();
 	if (GoldLines.Num() == 0 && VictoryPointsGranted == INDEX_NONE)
 	{
 		return Lines;
 	}
 
 	int32 TotalGoldDelta = 0;
-	for (const FGambitDebugGoldLine& Line : GoldLines)
+	for (const FGambitGoldBreakdownLine& Line : GoldLines)
 	{
 		TotalGoldDelta += Line.ActualDelta;
 	}
@@ -787,9 +787,9 @@ TArray<FString> UGambitPCShellWidget::BuildRewardFeedbackLines(
 	if (GoldLines.Num() > 0)
 	{
 		Lines.Add(TEXT("Gold breakdown:"));
-		for (const FGambitDebugGoldLine& Line : GoldLines)
+		for (const FGambitGoldBreakdownLine& Line : GoldLines)
 		{
-			Lines.Add(ShellFormatDebugGoldLine(Line));
+			Lines.Add(ShellFormatGoldBreakdownLine(Line));
 		}
 	}
 
@@ -868,9 +868,9 @@ TArray<FString> UGambitPCShellWidget::BuildTargetSelectionFeedbackLines(const AG
 	const FGambitTargetSelectionRequest Request = PlayerController->GetPendingTargetSelectionRequest();
 	const int32 SelectedOptionId = PlayerController->GetPendingTargetSelectionSelectedOptionId();
 	const FString SourceName = ShellItemDisplayName(Request.SourceItemDefinition);
-	const FString RequestSummary = Request.DebugText.IsEmpty()
+	const FString RequestSummary = Request.PresentationText.IsEmpty()
 		? FString::Printf(TEXT("%s requires target selection."), *SourceName)
-		: Request.DebugText;
+		: Request.PresentationText;
 
 	Lines.Add(FString::Printf(
 		TEXT("Target Selection: %s | Type %s | Selected %s"),
@@ -907,9 +907,9 @@ TArray<FString> UGambitPCShellWidget::BuildTargetSelectionFeedbackLines(const AG
 		{
 			Line += FString::Printf(TEXT(" | Die %d"), Option.TargetDieHandIndex + 1);
 		}
-		if (!Option.DebugText.IsEmpty())
+		if (!Option.PresentationText.IsEmpty())
 		{
-			Line += FString::Printf(TEXT(" | %s"), *Option.DebugText);
+			Line += FString::Printf(TEXT(" | %s"), *Option.PresentationText);
 		}
 		Lines.Add(Line);
 	}
@@ -966,9 +966,9 @@ TArray<FString> UGambitPCShellWidget::BuildInventorySummaryLines(const AGambitPl
 		SlotState.ModuleSlotsCapacity,
 		SlotState.ConsumableSlotsUsed,
 		SlotState.ConsumableSlotsCapacity));
-	Lines.Add(FString::Printf(TEXT("  Dice: %s"), *ShellJoinDebugDiceSnapshots(PlayerState->BuildDebugDiceSnapshot())));
-	Lines.Add(FString::Printf(TEXT("  Modules: %s"), *ShellJoinDebugItemSnapshots(PlayerState->BuildDebugModuleSnapshot())));
-	Lines.Add(FString::Printf(TEXT("  Consumables: %s"), *ShellJoinDebugItemSnapshots(PlayerState->BuildDebugConsumableSnapshot())));
+	Lines.Add(FString::Printf(TEXT("  Dice: %s"), *ShellJoinDiceSnapshots(PlayerState->BuildDiceSnapshot())));
+	Lines.Add(FString::Printf(TEXT("  Modules: %s"), *ShellJoinItemSnapshots(PlayerState->BuildModuleSnapshot())));
+	Lines.Add(FString::Printf(TEXT("  Consumables: %s"), *ShellJoinItemSnapshots(PlayerState->BuildConsumableSnapshot())));
 	return Lines;
 }
 

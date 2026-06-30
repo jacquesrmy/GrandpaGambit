@@ -39,11 +39,11 @@ namespace
 		return EffectIds;
 	}
 
-	FGambitDebugItemSnapshot BuildItemSnapshot(
+	FGambitItemSnapshot BuildItemSnapshot(
 		const UGambitItemDefinition* ItemDefinition,
 		const FGambitInventoryItemInstance* ItemInstance = nullptr)
 	{
-		FGambitDebugItemSnapshot Snapshot;
+		FGambitItemSnapshot Snapshot;
 		if (ItemInstance)
 		{
 			Snapshot.InventoryInstanceId = ItemInstance->InstanceId;
@@ -161,9 +161,9 @@ int32 AGambitPlayerState::ApplyRoundGoldReward(const int32 BaseGoldReward)
 		return 0;
 	}
 
-	TArray<FGambitDebugGoldLine> GoldLines;
+	TArray<FGambitGoldBreakdownLine> GoldLines;
 	const int32 Interest = EconomyComponent->ApplyRoundEconomyDetailed(BaseGoldReward, GoldLines);
-	AppendDebugGoldLines(GoldLines);
+	AppendGoldBreakdownLines(GoldLines);
 	return Interest;
 }
 
@@ -483,79 +483,79 @@ TArray<FGambitRoundGameplayEvent> AGambitPlayerState::GetRoundEventsByTargetPlay
 		: TArray<FGambitRoundGameplayEvent>();
 }
 
-void AGambitPlayerState::AddDebugEffectEvent(const FGambitDebugEffectEvent& Event)
+void AGambitPlayerState::AddRoundFeedbackEvent(const FGambitRoundFeedbackEvent& Event)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AddDebugEffectEvent(Event);
+		RoundStateComponent->AddRoundFeedbackEvent(Event);
 	}
 }
 
-void AGambitPlayerState::AddDebugScoreLine(const FGambitDebugScoreLine& Line)
+void AGambitPlayerState::AddScoreBreakdownLine(const FGambitScoreBreakdownLine& Line)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AddDebugScoreLine(Line);
+		RoundStateComponent->AddScoreBreakdownLine(Line);
 	}
 }
 
-void AGambitPlayerState::AddDebugGoldLine(const FGambitDebugGoldLine& Line)
+void AGambitPlayerState::AddGoldBreakdownLine(const FGambitGoldBreakdownLine& Line)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AddDebugGoldLine(Line);
+		RoundStateComponent->AddGoldBreakdownLine(Line);
 	}
 }
 
-void AGambitPlayerState::AddDebugShopLine(const FGambitDebugShopLine& Line)
+void AGambitPlayerState::AddShopBreakdownLine(const FGambitShopBreakdownLine& Line)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AddDebugShopLine(Line);
+		RoundStateComponent->AddShopBreakdownLine(Line);
 	}
 }
 
-void AGambitPlayerState::AppendDebugEffectEvents(const TArray<FGambitDebugEffectEvent>& Events)
+void AGambitPlayerState::AppendRoundFeedbackEvents(const TArray<FGambitRoundFeedbackEvent>& Events)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AppendDebugEffectEvents(Events);
+		RoundStateComponent->AppendRoundFeedbackEvents(Events);
 	}
 }
 
-void AGambitPlayerState::AppendDebugScoreLines(const TArray<FGambitDebugScoreLine>& Lines)
+void AGambitPlayerState::AppendScoreBreakdownLines(const TArray<FGambitScoreBreakdownLine>& Lines)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AppendDebugScoreLines(Lines);
+		RoundStateComponent->AppendScoreBreakdownLines(Lines);
 	}
 }
 
-void AGambitPlayerState::AppendDebugGoldLines(const TArray<FGambitDebugGoldLine>& Lines)
+void AGambitPlayerState::AppendGoldBreakdownLines(const TArray<FGambitGoldBreakdownLine>& Lines)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AppendDebugGoldLines(Lines);
+		RoundStateComponent->AppendGoldBreakdownLines(Lines);
 	}
 }
 
-void AGambitPlayerState::AppendDebugShopLines(const TArray<FGambitDebugShopLine>& Lines)
+void AGambitPlayerState::AppendShopBreakdownLines(const TArray<FGambitShopBreakdownLine>& Lines)
 {
 	if (RoundStateComponent)
 	{
-		RoundStateComponent->AppendDebugShopLines(Lines);
+		RoundStateComponent->AppendShopBreakdownLines(Lines);
 	}
 }
 
-TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() const
+TArray<FGambitDiceSnapshot> AGambitPlayerState::BuildDiceSnapshot() const
 {
-	TArray<FGambitDebugDieSnapshot> Snapshots;
+	TArray<FGambitDiceSnapshot> Snapshots;
 	const TArray<FGambitDieRuntimeState>& DiceStates = GetDiceStatesRef();
 	Snapshots.Reserve(DiceStates.Num());
 
 	for (const FGambitDieRuntimeState& DieState : DiceStates)
 	{
-		FGambitDebugDieSnapshot Snapshot;
+		FGambitDiceSnapshot Snapshot;
 		Snapshot.HandIndex = DieState.HandIndex;
 		Snapshot.InstanceId = DieState.InstanceId;
 		Snapshot.RawValue = DieState.RawValue;
@@ -620,9 +620,9 @@ TArray<FGambitDebugDieSnapshot> AGambitPlayerState::BuildDebugDiceSnapshot() con
 	return Snapshots;
 }
 
-TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugModuleSnapshot() const
+TArray<FGambitItemSnapshot> AGambitPlayerState::BuildModuleSnapshot() const
 {
-	TArray<FGambitDebugItemSnapshot> Snapshots;
+	TArray<FGambitItemSnapshot> Snapshots;
 	if (InventoryComponent)
 	{
 		const TArray<FGambitInventoryItemInstance> ModuleInstances = InventoryComponent->GetActiveModuleInstances();
@@ -646,9 +646,9 @@ TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugModuleSnapshot() 
 	return Snapshots;
 }
 
-TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugConsumableSnapshot() const
+TArray<FGambitItemSnapshot> AGambitPlayerState::BuildConsumableSnapshot() const
 {
-	TArray<FGambitDebugItemSnapshot> Snapshots;
+	TArray<FGambitItemSnapshot> Snapshots;
 	if (InventoryComponent)
 	{
 		const TArray<FGambitInventoryItemInstance> ConsumableInstances = InventoryComponent->GetConsumableInstances();
@@ -672,9 +672,9 @@ TArray<FGambitDebugItemSnapshot> AGambitPlayerState::BuildDebugConsumableSnapsho
 	return Snapshots;
 }
 
-FGambitDebugPlayerSnapshot AGambitPlayerState::BuildDebugPlayerSnapshot(const int32 PlayerIndex) const
+FGambitPlayerSnapshot AGambitPlayerState::BuildPlayerSnapshot(const int32 PlayerIndex) const
 {
-	FGambitDebugPlayerSnapshot Snapshot;
+	FGambitPlayerSnapshot Snapshot;
 	Snapshot.PlayerIndex = PlayerIndex;
 	Snapshot.PlayerName = GetPlayerName().IsEmpty() ? FString::Printf(TEXT("Player %d"), PlayerIndex) : GetPlayerName();
 	Snapshot.CurrentGold = GetCurrentGold();
@@ -682,32 +682,32 @@ FGambitDebugPlayerSnapshot AGambitPlayerState::BuildDebugPlayerSnapshot(const in
 	Snapshot.TotalVictoryPoints = GetTotalVictoryPoints();
 	Snapshot.SlotState = GetSlotState();
 	Snapshot.LastScoreBreakdown = GetLastScoreBreakdown();
-	Snapshot.Dice = BuildDebugDiceSnapshot();
-	Snapshot.ActiveModules = BuildDebugModuleSnapshot();
-	Snapshot.Consumables = BuildDebugConsumableSnapshot();
-	Snapshot.EffectEvents = GetDebugEffectEvents();
-	Snapshot.ScoreLines = GetDebugScoreLines();
-	Snapshot.GoldLines = GetDebugGoldLines();
-	Snapshot.ShopLines = GetDebugShopLines();
+	Snapshot.Dice = BuildDiceSnapshot();
+	Snapshot.ActiveModules = BuildModuleSnapshot();
+	Snapshot.Consumables = BuildConsumableSnapshot();
+	Snapshot.EffectEvents = GetRoundFeedbackEvents();
+	Snapshot.ScoreLines = GetScoreBreakdownLines();
+	Snapshot.GoldLines = GetGoldBreakdownLines();
+	Snapshot.ShopLines = GetShopBreakdownLines();
 	return Snapshot;
 }
 
-TArray<FGambitDebugEffectEvent> AGambitPlayerState::GetDebugEffectEvents() const
+TArray<FGambitRoundFeedbackEvent> AGambitPlayerState::GetRoundFeedbackEvents() const
 {
-	return RoundStateComponent ? RoundStateComponent->GetDebugEffectEvents() : TArray<FGambitDebugEffectEvent>();
+	return RoundStateComponent ? RoundStateComponent->GetRoundFeedbackEvents() : TArray<FGambitRoundFeedbackEvent>();
 }
 
-TArray<FGambitDebugScoreLine> AGambitPlayerState::GetDebugScoreLines() const
+TArray<FGambitScoreBreakdownLine> AGambitPlayerState::GetScoreBreakdownLines() const
 {
-	return RoundStateComponent ? RoundStateComponent->GetDebugScoreLines() : TArray<FGambitDebugScoreLine>();
+	return RoundStateComponent ? RoundStateComponent->GetScoreBreakdownLines() : TArray<FGambitScoreBreakdownLine>();
 }
 
-TArray<FGambitDebugGoldLine> AGambitPlayerState::GetDebugGoldLines() const
+TArray<FGambitGoldBreakdownLine> AGambitPlayerState::GetGoldBreakdownLines() const
 {
-	return RoundStateComponent ? RoundStateComponent->GetDebugGoldLines() : TArray<FGambitDebugGoldLine>();
+	return RoundStateComponent ? RoundStateComponent->GetGoldBreakdownLines() : TArray<FGambitGoldBreakdownLine>();
 }
 
-TArray<FGambitDebugShopLine> AGambitPlayerState::GetDebugShopLines() const
+TArray<FGambitShopBreakdownLine> AGambitPlayerState::GetShopBreakdownLines() const
 {
-	return RoundStateComponent ? RoundStateComponent->GetDebugShopLines() : TArray<FGambitDebugShopLine>();
+	return RoundStateComponent ? RoundStateComponent->GetShopBreakdownLines() : TArray<FGambitShopBreakdownLine>();
 }

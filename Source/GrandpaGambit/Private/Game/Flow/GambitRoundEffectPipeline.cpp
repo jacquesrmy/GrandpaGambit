@@ -83,19 +83,19 @@ void UGambitRoundEffectPipeline::CommitEffectContext(
 
 	if (Context.SourcePlayer)
 	{
-		Context.SourcePlayer->AppendDebugEffectEvents(Context.DebugEffectEvents);
-		Context.SourcePlayer->AppendDebugScoreLines(Context.DebugScoreLines);
-		Context.SourcePlayer->AppendDebugGoldLines(Context.DebugGoldLines);
-		Context.SourcePlayer->AppendDebugShopLines(Context.DebugShopLines);
+		Context.SourcePlayer->AppendRoundFeedbackEvents(Context.RoundFeedbackEvents);
+		Context.SourcePlayer->AppendScoreBreakdownLines(Context.ScoreBreakdownLines);
+		Context.SourcePlayer->AppendGoldBreakdownLines(Context.GoldBreakdownLines);
+		Context.SourcePlayer->AppendShopBreakdownLines(Context.ShopBreakdownLines);
 		Context.SourcePlayer->AppendRoundEvents(Context.RoundEvents);
 	}
 
 	if (Context.TargetPlayer && Context.TargetPlayer != Context.SourcePlayer)
 	{
-		Context.TargetPlayer->AppendDebugEffectEvents(Context.DebugEffectEvents);
-		Context.TargetPlayer->AppendDebugScoreLines(Context.DebugScoreLines);
-		Context.TargetPlayer->AppendDebugGoldLines(Context.DebugGoldLines);
-		Context.TargetPlayer->AppendDebugShopLines(Context.DebugShopLines);
+		Context.TargetPlayer->AppendRoundFeedbackEvents(Context.RoundFeedbackEvents);
+		Context.TargetPlayer->AppendScoreBreakdownLines(Context.ScoreBreakdownLines);
+		Context.TargetPlayer->AppendGoldBreakdownLines(Context.GoldBreakdownLines);
+		Context.TargetPlayer->AppendShopBreakdownLines(Context.ShopBreakdownLines);
 		Context.TargetPlayer->AppendRoundEvents(Context.RoundEvents);
 	}
 

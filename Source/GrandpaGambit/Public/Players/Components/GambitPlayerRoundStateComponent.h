@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "GambitPlayerRoundStateComponent.generated.h"
@@ -32,22 +32,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Events")
 	void AddRoundEvent(const FGambitRoundGameplayEvent& Event);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Debug")
-	void AddDebugEffectEvent(const FGambitDebugEffectEvent& Event);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Feedback")
+	void AddRoundFeedbackEvent(const FGambitRoundFeedbackEvent& Event);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Debug")
-	void AddDebugScoreLine(const FGambitDebugScoreLine& Line);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Feedback")
+	void AddScoreBreakdownLine(const FGambitScoreBreakdownLine& Line);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Debug")
-	void AddDebugGoldLine(const FGambitDebugGoldLine& Line);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Feedback")
+	void AddGoldBreakdownLine(const FGambitGoldBreakdownLine& Line);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Debug")
-	void AddDebugShopLine(const FGambitDebugShopLine& Line);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Round Feedback")
+	void AddShopBreakdownLine(const FGambitShopBreakdownLine& Line);
 
-	void AppendDebugEffectEvents(const TArray<FGambitDebugEffectEvent>& Events);
-	void AppendDebugScoreLines(const TArray<FGambitDebugScoreLine>& Lines);
-	void AppendDebugGoldLines(const TArray<FGambitDebugGoldLine>& Lines);
-	void AppendDebugShopLines(const TArray<FGambitDebugShopLine>& Lines);
+	void AppendRoundFeedbackEvents(const TArray<FGambitRoundFeedbackEvent>& Events);
+	void AppendScoreBreakdownLines(const TArray<FGambitScoreBreakdownLine>& Lines);
+	void AppendGoldBreakdownLines(const TArray<FGambitGoldBreakdownLine>& Lines);
+	void AppendShopBreakdownLines(const TArray<FGambitShopBreakdownLine>& Lines);
 	void AppendRoundEvents(const TArray<FGambitRoundGameplayEvent>& Events);
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round State")
@@ -87,25 +87,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
 	TArray<FGambitRoundGameplayEvent> GetRoundEventsByTargetPlayer(int32 TargetPlayerId) const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Debug")
-	TArray<FGambitDebugEffectEvent> GetDebugEffectEvents() const { return DebugEffectEvents; }
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Feedback")
+	TArray<FGambitRoundFeedbackEvent> GetRoundFeedbackEvents() const { return RoundFeedbackEvents; }
 
-	const TArray<FGambitDebugEffectEvent>& GetDebugEffectEventsRef() const { return DebugEffectEvents; }
+	const TArray<FGambitRoundFeedbackEvent>& GetRoundFeedbackEventsRef() const { return RoundFeedbackEvents; }
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Debug")
-	TArray<FGambitDebugScoreLine> GetDebugScoreLines() const { return DebugScoreLines; }
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Feedback")
+	TArray<FGambitScoreBreakdownLine> GetScoreBreakdownLines() const { return ScoreBreakdownLines; }
 
-	const TArray<FGambitDebugScoreLine>& GetDebugScoreLinesRef() const { return DebugScoreLines; }
+	const TArray<FGambitScoreBreakdownLine>& GetScoreBreakdownLinesRef() const { return ScoreBreakdownLines; }
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Debug")
-	TArray<FGambitDebugGoldLine> GetDebugGoldLines() const { return DebugGoldLines; }
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Feedback")
+	TArray<FGambitGoldBreakdownLine> GetGoldBreakdownLines() const { return GoldBreakdownLines; }
 
-	const TArray<FGambitDebugGoldLine>& GetDebugGoldLinesRef() const { return DebugGoldLines; }
+	const TArray<FGambitGoldBreakdownLine>& GetGoldBreakdownLinesRef() const { return GoldBreakdownLines; }
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Debug")
-	TArray<FGambitDebugShopLine> GetDebugShopLines() const { return DebugShopLines; }
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Feedback")
+	TArray<FGambitShopBreakdownLine> GetShopBreakdownLines() const { return ShopBreakdownLines; }
 
-	const TArray<FGambitDebugShopLine>& GetDebugShopLinesRef() const { return DebugShopLines; }
+	const TArray<FGambitShopBreakdownLine>& GetShopBreakdownLinesRef() const { return ShopBreakdownLines; }
 
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|Player|Round State")
 	FOnGambitPlayerRoundScoreChanged OnRoundScoreChanged;
@@ -123,20 +123,20 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Events", meta = (AllowPrivateAccess = "true"))
 	TArray<FGambitRoundGameplayEvent> RoundEvents;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
-	TArray<FGambitDebugEffectEvent> DebugEffectEvents;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Feedback", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitRoundFeedbackEvent> RoundFeedbackEvents;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
-	TArray<FGambitDebugScoreLine> DebugScoreLines;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Feedback", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitScoreBreakdownLine> ScoreBreakdownLines;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
-	TArray<FGambitDebugGoldLine> DebugGoldLines;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Feedback", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitGoldBreakdownLine> GoldBreakdownLines;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
-	TArray<FGambitDebugShopLine> DebugShopLines;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Feedback", meta = (AllowPrivateAccess = "true"))
+	TArray<FGambitShopBreakdownLine> ShopBreakdownLines;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Debug", meta = (AllowPrivateAccess = "true"))
-	int32 NextDebugSequence = 1;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Feedback", meta = (AllowPrivateAccess = "true"))
+	int32 NextFeedbackSequence = 1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|Player|Round Events", meta = (AllowPrivateAccess = "true"))
 	int32 NextRoundEventSequence = 1;

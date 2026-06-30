@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "GambitEffectExecutionTypes.generated.h"
@@ -517,17 +517,17 @@ struct GRANDPAGAMBIT_API FGambitEffectExecutionContext
 	UPROPERTY(BlueprintReadWrite, Category = "Effect")
 	TObjectPtr<UGambitDiceDefinition> TransformDiceDefinition = nullptr;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Effect|Debug")
-	TArray<FGambitDebugEffectEvent> DebugEffectEvents;
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Feedback")
+	TArray<FGambitRoundFeedbackEvent> RoundFeedbackEvents;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Effect|Debug")
-	TArray<FGambitDebugScoreLine> DebugScoreLines;
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Feedback")
+	TArray<FGambitScoreBreakdownLine> ScoreBreakdownLines;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Effect|Debug")
-	TArray<FGambitDebugGoldLine> DebugGoldLines;
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Feedback")
+	TArray<FGambitGoldBreakdownLine> GoldBreakdownLines;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Effect|Debug")
-	TArray<FGambitDebugShopLine> DebugShopLines;
+	UPROPERTY(BlueprintReadWrite, Category = "Effect|Feedback")
+	TArray<FGambitShopBreakdownLine> ShopBreakdownLines;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Effect|Round Events")
 	TArray<FGambitRoundGameplayEvent> RoundEvents;

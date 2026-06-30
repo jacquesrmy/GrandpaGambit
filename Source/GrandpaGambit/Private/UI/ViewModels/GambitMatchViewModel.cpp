@@ -57,9 +57,9 @@ void UGambitMatchViewModel::HandleRankingUpdated()
 	OnViewModelUpdated.Broadcast();
 }
 
-TArray<FGambitDebugPlayerSnapshot> UGambitMatchViewModel::BuildDebugPlayerSnapshots() const
+TArray<FGambitPlayerSnapshot> UGambitMatchViewModel::BuildPlayerSnapshots() const
 {
-	TArray<FGambitDebugPlayerSnapshot> Snapshots;
+	TArray<FGambitPlayerSnapshot> Snapshots;
 	if (!BoundGameState)
 	{
 		return Snapshots;
@@ -71,7 +71,7 @@ TArray<FGambitDebugPlayerSnapshot> UGambitMatchViewModel::BuildDebugPlayerSnapsh
 	{
 		if (const AGambitPlayerState* PlayerState = PlayerStates[PlayerIndex])
 		{
-			Snapshots.Add(PlayerState->BuildDebugPlayerSnapshot(PlayerIndex));
+			Snapshots.Add(PlayerState->BuildPlayerSnapshot(PlayerIndex));
 		}
 	}
 

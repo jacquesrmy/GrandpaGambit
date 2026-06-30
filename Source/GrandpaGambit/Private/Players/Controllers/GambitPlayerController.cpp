@@ -221,9 +221,9 @@ bool AGambitPlayerController::StartTargetSelection(const FGambitTargetSelectionR
 		}
 	}
 
-	const FString Summary = Request.DebugText.IsEmpty()
+	const FString Summary = Request.PresentationText.IsEmpty()
 		? FString::Printf(TEXT("%s requires target selection"), *ResolveControllerItemName(Request.SourceItemDefinition))
-		: Request.DebugText;
+		: Request.PresentationText;
 	AddTargetSelectionFeedback(
 		EGambitRoundGameplayEventType::TargetSelectionRequested,
 		EGambitRoundGameplayEventOutcome::Applied,
@@ -1096,20 +1096,20 @@ void AGambitPlayerController::AddTargetSelectionFeedback(
 		: TargetSelectionPlayerState;
 	const EGambitRoundPhase Phase = GameState ? GameState->GetCurrentPhase() : Request.CurrentPhase;
 
-	FGambitDebugEffectEvent DebugEvent;
-	DebugEvent.Category = Outcome == EGambitRoundGameplayEventOutcome::Failed
-		? EGambitDebugEventCategory::Refusal
-		: EGambitDebugEventCategory::Effect;
-	DebugEvent.Phase = Phase;
-	DebugEvent.HookId = TEXT("TargetSelection");
-	DebugEvent.SourceId = Request.SourceItemId;
-	DebugEvent.SourceName = ResolveControllerItemName(Request.SourceItemDefinition);
-	DebugEvent.EffectId = Request.EffectId;
-	DebugEvent.TargetRuleId = Request.TargetRuleId;
-	DebugEvent.TargetName = Option ? Option->Label : TEXT("Pending target");
-	DebugEvent.bTriggered = Outcome == EGambitRoundGameplayEventOutcome::Applied;
-	DebugEvent.Summary = Summary;
-	TargetSelectionPlayerState->AddDebugEffectEvent(DebugEvent);
+	FGambitRoundFeedbackEvent FeedbackEvent;
+	FeedbackEvent.Category = Outcome == EGambitRoundGameplayEventOutcome::Failed
+		? EGambitRoundFeedbackEventCategory::Refusal
+		: EGambitRoundFeedbackEventCategory::Effect;
+	FeedbackEvent.Phase = Phase;
+	FeedbackEvent.HookId = TEXT("TargetSelection");
+	FeedbackEvent.SourceId = Request.SourceItemId;
+	FeedbackEvent.SourceName = ResolveControllerItemName(Request.SourceItemDefinition);
+	FeedbackEvent.EffectId = Request.EffectId;
+	FeedbackEvent.TargetRuleId = Request.TargetRuleId;
+	FeedbackEvent.TargetName = Option ? Option->Label : TEXT("Pending target");
+	FeedbackEvent.bTriggered = Outcome == EGambitRoundGameplayEventOutcome::Applied;
+	FeedbackEvent.Summary = Summary;
+	TargetSelectionPlayerState->AddRoundFeedbackEvent(FeedbackEvent);
 
 	FGambitRoundGameplayEvent RoundEvent;
 	RoundEvent.EventType = EventType;

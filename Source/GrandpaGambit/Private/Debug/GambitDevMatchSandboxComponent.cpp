@@ -183,7 +183,7 @@ FGambitDevSandboxSnapshot UGambitDevMatchSandboxComponent::BuildSandboxSnapshot(
 	Snapshot.InspectedPlayerIndex = InspectedPlayerIndex;
 	Snapshot.LocalPlayerCount = GetLocalMultiplayerSubsystem() ? GetLocalMultiplayerSubsystem()->GetLocalPlayerCount() : 0;
 	Snapshot.PlayerSlots = BuildPlayerSlotSnapshots();
-	Snapshot.bHasInspectedPlayer = BuildDebugPlayerSnapshotByIndex(InspectedPlayerIndex, Snapshot.InspectedPlayer);
+	Snapshot.bHasInspectedPlayer = BuildPlayerSnapshotByIndex(InspectedPlayerIndex, Snapshot.InspectedPlayer);
 	Snapshot.Summary = FString::Printf(
 		TEXT("Round=%d Phase=%s Players=%d Inspect=%d"),
 		Snapshot.RoundIndex,
@@ -245,9 +245,9 @@ TArray<FGambitDevSandboxPlayerSlotSnapshot> UGambitDevMatchSandboxComponent::Bui
 	return Slots;
 }
 
-TArray<FGambitDebugPlayerSnapshot> UGambitDevMatchSandboxComponent::BuildDebugPlayerSnapshots() const
+TArray<FGambitPlayerSnapshot> UGambitDevMatchSandboxComponent::BuildPlayerSnapshots() const
 {
-	TArray<FGambitDebugPlayerSnapshot> Snapshots;
+	TArray<FGambitPlayerSnapshot> Snapshots;
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
 	Snapshots.Reserve(Players.Num());
 
@@ -255,25 +255,25 @@ TArray<FGambitDebugPlayerSnapshot> UGambitDevMatchSandboxComponent::BuildDebugPl
 	{
 		if (const AGambitPlayerState* PlayerState = Players[PlayerIndex])
 		{
-			Snapshots.Add(PlayerState->BuildDebugPlayerSnapshot(PlayerIndex));
+			Snapshots.Add(PlayerState->BuildPlayerSnapshot(PlayerIndex));
 		}
 	}
 
 	return Snapshots;
 }
 
-bool UGambitDevMatchSandboxComponent::BuildDebugPlayerSnapshotByIndex(
+bool UGambitDevMatchSandboxComponent::BuildPlayerSnapshotByIndex(
 	const int32 PlayerIndex,
-	FGambitDebugPlayerSnapshot& OutSnapshot) const
+	FGambitPlayerSnapshot& OutSnapshot) const
 {
 	const AGambitPlayerState* PlayerState = GetPlayerByIndex(PlayerIndex);
 	if (!PlayerState)
 	{
-		OutSnapshot = FGambitDebugPlayerSnapshot();
+		OutSnapshot = FGambitPlayerSnapshot();
 		return false;
 	}
 
-	OutSnapshot = PlayerState->BuildDebugPlayerSnapshot(PlayerIndex);
+	OutSnapshot = PlayerState->BuildPlayerSnapshot(PlayerIndex);
 	return true;
 }
 

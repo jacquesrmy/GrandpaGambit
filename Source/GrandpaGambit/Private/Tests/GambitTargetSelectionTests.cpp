@@ -515,7 +515,7 @@ bool FGambitTargetSelectionAppliesAndReportsFeedbackTest::RunTest(const FString&
 	TestEqual(TEXT("blocked target keeps gold"), TargetPlayer->GetEconomyComponent()->GetCurrentGold(), 10);
 	TestEqual(TEXT("blocked source does not gain gold"), SourcePlayer->GetEconomyComponent()->GetCurrentGold(), 0);
 	TestTrue(TEXT("prevented feedback event is visible"), CountTargetSelectionRoundEvents(BlockedContext, EGambitRoundGameplayEventType::EffectPrevented) > 0);
-	TestTrue(TEXT("prevented debug event is visible"), BlockedContext.DebugEffectEvents.ContainsByPredicate([](const FGambitDebugEffectEvent& Event)
+	TestTrue(TEXT("prevented feedback event is visible"), BlockedContext.RoundFeedbackEvents.ContainsByPredicate([](const FGambitRoundFeedbackEvent& Event)
 	{
 		return Event.bPrevented;
 	}));

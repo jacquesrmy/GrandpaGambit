@@ -18,11 +18,11 @@ void UGambitPlayerRoundStateComponent::ResetRoundState()
 	CurrentRoundScore = 0;
 	LastScoreBreakdown = FGambitScoreBreakdown();
 	RoundEvents.Reset();
-	DebugEffectEvents.Reset();
-	DebugScoreLines.Reset();
-	DebugGoldLines.Reset();
-	DebugShopLines.Reset();
-	NextDebugSequence = 1;
+	RoundFeedbackEvents.Reset();
+	ScoreBreakdownLines.Reset();
+	GoldBreakdownLines.Reset();
+	ShopBreakdownLines.Reset();
+	NextFeedbackSequence = 1;
 	NextRoundEventSequence = 1;
 
 	RoundConsumableModifier = FGambitScoreModifierMath::MakeNeutral();
@@ -49,63 +49,63 @@ void UGambitPlayerRoundStateComponent::AddRoundEvent(const FGambitRoundGameplayE
 	RoundEvents.Add(StoredEvent);
 }
 
-void UGambitPlayerRoundStateComponent::AddDebugEffectEvent(const FGambitDebugEffectEvent& Event)
+void UGambitPlayerRoundStateComponent::AddRoundFeedbackEvent(const FGambitRoundFeedbackEvent& Event)
 {
-	FGambitDebugEffectEvent StoredEvent = Event;
-	StoredEvent.Sequence = NextDebugSequence++;
-	DebugEffectEvents.Add(StoredEvent);
+	FGambitRoundFeedbackEvent StoredEvent = Event;
+	StoredEvent.Sequence = NextFeedbackSequence++;
+	RoundFeedbackEvents.Add(StoredEvent);
 }
 
-void UGambitPlayerRoundStateComponent::AddDebugScoreLine(const FGambitDebugScoreLine& Line)
+void UGambitPlayerRoundStateComponent::AddScoreBreakdownLine(const FGambitScoreBreakdownLine& Line)
 {
-	FGambitDebugScoreLine StoredLine = Line;
-	StoredLine.Sequence = NextDebugSequence++;
-	DebugScoreLines.Add(StoredLine);
+	FGambitScoreBreakdownLine StoredLine = Line;
+	StoredLine.Sequence = NextFeedbackSequence++;
+	ScoreBreakdownLines.Add(StoredLine);
 }
 
-void UGambitPlayerRoundStateComponent::AddDebugGoldLine(const FGambitDebugGoldLine& Line)
+void UGambitPlayerRoundStateComponent::AddGoldBreakdownLine(const FGambitGoldBreakdownLine& Line)
 {
-	FGambitDebugGoldLine StoredLine = Line;
-	StoredLine.Sequence = NextDebugSequence++;
-	DebugGoldLines.Add(StoredLine);
+	FGambitGoldBreakdownLine StoredLine = Line;
+	StoredLine.Sequence = NextFeedbackSequence++;
+	GoldBreakdownLines.Add(StoredLine);
 }
 
-void UGambitPlayerRoundStateComponent::AddDebugShopLine(const FGambitDebugShopLine& Line)
+void UGambitPlayerRoundStateComponent::AddShopBreakdownLine(const FGambitShopBreakdownLine& Line)
 {
-	FGambitDebugShopLine StoredLine = Line;
-	StoredLine.Sequence = NextDebugSequence++;
-	DebugShopLines.Add(StoredLine);
+	FGambitShopBreakdownLine StoredLine = Line;
+	StoredLine.Sequence = NextFeedbackSequence++;
+	ShopBreakdownLines.Add(StoredLine);
 }
 
-void UGambitPlayerRoundStateComponent::AppendDebugEffectEvents(const TArray<FGambitDebugEffectEvent>& Events)
+void UGambitPlayerRoundStateComponent::AppendRoundFeedbackEvents(const TArray<FGambitRoundFeedbackEvent>& Events)
 {
-	for (const FGambitDebugEffectEvent& Event : Events)
+	for (const FGambitRoundFeedbackEvent& Event : Events)
 	{
-		AddDebugEffectEvent(Event);
+		AddRoundFeedbackEvent(Event);
 	}
 }
 
-void UGambitPlayerRoundStateComponent::AppendDebugScoreLines(const TArray<FGambitDebugScoreLine>& Lines)
+void UGambitPlayerRoundStateComponent::AppendScoreBreakdownLines(const TArray<FGambitScoreBreakdownLine>& Lines)
 {
-	for (const FGambitDebugScoreLine& Line : Lines)
+	for (const FGambitScoreBreakdownLine& Line : Lines)
 	{
-		AddDebugScoreLine(Line);
+		AddScoreBreakdownLine(Line);
 	}
 }
 
-void UGambitPlayerRoundStateComponent::AppendDebugGoldLines(const TArray<FGambitDebugGoldLine>& Lines)
+void UGambitPlayerRoundStateComponent::AppendGoldBreakdownLines(const TArray<FGambitGoldBreakdownLine>& Lines)
 {
-	for (const FGambitDebugGoldLine& Line : Lines)
+	for (const FGambitGoldBreakdownLine& Line : Lines)
 	{
-		AddDebugGoldLine(Line);
+		AddGoldBreakdownLine(Line);
 	}
 }
 
-void UGambitPlayerRoundStateComponent::AppendDebugShopLines(const TArray<FGambitDebugShopLine>& Lines)
+void UGambitPlayerRoundStateComponent::AppendShopBreakdownLines(const TArray<FGambitShopBreakdownLine>& Lines)
 {
-	for (const FGambitDebugShopLine& Line : Lines)
+	for (const FGambitShopBreakdownLine& Line : Lines)
 	{
-		AddDebugShopLine(Line);
+		AddShopBreakdownLine(Line);
 	}
 }
 

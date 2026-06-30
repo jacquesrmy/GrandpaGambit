@@ -1238,7 +1238,7 @@ namespace
 	}
 
 	template <typename TEnum>
-	FString EffectResolverEnumToDebugString(const TEnum Value)
+	FString EffectResolverEnumToString(const TEnum Value)
 	{
 		if (const UEnum* Enum = StaticEnum<TEnum>())
 		{
@@ -1248,7 +1248,7 @@ namespace
 		return TEXT("Unknown");
 	}
 
-	FName ResolveDebugSourceId(const FGambitEffectExecutionContext& Context)
+	FName ResolveFeedbackSourceId(const FGambitEffectExecutionContext& Context)
 	{
 		if (const UGambitItemDefinition* SourceItem = Context.SourceItem.Get())
 		{
@@ -1269,7 +1269,7 @@ namespace
 		const UGambitItemEffectDefinition* EffectDefinition)
 	{
 		const FName SourceEffectId = GetEffectSourceId(EffectDefinition);
-		DieState.RuntimeSourceItemId = ResolveDebugSourceId(Context);
+		DieState.RuntimeSourceItemId = ResolveFeedbackSourceId(Context);
 		DieState.RuntimeSourceEffectId = SourceEffectId;
 		if (!SourceEffectId.IsNone())
 		{
@@ -1285,11 +1285,11 @@ namespace
 	{
 		if (DiceComponent)
 		{
-			DiceComponent->RecordRuntimeEffectSource(DieIndex, ResolveDebugSourceId(Context), GetEffectSourceId(EffectDefinition));
+			DiceComponent->RecordRuntimeEffectSource(DieIndex, ResolveFeedbackSourceId(Context), GetEffectSourceId(EffectDefinition));
 		}
 	}
 
-	FString ResolveDebugSourceName(const FGambitEffectExecutionContext& Context)
+	FString ResolveFeedbackSourceName(const FGambitEffectExecutionContext& Context)
 	{
 		if (const UGambitItemDefinition* SourceItem = Context.SourceItem.Get())
 		{
@@ -1304,7 +1304,7 @@ namespace
 		return TEXT("Unknown Source");
 	}
 
-	FString ResolveDebugTargetName(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
+	FString ResolveFeedbackTargetName(const FGambitEffectExecutionContext& Context, const EGambitEffectTarget Target)
 	{
 		const AGambitPlayerState* TargetPlayer = ResolvePlayerForRead(Context, Target);
 		if (!TargetPlayer)
@@ -1316,26 +1316,26 @@ namespace
 		return PlayerName.IsEmpty() ? TEXT("Unnamed Player") : PlayerName;
 	}
 
-	FGambitDebugEffectEvent MakeEffectDebugEvent(
+	FGambitRoundFeedbackEvent MakeEffectFeedbackEvent(
 		const FGambitEffectExecutionContext& Context,
 		const UGambitItemEffectDefinition* EffectDefinition,
 		const bool bTriggered,
 		const bool bPrevented,
 		const FString& Summary)
 	{
-		FGambitDebugEffectEvent Event;
+		FGambitRoundFeedbackEvent Event;
 		Event.Category = (bPrevented || (EffectDefinition && EffectDefinition->EffectType == EGambitItemEffectType::PreventNegativeEffect))
-			? EGambitDebugEventCategory::Protection
-			: EGambitDebugEventCategory::Effect;
+			? EGambitRoundFeedbackEventCategory::Protection
+			: EGambitRoundFeedbackEventCategory::Effect;
 		Event.Phase = Context.CurrentPhase;
-		Event.HookId = FName(*EffectResolverEnumToDebugString(Context.Hook));
-		Event.SourceId = ResolveDebugSourceId(Context);
-		Event.SourceName = ResolveDebugSourceName(Context);
+		Event.HookId = FName(*EffectResolverEnumToString(Context.Hook));
+		Event.SourceId = ResolveFeedbackSourceId(Context);
+		Event.SourceName = ResolveFeedbackSourceName(Context);
 		Event.EffectId = GetEffectSourceId(EffectDefinition);
 		Event.EffectTypeId = EffectDefinition ? EffectDefinition->EffectTypeId : NAME_None;
-		Event.EffectTypeName = EffectDefinition ? EffectResolverEnumToDebugString(EffectDefinition->EffectType) : TEXT("RuntimeEffect");
+		Event.EffectTypeName = EffectDefinition ? EffectResolverEnumToString(EffectDefinition->EffectType) : TEXT("RuntimeEffect");
 		Event.TargetRuleId = EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None;
-		Event.TargetName = ResolveDebugTargetName(Context, EffectDefinition ? EffectDefinition->Target : EGambitEffectTarget::Source);
+		Event.TargetName = ResolveFeedbackTargetName(Context, EffectDefinition ? EffectDefinition->Target : EGambitEffectTarget::Source);
 		Event.bTriggered = bTriggered;
 		Event.bNegative = EffectDefinition ? EffectDefinition->bNegativeEffect : false;
 		Event.bPrevented = bPrevented;
@@ -1343,28 +1343,28 @@ namespace
 		return Event;
 	}
 
-	FGambitDebugEffectEvent MakeRuntimeEffectDebugEvent(
+	FGambitRoundFeedbackEvent MakeRuntimeEffectFeedbackEvent(
 		const FGambitEffectExecutionContext& Context,
 		const FString& EffectName,
 		const FString& Summary)
 	{
-		FGambitDebugEffectEvent Event;
-		Event.Category = EGambitDebugEventCategory::Effect;
+		FGambitRoundFeedbackEvent Event;
+		Event.Category = EGambitRoundFeedbackEventCategory::Effect;
 		Event.Phase = Context.CurrentPhase;
-		Event.HookId = FName(*EffectResolverEnumToDebugString(Context.Hook));
-		Event.SourceId = ResolveDebugSourceId(Context);
-		Event.SourceName = ResolveDebugSourceName(Context);
+		Event.HookId = FName(*EffectResolverEnumToString(Context.Hook));
+		Event.SourceId = ResolveFeedbackSourceId(Context);
+		Event.SourceName = ResolveFeedbackSourceName(Context);
 		Event.EffectId = FName(*EffectName);
 		Event.EffectTypeName = TEXT("RuntimeEffect");
-		Event.TargetName = ResolveDebugTargetName(Context, EGambitEffectTarget::Source);
+		Event.TargetName = ResolveFeedbackTargetName(Context, EGambitEffectTarget::Source);
 		Event.bTriggered = true;
 		Event.Summary = Summary;
 		return Event;
 	}
 
-	FGambitDebugScoreLine MakeScoreDebugLine(
+	FGambitScoreBreakdownLine MakeScoreBreakdownLine(
 		const FGambitEffectExecutionContext& Context,
-		const EGambitDebugScoreLineType LineType,
+		const EGambitScoreBreakdownLineType LineType,
 		const FString& Label,
 		const float AdditiveDelta,
 		const float DiceContributionDelta,
@@ -1373,11 +1373,11 @@ namespace
 		const float ScoreAfter,
 		const FString& Summary)
 	{
-		FGambitDebugScoreLine Line;
+		FGambitScoreBreakdownLine Line;
 		Line.LineType = LineType;
 		Line.Phase = Context.CurrentPhase;
-		Line.SourceId = ResolveDebugSourceId(Context);
-		Line.SourceName = ResolveDebugSourceName(Context);
+		Line.SourceId = ResolveFeedbackSourceId(Context);
+		Line.SourceName = ResolveFeedbackSourceName(Context);
 		Line.Label = Label;
 		Line.AdditiveDelta = AdditiveDelta;
 		Line.DiceContributionDelta = DiceContributionDelta;
@@ -1388,16 +1388,16 @@ namespace
 		return Line;
 	}
 
-	void AddScoreModifierDebugLine(
+	void AddScoreModifierBreakdownLine(
 		FGambitEffectExecutionContext& Context,
 		const FGambitScoreModifierContext& Modifier,
 		const FString& Label)
 	{
 		if (!FMath::IsNearlyZero(Modifier.AdditiveBonus))
 		{
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+			Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 				Context,
-				EGambitDebugScoreLineType::Additive,
+				EGambitScoreBreakdownLineType::Additive,
 				Label,
 				Modifier.AdditiveBonus,
 				0.0f,
@@ -1409,9 +1409,9 @@ namespace
 
 		if (!FMath::IsNearlyZero(Modifier.DiceContributionMultiplierBonus))
 		{
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+			Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 				Context,
-				EGambitDebugScoreLineType::DiceContribution,
+				EGambitScoreBreakdownLineType::DiceContribution,
 				Label,
 				0.0f,
 				Modifier.DiceContributionMultiplierBonus,
@@ -1423,9 +1423,9 @@ namespace
 
 		if (!FMath::IsNearlyEqual(Modifier.Multiplier, 1.0f))
 		{
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+			Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 				Context,
-				EGambitDebugScoreLineType::Multiplier,
+				EGambitScoreBreakdownLineType::Multiplier,
 				Label,
 				0.0f,
 				0.0f,
@@ -1437,9 +1437,9 @@ namespace
 
 		if (Modifier.ScoreCap > 0.0f)
 		{
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+			Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 				Context,
-				EGambitDebugScoreLineType::Cap,
+				EGambitScoreBreakdownLineType::Cap,
 				Label,
 				0.0f,
 				0.0f,
@@ -1450,19 +1450,19 @@ namespace
 		}
 	}
 
-	FGambitDebugGoldLine MakeGoldDebugLine(
+	FGambitGoldBreakdownLine MakeGoldBreakdownLine(
 		const FGambitEffectExecutionContext& Context,
-		const EGambitDebugGoldLineType LineType,
+		const EGambitGoldBreakdownLineType LineType,
 		const int32 RequestedDelta,
 		const int32 GoldBefore,
 		const int32 GoldAfter,
 		const FString& Summary)
 	{
-		FGambitDebugGoldLine Line;
+		FGambitGoldBreakdownLine Line;
 		Line.LineType = LineType;
 		Line.Phase = Context.CurrentPhase;
-		Line.SourceId = ResolveDebugSourceId(Context);
-		Line.SourceName = ResolveDebugSourceName(Context);
+		Line.SourceId = ResolveFeedbackSourceId(Context);
+		Line.SourceName = ResolveFeedbackSourceName(Context);
 		Line.RequestedDelta = RequestedDelta;
 		Line.ActualDelta = GoldAfter - GoldBefore;
 		Line.GoldBefore = GoldBefore;
@@ -1485,7 +1485,7 @@ namespace
 		}
 
 		return EffectDefinition->EffectTypeId.IsNone()
-			? FName(*EffectResolverEnumToDebugString(EffectDefinition->EffectType))
+			? FName(*EffectResolverEnumToString(EffectDefinition->EffectType))
 			: EffectDefinition->EffectTypeId;
 	}
 
@@ -1536,7 +1536,7 @@ namespace
 		Event.Phase = Context.CurrentPhase;
 		Event.SourcePlayerId = ResolveRoundEventPlayerId(Context.SourcePlayer.Get());
 		Event.TargetPlayerId = ResolveRoundEventPlayerId(ResolveRoundEventTargetPlayer(Context, Target));
-		Event.SourceItemId = ResolveDebugSourceId(Context);
+		Event.SourceItemId = ResolveFeedbackSourceId(Context);
 		Event.EffectId = GetEffectSourceId(EffectDefinition);
 		Event.EffectTypeId = ResolveRoundEventEffectTypeId(EffectDefinition);
 		Event.TargetRuleId = EffectDefinition ? EffectDefinition->TargetRuleId : NAME_None;
@@ -1593,7 +1593,7 @@ int32 UGambitEffectResolver::ExecuteItemEffects(UGambitItemDefinition* ItemDefin
 		if (RuntimeEffect->ExecuteEffect(Context))
 		{
 			TriggeredCount++;
-			Context.DebugEffectEvents.Add(MakeRuntimeEffectDebugEvent(
+			Context.RoundFeedbackEvents.Add(MakeRuntimeEffectFeedbackEvent(
 				Context,
 				EffectClass->GetName(),
 				FString::Printf(TEXT("Runtime effect class %s triggered"), *EffectClass->GetName())));
@@ -1657,7 +1657,7 @@ int32 UGambitEffectResolver::ExecuteDiceEffects(UGambitDiceDefinition* DiceDefin
 		if (RuntimeEffect->ExecuteEffect(Context))
 		{
 			TriggeredCount++;
-			Context.DebugEffectEvents.Add(MakeRuntimeEffectDebugEvent(
+			Context.RoundFeedbackEvents.Add(MakeRuntimeEffectFeedbackEvent(
 				Context,
 				EffectClass->GetName(),
 				FString::Printf(TEXT("Runtime dice effect class %s triggered"), *EffectClass->GetName())));
@@ -1705,7 +1705,7 @@ bool UGambitEffectResolver::ExecuteEffectDefinition(UGambitItemEffectDefinition*
 			const FString ChargeSummary = ConsumedProtection.bUnlimitedCharges
 				? FString(TEXT("unlimited charges"))
 				: FString::Printf(TEXT("%d charge(s) remaining"), ConsumedProtection.RemainingCharges);
-			Context.DebugEffectEvents.Add(MakeEffectDebugEvent(
+			Context.RoundFeedbackEvents.Add(MakeEffectFeedbackEvent(
 				Context,
 				EffectDefinition,
 				false,
@@ -1759,18 +1759,18 @@ bool UGambitEffectResolver::ExecuteEffectDefinition(UGambitItemEffectDefinition*
 			EGambitRoundGameplayEventOutcome::Applied,
 			FString::Printf(
 				TEXT("%s applied %s"),
-				*ResolveDebugSourceName(Context),
+				*ResolveFeedbackSourceName(Context),
 				*GetEffectName(EffectDefinition)),
 			static_cast<float>(ResolveContextualAmountAsInt(EffectDefinition, Context, EffectDefinition->Target)),
 			EffectDefinition->Target));
-		Context.DebugEffectEvents.Add(MakeEffectDebugEvent(
+		Context.RoundFeedbackEvents.Add(MakeEffectFeedbackEvent(
 			Context,
 			EffectDefinition,
 			true,
 			false,
 			FString::Printf(
 				TEXT("%s triggered %s"),
-				*ResolveDebugSourceName(Context),
+				*ResolveFeedbackSourceName(Context),
 				*GetEffectName(EffectDefinition))));
 		UE_LOG(
 			LogGambit,
@@ -2216,7 +2216,7 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 	{
 	case EGambitItemEffectType::ScoreModifier:
 		ApplyScoreModifier(ResolveScoreModifierDelta(Context, Target), EffectDefinition->ScoreModifier);
-		AddScoreModifierDebugLine(Context, EffectDefinition->ScoreModifier, GetEffectName(EffectDefinition));
+		AddScoreModifierBreakdownLine(Context, EffectDefinition->ScoreModifier, GetEffectName(EffectDefinition));
 		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
 			Context,
 			EffectDefinition,
@@ -2238,9 +2238,9 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			ResolveScoreModifierDelta(Context, Target).AdditiveBonus += static_cast<float>(Amount);
 		}
 		const float ScoreAfter = Context.CurrentScoreBreakdown.FinalScore;
-		Context.DebugScoreLines.Add(MakeScoreDebugLine(
+		Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 			Context,
-			EGambitDebugScoreLineType::Additive,
+			EGambitScoreBreakdownLineType::Additive,
 			GetEffectName(EffectDefinition),
 			static_cast<float>(Amount),
 			0.0f,
@@ -2271,9 +2271,9 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			ResolveScoreModifierDelta(Context, Target).Multiplier *= Multiplier;
 		}
 		const float ScoreAfter = Context.CurrentScoreBreakdown.FinalScore;
-		Context.DebugScoreLines.Add(MakeScoreDebugLine(
+		Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 			Context,
-			EGambitDebugScoreLineType::Multiplier,
+			EGambitScoreBreakdownLineType::Multiplier,
 			GetEffectName(EffectDefinition),
 			0.0f,
 			0.0f,
@@ -2300,9 +2300,9 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 		}
 
 		ResolveScoreModifierDelta(Context, Target).DiceContributionMultiplierBonus += Bonus;
-		Context.DebugScoreLines.Add(MakeScoreDebugLine(
+		Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 			Context,
-			EGambitDebugScoreLineType::DiceContribution,
+			EGambitScoreBreakdownLineType::DiceContribution,
 			GetEffectName(EffectDefinition),
 			0.0f,
 			Bonus,
@@ -2332,27 +2332,27 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 		FGambitScoreModifierContext& TargetModifier = ResolvedTarget->TargetSide == EGambitEffectTarget::Target
 			? Context.TargetTemporaryScoreModifierDelta
 			: Context.TemporaryScoreModifierDelta;
-		FGambitScoreModifierContext DebugModifier = EffectDefinition->ScoreModifier;
+		FGambitScoreModifierContext FeedbackModifier = EffectDefinition->ScoreModifier;
 		ApplyScoreModifier(TargetModifier, EffectDefinition->ScoreModifier);
 		if (Amount != 0)
 		{
 			TargetModifier.AdditiveBonus += static_cast<float>(Amount);
-			DebugModifier.AdditiveBonus += static_cast<float>(Amount);
+			FeedbackModifier.AdditiveBonus += static_cast<float>(Amount);
 		}
 		const float TemporaryMultiplier = ResolveContextualMultiplier(EffectDefinition, Context, ResolvedTarget->TargetSide);
 		if (!FMath::IsNearlyEqual(TemporaryMultiplier, 1.0f))
 		{
 			TargetModifier.Multiplier *= TemporaryMultiplier;
-			DebugModifier.Multiplier *= TemporaryMultiplier;
+			FeedbackModifier.Multiplier *= TemporaryMultiplier;
 		}
-		AddScoreModifierDebugLine(Context, DebugModifier, FString::Printf(TEXT("%s temporary modifier"), *GetEffectName(EffectDefinition)));
+		AddScoreModifierBreakdownLine(Context, FeedbackModifier, FString::Printf(TEXT("%s temporary modifier"), *GetEffectName(EffectDefinition)));
 		AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
 			Context,
 			EffectDefinition,
 			EGambitRoundGameplayEventType::ScoreModifierApplied,
 			EGambitRoundGameplayEventOutcome::Applied,
 			FString::Printf(TEXT("%s applied a temporary score modifier"), *GetEffectName(EffectDefinition)),
-			DebugModifier.AdditiveBonus,
+			FeedbackModifier.AdditiveBonus,
 			ResolvedTarget->TargetSide));
 		return true;
 	}
@@ -2384,9 +2384,9 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 		{
 			const float ScoreBefore = Context.CurrentScoreBreakdown.FinalScore;
 			ApplyFlatScoreToBreakdown(Context.CurrentScoreBreakdown, static_cast<float>(ActualAmount));
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+			Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 				Context,
-				EGambitDebugScoreLineType::Additive,
+				EGambitScoreBreakdownLineType::Additive,
 				GetEffectName(EffectDefinition),
 				static_cast<float>(ActualAmount),
 				0.0f,
@@ -2401,9 +2401,9 @@ bool UGambitEffectResolver::ApplyScoreEffect(
 			const float ScoreBefore = SourceBreakdown.FinalScore;
 			ApplyFlatScoreToBreakdown(SourceBreakdown, static_cast<float>(ActualAmount));
 			SourcePlayer->ApplyRoundScore(SourceBreakdown);
-			Context.DebugScoreLines.Add(MakeScoreDebugLine(
+			Context.ScoreBreakdownLines.Add(MakeScoreBreakdownLine(
 				Context,
-				EGambitDebugScoreLineType::Additive,
+				EGambitScoreBreakdownLineType::Additive,
 				GetEffectName(EffectDefinition),
 				static_cast<float>(ActualAmount),
 				0.0f,
@@ -3005,13 +3005,13 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 		{
 			const int32 GoldBefore = EconomyComponent->GetCurrentGold();
 			const int32 GoldAfter = EconomyComponent->AddGold(Amount);
-			Context.DebugGoldLines.Add(MakeGoldDebugLine(
+			Context.GoldBreakdownLines.Add(MakeGoldBreakdownLine(
 				Context,
-				EGambitDebugGoldLineType::Effect,
+				EGambitGoldBreakdownLineType::Effect,
 				Amount,
 				GoldBefore,
 				GoldAfter,
-				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
+				FString::Printf(TEXT("%s adds %+d gold to %s"), *GetEffectName(EffectDefinition), Amount, *ResolveFeedbackTargetName(Context, ResolvedTarget->TargetSide))));
 			AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
 				Context,
 				EffectDefinition,
@@ -3036,13 +3036,13 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 			const bool bSpent = EconomyComponent->SpendGold(Cost);
 			if (bSpent)
 			{
-				Context.DebugGoldLines.Add(MakeGoldDebugLine(
+				Context.GoldBreakdownLines.Add(MakeGoldBreakdownLine(
 					Context,
-					EGambitDebugGoldLineType::Effect,
+					EGambitGoldBreakdownLineType::Effect,
 					-Cost,
 					GoldBefore,
 					EconomyComponent->GetCurrentGold(),
-					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveDebugTargetName(Context, ResolvedTarget->TargetSide))));
+					FString::Printf(TEXT("%s spends %d gold from %s"), *GetEffectName(EffectDefinition), Cost, *ResolveFeedbackTargetName(Context, ResolvedTarget->TargetSide))));
 				AddRoundGameplayEvent(Context, MakeRoundGameplayEvent(
 					Context,
 					EffectDefinition,
@@ -3075,9 +3075,9 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 			return false;
 		}
 
-		Context.DebugGoldLines.Add(MakeGoldDebugLine(
+		Context.GoldBreakdownLines.Add(MakeGoldBreakdownLine(
 			Context,
-			EGambitDebugGoldLineType::Effect,
+			EGambitGoldBreakdownLineType::Effect,
 			-ActualAmount,
 			TargetEconomy->GetCurrentGold() + ActualAmount,
 			TargetEconomy->GetCurrentGold(),
@@ -3093,9 +3093,9 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 
 		const int32 SourceGoldBefore = SourceEconomy->GetCurrentGold();
 		SourceEconomy->AddGold(ActualAmount);
-		Context.DebugGoldLines.Add(MakeGoldDebugLine(
+		Context.GoldBreakdownLines.Add(MakeGoldBreakdownLine(
 			Context,
-			EGambitDebugGoldLineType::Effect,
+			EGambitGoldBreakdownLineType::Effect,
 			ActualAmount,
 			SourceGoldBefore,
 			SourceEconomy->GetCurrentGold(),
@@ -3198,9 +3198,9 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 			{
 				const int32 GoldBefore = EconomyComponent->GetCurrentGold();
 				EconomyComponent->AddGold(Amount);
-				Context.DebugGoldLines.Add(MakeGoldDebugLine(
+				Context.GoldBreakdownLines.Add(MakeGoldBreakdownLine(
 					Context,
-					EGambitDebugGoldLineType::Effect,
+					EGambitGoldBreakdownLineType::Effect,
 					Amount,
 					GoldBefore,
 					EconomyComponent->GetCurrentGold(),
@@ -3226,9 +3226,9 @@ bool UGambitEffectResolver::ApplyEconomyEffect(
 			{
 				const int32 GoldBefore = EconomyComponent->GetCurrentGold();
 				EconomyComponent->AddGold(Amount);
-				Context.DebugGoldLines.Add(MakeGoldDebugLine(
+				Context.GoldBreakdownLines.Add(MakeGoldBreakdownLine(
 					Context,
-					EGambitDebugGoldLineType::Effect,
+					EGambitGoldBreakdownLineType::Effect,
 					Amount,
 					GoldBefore,
 					EconomyComponent->GetCurrentGold(),

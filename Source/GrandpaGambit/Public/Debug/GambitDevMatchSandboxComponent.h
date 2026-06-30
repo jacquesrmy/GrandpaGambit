@@ -57,10 +57,10 @@ public:
 	TArray<FGambitDevSandboxPlayerSlotSnapshot> BuildPlayerSlotSnapshots() const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Dev Sandbox")
-	TArray<FGambitDebugPlayerSnapshot> BuildDebugPlayerSnapshots() const;
+	TArray<FGambitPlayerSnapshot> BuildPlayerSnapshots() const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Dev Sandbox")
-	bool BuildDebugPlayerSnapshotByIndex(int32 PlayerIndex, UPARAM(ref) FGambitDebugPlayerSnapshot& OutSnapshot) const;
+	bool BuildPlayerSnapshotByIndex(int32 PlayerIndex, UPARAM(ref) FGambitPlayerSnapshot& OutSnapshot) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Dev Sandbox|Commands")
 	FGambitDevSandboxActionResult RequestPlayerReady(int32 PlayerIndex, bool bReady);

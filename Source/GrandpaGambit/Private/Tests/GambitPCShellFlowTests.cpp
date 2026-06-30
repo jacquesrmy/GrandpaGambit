@@ -4,7 +4,7 @@
 #include "Misc/AutomationTest.h"
 
 #include "Dice/Data/GambitDiceDefinition.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "Core/Types/GambitRoundPhaseRules.h"
 #include "Data/Assets/GambitItemEffectDefinition.h"
@@ -434,7 +434,7 @@ bool FGambitPCShellRoundHudTargetSelectionFeedbackTest::RunTest(const FString& P
 	Request.CurrentPhase = EGambitRoundPhase::Action;
 	Request.bRequiresExplicitSelection = true;
 	Request.bHasValidOptions = true;
-	Request.DebugText = TEXT("Target Coffee requires one opponent.");
+	Request.PresentationText = TEXT("Target Coffee requires one opponent.");
 
 	FGambitTargetSelectionOption Option;
 	Option.OptionId = 7;
@@ -444,7 +444,7 @@ bool FGambitPCShellRoundHudTargetSelectionFeedbackTest::RunTest(const FString& P
 	Option.TargetRuleId = TEXT("target.opponent");
 	Option.bValid = true;
 	Option.Label = TEXT("P2 Player 2");
-	Option.DebugText = TEXT("Validated by target.opponent");
+	Option.PresentationText = TEXT("Validated by target.opponent");
 	Request.Options.Add(Option);
 
 	AGambitPlayerController* PlayerController = TestWorld.World->SpawnActor<AGambitPlayerController>();
@@ -510,11 +510,11 @@ bool FGambitPCShellRoundHudResolutionFeedbackTest::RunTest(const FString& Parame
 	ScoredEvent.NumericDelta = 777.0f;
 	PlayerState->AddRoundEvent(ScoredEvent);
 
-	FGambitDebugScoreLine ScoreLine;
-	ScoreLine.LineType = EGambitDebugScoreLineType::Additive;
+	FGambitScoreBreakdownLine ScoreLine;
+	ScoreLine.LineType = EGambitScoreBreakdownLineType::Additive;
 	ScoreLine.SourceName = TEXT("Lucky module");
 	ScoreLine.Summary = TEXT("Lucky module adds +7 score");
-	PlayerState->AddDebugScoreLine(ScoreLine);
+	PlayerState->AddScoreBreakdownLine(ScoreLine);
 
 	const TArray<FString> Lines = UGambitPCShellWidget::BuildScoreFeedbackLines(PlayerState);
 	TestTrue(TEXT("resolution line is visible once scoring is finalized"), ContainsShellLine(Lines, TEXT("Resolution:")));
@@ -552,23 +552,23 @@ bool FGambitPCShellRoundHudRewardRankingFeedbackTest::RunTest(const FString& Par
 		return false;
 	}
 
-	FGambitDebugGoldLine BaseRewardLine;
-	BaseRewardLine.LineType = EGambitDebugGoldLineType::BaseReward;
+	FGambitGoldBreakdownLine BaseRewardLine;
+	BaseRewardLine.LineType = EGambitGoldBreakdownLineType::BaseReward;
 	BaseRewardLine.ActualDelta = 4;
 	BaseRewardLine.RequestedDelta = 4;
 	BaseRewardLine.GoldBefore = 10;
 	BaseRewardLine.GoldAfter = 14;
 	BaseRewardLine.Summary = TEXT("Base reward from round score: +4 gold");
-	PlayerOne->AddDebugGoldLine(BaseRewardLine);
+	PlayerOne->AddGoldBreakdownLine(BaseRewardLine);
 
-	FGambitDebugGoldLine InterestLine;
-	InterestLine.LineType = EGambitDebugGoldLineType::Interest;
+	FGambitGoldBreakdownLine InterestLine;
+	InterestLine.LineType = EGambitGoldBreakdownLineType::Interest;
 	InterestLine.ActualDelta = 1;
 	InterestLine.RequestedDelta = 1;
 	InterestLine.GoldBefore = 14;
 	InterestLine.GoldAfter = 15;
 	InterestLine.Summary = TEXT("Interest from saved gold: +1 gold");
-	PlayerOne->AddDebugGoldLine(InterestLine);
+	PlayerOne->AddGoldBreakdownLine(InterestLine);
 
 	PlayerOne->AddVictoryPoints(5);
 	PlayerTwo->AddVictoryPoints(3);

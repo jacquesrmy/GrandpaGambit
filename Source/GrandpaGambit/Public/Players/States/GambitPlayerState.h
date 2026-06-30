@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitRoundGameplayEventTypes.h"
 #include "GambitPlayerState.generated.h"
@@ -156,46 +156,46 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Round Events")
 	TArray<FGambitRoundGameplayEvent> GetRoundEventsByTargetPlayer(int32 TargetPlayerId) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Debug")
-	void AddDebugEffectEvent(const FGambitDebugEffectEvent& Event);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Feedback")
+	void AddRoundFeedbackEvent(const FGambitRoundFeedbackEvent& Event);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Debug")
-	void AddDebugScoreLine(const FGambitDebugScoreLine& Line);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Feedback")
+	void AddScoreBreakdownLine(const FGambitScoreBreakdownLine& Line);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Debug")
-	void AddDebugGoldLine(const FGambitDebugGoldLine& Line);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Feedback")
+	void AddGoldBreakdownLine(const FGambitGoldBreakdownLine& Line);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|Debug")
-	void AddDebugShopLine(const FGambitDebugShopLine& Line);
+	UFUNCTION(BlueprintCallable, Category = "Gambit|Player|Feedback")
+	void AddShopBreakdownLine(const FGambitShopBreakdownLine& Line);
 
-	void AppendDebugEffectEvents(const TArray<FGambitDebugEffectEvent>& Events);
-	void AppendDebugScoreLines(const TArray<FGambitDebugScoreLine>& Lines);
-	void AppendDebugGoldLines(const TArray<FGambitDebugGoldLine>& Lines);
-	void AppendDebugShopLines(const TArray<FGambitDebugShopLine>& Lines);
+	void AppendRoundFeedbackEvents(const TArray<FGambitRoundFeedbackEvent>& Events);
+	void AppendScoreBreakdownLines(const TArray<FGambitScoreBreakdownLine>& Lines);
+	void AppendGoldBreakdownLines(const TArray<FGambitGoldBreakdownLine>& Lines);
+	void AppendShopBreakdownLines(const TArray<FGambitShopBreakdownLine>& Lines);
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugDieSnapshot> BuildDebugDiceSnapshot() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitDiceSnapshot> BuildDiceSnapshot() const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugItemSnapshot> BuildDebugModuleSnapshot() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitItemSnapshot> BuildModuleSnapshot() const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugItemSnapshot> BuildDebugConsumableSnapshot() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitItemSnapshot> BuildConsumableSnapshot() const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	FGambitDebugPlayerSnapshot BuildDebugPlayerSnapshot(int32 PlayerIndex) const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	FGambitPlayerSnapshot BuildPlayerSnapshot(int32 PlayerIndex) const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugEffectEvent> GetDebugEffectEvents() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitRoundFeedbackEvent> GetRoundFeedbackEvents() const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugScoreLine> GetDebugScoreLines() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitScoreBreakdownLine> GetScoreBreakdownLines() const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugGoldLine> GetDebugGoldLines() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitGoldBreakdownLine> GetGoldBreakdownLines() const;
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|Debug")
-	TArray<FGambitDebugShopLine> GetDebugShopLines() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|Player|Feedback")
+	TArray<FGambitShopBreakdownLine> GetShopBreakdownLines() const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Player")
 	UGambitInventoryComponent* GetInventoryComponent() const { return InventoryComponent; }

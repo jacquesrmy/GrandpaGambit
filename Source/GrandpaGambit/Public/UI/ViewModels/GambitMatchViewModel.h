@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "GambitMatchViewModel.generated.h"
 
@@ -30,8 +30,8 @@ public:
 
 	const TArray<FGambitRankingEntry>& GetRankingSnapshotRef() const { return RankingSnapshot; }
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|UI|Debug")
-	TArray<FGambitDebugPlayerSnapshot> BuildDebugPlayerSnapshots() const;
+	UFUNCTION(BlueprintPure, Category = "Gambit|UI")
+	TArray<FGambitPlayerSnapshot> BuildPlayerSnapshots() const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|UI")
 	FOnGambitViewModelUpdated OnViewModelUpdated;

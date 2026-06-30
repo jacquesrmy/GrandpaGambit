@@ -4,7 +4,7 @@
 #include "Core/Interfaces/GambitDiceEvaluatorContract.h"
 #include "Core/Interfaces/GambitScoreCalculatorContract.h"
 #include "Core/Settings/GambitGameBalanceSettings.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitRoundPhaseRules.h"
 #include "Data/Assets/GambitItemEffectDefinition.h"
 #include "Dice/Data/GambitDiceDefinition.h"
@@ -159,7 +159,7 @@ namespace
 	}
 
 	template <typename TEnum>
-	FString RoundFlowEnumToDebugString(const TEnum Value)
+	FString RoundFlowEnumToString(const TEnum Value)
 	{
 		if (const UEnum* Enum = StaticEnum<TEnum>())
 		{
@@ -169,8 +169,8 @@ namespace
 		return TEXT("Unknown");
 	}
 
-	FGambitDebugScoreLine MakeRoundScoreLine(
-		const EGambitDebugScoreLineType LineType,
+	FGambitScoreBreakdownLine MakeRoundScoreLine(
+		const EGambitScoreBreakdownLineType LineType,
 		const EGambitRoundPhase Phase,
 		const FString& Label,
 		const float AdditiveDelta,
@@ -180,7 +180,7 @@ namespace
 		const float ScoreAfter,
 		const FString& Summary)
 	{
-		FGambitDebugScoreLine Line;
+		FGambitScoreBreakdownLine Line;
 		Line.LineType = LineType;
 		Line.Phase = Phase;
 		Line.SourceId = TEXT("score.calculator");
@@ -195,7 +195,7 @@ namespace
 		return Line;
 	}
 
-	void RecordScoreBreakdownDebugLines(
+	void RecordScoreBreakdownPresentationLines(
 		AGambitPlayerState* PlayerState,
 		const EGambitRoundPhase Phase,
 		const FGambitScoreBreakdown& ScoreBreakdown)
@@ -205,8 +205,8 @@ namespace
 			return;
 		}
 
-		PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-			EGambitDebugScoreLineType::BaseCombination,
+		PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+			EGambitScoreBreakdownLineType::BaseCombination,
 			Phase,
 			TEXT("Combination base"),
 			static_cast<float>(ScoreBreakdown.BaseCombinationScore),
@@ -216,8 +216,8 @@ namespace
 			static_cast<float>(ScoreBreakdown.BaseCombinationScore),
 			FString::Printf(TEXT("%s base score: %d"), *RoundFlowCombinationToString(ScoreBreakdown.Combination), ScoreBreakdown.BaseCombinationScore)));
 
-		PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-			EGambitDebugScoreLineType::DiceSum,
+		PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+			EGambitScoreBreakdownLineType::DiceSum,
 			Phase,
 			TEXT("Dice sum"),
 			static_cast<float>(ScoreBreakdown.DiceSum),
@@ -229,8 +229,8 @@ namespace
 
 		if (!FMath::IsNearlyZero(ScoreBreakdown.DiceContributionMultiplierBonus))
 		{
-			PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-				EGambitDebugScoreLineType::DiceContribution,
+			PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+				EGambitScoreBreakdownLineType::DiceContribution,
 				Phase,
 				TEXT("Dice contribution bonus"),
 				0.0f,
@@ -243,8 +243,8 @@ namespace
 
 		if (!FMath::IsNearlyZero(ScoreBreakdown.AdditiveBonus))
 		{
-			PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-				EGambitDebugScoreLineType::Additive,
+			PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+				EGambitScoreBreakdownLineType::Additive,
 				Phase,
 				TEXT("Total additive bonus"),
 				ScoreBreakdown.AdditiveBonus,
@@ -257,8 +257,8 @@ namespace
 
 		if (!FMath::IsNearlyEqual(ScoreBreakdown.Multiplier, 1.0f))
 		{
-			PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-				EGambitDebugScoreLineType::Multiplier,
+			PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+				EGambitScoreBreakdownLineType::Multiplier,
 				Phase,
 				TEXT("Total multiplier"),
 				0.0f,
@@ -271,8 +271,8 @@ namespace
 
 		if (!FMath::IsNearlyEqual(ScoreBreakdown.ScoreBeforeCap, ScoreBreakdown.ScoreAfterCap))
 		{
-			PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-				EGambitDebugScoreLineType::Cap,
+			PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+				EGambitScoreBreakdownLineType::Cap,
 				Phase,
 				TEXT("Score cap or diminishing"),
 				0.0f,
@@ -283,8 +283,8 @@ namespace
 				FString::Printf(TEXT("Score adjusted from %0.2f to %0.2f by cap/diminishing"), ScoreBreakdown.ScoreBeforeCap, ScoreBreakdown.ScoreAfterCap)));
 		}
 
-		PlayerState->AddDebugScoreLine(MakeRoundScoreLine(
-			EGambitDebugScoreLineType::FinalScore,
+		PlayerState->AddScoreBreakdownLine(MakeRoundScoreLine(
+			EGambitScoreBreakdownLineType::FinalScore,
 			Phase,
 			TEXT("Final score"),
 			0.0f,
@@ -295,13 +295,13 @@ namespace
 			FString::Printf(TEXT("Final rounded score: %d"), ScoreBreakdown.FinalScore)));
 	}
 
-	FGambitDebugShopLine BuildShopLineFromOffer(
+	FGambitShopBreakdownLine BuildShopLineFromOffer(
 		const FGambitShopOffer& Offer,
 		const EGambitRoundPhase Phase,
 		const UGambitSharedPoolComponent* SharedPoolComponent)
 	{
-		FGambitDebugShopLine Line;
-		Line.LineType = EGambitDebugShopLineType::GeneratedOffer;
+		FGambitShopBreakdownLine Line;
+		Line.LineType = EGambitShopBreakdownLineType::GeneratedOffer;
 		Line.Phase = Phase;
 		Line.OfferId = Offer.OfferId;
 		Line.BasePrice = Offer.BasePrice;
@@ -321,7 +321,7 @@ namespace
 			if (ItemDefinition->bUsesSharedPool && SharedPoolComponent)
 			{
 				const FGambitSharedPoolAvailabilityResult Availability = SharedPoolComponent->QueryItemAvailability(ItemDefinition);
-				Line.SharedPoolState = RoundFlowEnumToDebugString(Availability.State);
+				Line.SharedPoolState = RoundFlowEnumToString(Availability.State);
 				Line.SharedPoolReason = Availability.Reason;
 			}
 		}
@@ -335,12 +335,12 @@ namespace
 		return Line;
 	}
 
-	FGambitDebugShopLine BuildShopLineFromPurchaseContext(
+	FGambitShopBreakdownLine BuildShopLineFromPurchaseContext(
 		const FGambitShopPurchaseContext& PurchaseContext,
 		const EGambitRoundPhase Phase,
-		const EGambitDebugShopLineType LineType)
+		const EGambitShopBreakdownLineType LineType)
 	{
-		FGambitDebugShopLine Line;
+		FGambitShopBreakdownLine Line;
 		Line.LineType = LineType;
 		Line.Phase = Phase;
 		Line.OfferId = PurchaseContext.OfferId;
@@ -357,12 +357,12 @@ namespace
 		Line.GoldDeltaOnPurchase = PurchaseContext.GoldDeltaOnPurchase;
 		Line.bUsesSharedPool = PurchaseContext.bUsesSharedPool;
 		Line.bHasSharedPoolReservation = PurchaseContext.bHasSharedPoolReservation;
-		Line.SharedPoolState = RoundFlowEnumToDebugString(PurchaseContext.SharedPoolAvailability.State);
+		Line.SharedPoolState = RoundFlowEnumToString(PurchaseContext.SharedPoolAvailability.State);
 		Line.SharedPoolReason = PurchaseContext.SharedPoolAvailability.Reason;
 		Line.bPurchaseSucceeded = PurchaseContext.bPurchaseSucceeded;
 		Line.bRefused = !PurchaseContext.bPurchaseSucceeded;
 		Line.FailureReason = PurchaseContext.FailureReason;
-		Line.DebugLines = PurchaseContext.DebugLines;
+		Line.PresentationLines = PurchaseContext.PresentationLines;
 
 		if (const UGambitItemDefinition* ItemDefinition = PurchaseContext.ItemDefinition.Get())
 		{
@@ -1077,8 +1077,8 @@ FGambitRoundCommandResult UGambitRoundFlowComponent::RequestPurchaseOfferDetaile
 		const int32 GoldAfterPurchase = PlayerState->GetCurrentGold();
 		if (bSuccess && PurchaseContext.ItemDefinition)
 		{
-			FGambitDebugGoldLine PurchaseGoldLine;
-			PurchaseGoldLine.LineType = EGambitDebugGoldLineType::Purchase;
+			FGambitGoldBreakdownLine PurchaseGoldLine;
+			PurchaseGoldLine.LineType = EGambitGoldBreakdownLineType::Purchase;
 			PurchaseGoldLine.Phase = CurrentPhase;
 			PurchaseGoldLine.SourceId = PurchaseContext.ItemDefinition->GetResolvedItemId();
 			PurchaseGoldLine.SourceName = FormatRoundFlowItemName(PurchaseContext.ItemDefinition.Get());
@@ -1088,7 +1088,7 @@ FGambitRoundCommandResult UGambitRoundFlowComponent::RequestPurchaseOfferDetaile
 			PurchaseGoldLine.GoldAfter = GoldAfterPurchase;
 			PurchaseGoldLine.bClamped = PurchaseGoldLine.RequestedDelta != PurchaseGoldLine.ActualDelta;
 			PurchaseGoldLine.Summary = FString::Printf(TEXT("Purchase spend for %s: %d gold"), *PurchaseGoldLine.SourceName, PurchaseContext.ResolvedPrice);
-			PlayerState->AddDebugGoldLine(PurchaseGoldLine);
+			PlayerState->AddGoldBreakdownLine(PurchaseGoldLine);
 
 			FGambitEffectExecutionContext PostPurchaseContext = CreateEffectContext(EGambitEffectHook::PostPurchase, PlayerState);
 			PostPurchaseContext.ShopPurchase = PurchaseContext;
@@ -1113,8 +1113,8 @@ FGambitRoundCommandResult UGambitRoundFlowComponent::RequestPurchaseOfferDetaile
 			const int32 GoldAfterPostPurchase = PlayerState->GetCurrentGold();
 			if (GoldAfterPostPurchase != GoldBeforePostPurchase)
 			{
-				FGambitDebugGoldLine PostPurchaseGoldLine;
-				PostPurchaseGoldLine.LineType = EGambitDebugGoldLineType::Cashback;
+				FGambitGoldBreakdownLine PostPurchaseGoldLine;
+				PostPurchaseGoldLine.LineType = EGambitGoldBreakdownLineType::Cashback;
 				PostPurchaseGoldLine.Phase = CurrentPhase;
 				PostPurchaseGoldLine.SourceId = PurchaseContext.ItemDefinition->GetResolvedItemId();
 				PostPurchaseGoldLine.SourceName = FormatRoundFlowItemName(PurchaseContext.ItemDefinition.Get());
@@ -1128,9 +1128,9 @@ FGambitRoundCommandResult UGambitRoundFlowComponent::RequestPurchaseOfferDetaile
 					*PostPurchaseGoldLine.SourceName,
 					PurchaseContext.CashbackGold,
 					PurchaseContext.GoldDeltaOnPurchase);
-				PlayerState->AddDebugGoldLine(PostPurchaseGoldLine);
+				PlayerState->AddGoldBreakdownLine(PostPurchaseGoldLine);
 			}
-			PlayerState->AddDebugShopLine(BuildShopLineFromPurchaseContext(PurchaseContext, CurrentPhase, EGambitDebugShopLineType::PurchaseSuccess));
+			PlayerState->AddShopBreakdownLine(BuildShopLineFromPurchaseContext(PurchaseContext, CurrentPhase, EGambitShopBreakdownLineType::PurchaseSuccess));
 
 			Result = MakeCommandResult(
 				PlayerState,
@@ -1149,7 +1149,7 @@ FGambitRoundCommandResult UGambitRoundFlowComponent::RequestPurchaseOfferDetaile
 			{
 				PurchaseContext.FailureReason = TEXT("Purchase rejected by shop.");
 			}
-			PlayerState->AddDebugShopLine(BuildShopLineFromPurchaseContext(PurchaseContext, CurrentPhase, EGambitDebugShopLineType::PurchaseFailure));
+			PlayerState->AddShopBreakdownLine(BuildShopLineFromPurchaseContext(PurchaseContext, CurrentPhase, EGambitShopBreakdownLineType::PurchaseFailure));
 			UE_LOG(
 				LogGambit,
 				Log,
@@ -1415,7 +1415,7 @@ void UGambitRoundFlowComponent::EnterResolutionPhase()
 			EGambitRoundGameplayEventOutcome::Applied,
 			static_cast<float>(ScoreBreakdown.FinalScore),
 			FString::Printf(TEXT("Round score finalized at %d"), ScoreBreakdown.FinalScore)));
-		RecordScoreBreakdownDebugLines(PlayerState, EGambitRoundPhase::Resolution, ScoreBreakdown);
+		RecordScoreBreakdownPresentationLines(PlayerState, EGambitRoundPhase::Resolution, ScoreBreakdown);
 		UE_LOG(
 			LogGambit,
 			Log,
@@ -1555,7 +1555,7 @@ void UGambitRoundFlowComponent::EnterShopPhase()
 
 			for (const FGambitShopOffer& Offer : Offers)
 			{
-				PlayerState->AddDebugShopLine(BuildShopLineFromOffer(Offer, EGambitRoundPhase::Shop, GameState->GetSharedPoolComponent()));
+				PlayerState->AddShopBreakdownLine(BuildShopLineFromOffer(Offer, EGambitRoundPhase::Shop, GameState->GetSharedPoolComponent()));
 				UE_LOG(LogGambit, Log, TEXT("RoundFlow: %s ShopOffer %s"), *BuildRoundFlowPlayerLabel(PlayerState, Players), *FormatRoundFlowOffer(Offer));
 			}
 		}

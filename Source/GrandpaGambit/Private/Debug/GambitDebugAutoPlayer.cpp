@@ -143,7 +143,7 @@ namespace
 		return GameMode ? GameMode->GetGameState<AGambitGameState>() : nullptr;
 	}
 
-	struct FGambitDebugLockTarget
+	struct FGambitAutoPlayerLockTarget
 	{
 		int32 Value = INDEX_NONE;
 		int32 Count = 0;
@@ -173,9 +173,9 @@ namespace
 		return TEXT("PairFound");
 	}
 
-	FGambitDebugLockTarget ChooseLockTarget(const TArray<FGambitDieRuntimeState>& DiceStates)
+	FGambitAutoPlayerLockTarget ChooseLockTarget(const TArray<FGambitDieRuntimeState>& DiceStates)
 	{
-		FGambitDebugLockTarget Target;
+		FGambitAutoPlayerLockTarget Target;
 		if (DiceStates.Num() == 0)
 		{
 			return Target;
@@ -239,7 +239,7 @@ namespace
 		return Count;
 	}
 
-	TArray<int32> ApplyLockTarget(AGambitGameMode* GameMode, AGambitPlayerState* PlayerState, const FGambitDebugLockTarget& Target)
+	TArray<int32> ApplyLockTarget(AGambitGameMode* GameMode, AGambitPlayerState* PlayerState, const FGambitAutoPlayerLockTarget& Target)
 	{
 		TArray<int32> LockedIndices;
 		if (!GameMode || !PlayerState || !Target.IsValid())
@@ -357,7 +357,7 @@ namespace
 		return FGambitScoreModifierContext();
 	}
 
-	struct FGambitDebugShopCandidate
+	struct FGambitAutoPlayerShopCandidate
 	{
 		FGambitShopOffer Offer;
 		int32 Priority = MAX_int32;
@@ -409,7 +409,7 @@ namespace
 		return TEXT("UnsupportedItem");
 	}
 
-	bool IsBetterShopCandidate(const FGambitDebugShopCandidate& Candidate, const FGambitDebugShopCandidate& CurrentBest)
+	bool IsBetterShopCandidate(const FGambitAutoPlayerShopCandidate& Candidate, const FGambitAutoPlayerShopCandidate& CurrentBest)
 	{
 		if (!CurrentBest.IsValid())
 		{
@@ -453,9 +453,9 @@ namespace
 		return Candidate.Offer.OfferId < CurrentBest.Offer.OfferId;
 	}
 
-	FGambitDebugShopCandidate BuildShopCandidate(const FGambitShopOffer& Offer)
+	FGambitAutoPlayerShopCandidate BuildShopCandidate(const FGambitShopOffer& Offer)
 	{
-		FGambitDebugShopCandidate Candidate;
+		FGambitAutoPlayerShopCandidate Candidate;
 		Candidate.Offer = Offer;
 		Candidate.Priority = GetShopPriority(Offer);
 
@@ -516,7 +516,7 @@ void UGambitDebugAutoPlayer::DecideRerollsForPlayer(AGambitGameMode* GameMode, A
 		RoundFlow->GetRerollsUsedForPlayer(PlayerState),
 		RoundFlow->GetMaxRerollsForPlayer(PlayerState));
 
-	FGambitDebugLockTarget LockTarget = ChooseLockTarget(PlayerState->GetDiceStatesRef());
+	FGambitAutoPlayerLockTarget LockTarget = ChooseLockTarget(PlayerState->GetDiceStatesRef());
 	TArray<int32> LockedIndices = ApplyLockTarget(GameMode, PlayerState, LockTarget);
 	UE_LOG(
 		LogGambit,
@@ -718,7 +718,7 @@ void UGambitDebugAutoPlayer::DecideShopForPlayer(AGambitGameMode* GameMode, AGam
 		SlotState.ConsumableSlotsUsed,
 		SlotState.ConsumableSlotsCapacity);
 
-	FGambitDebugShopCandidate BestCandidate;
+	FGambitAutoPlayerShopCandidate BestCandidate;
 	for (const FGambitShopOffer& Offer : Offers)
 	{
 		const UGambitItemDefinition* ItemDefinition = Offer.ItemDefinition;
@@ -743,7 +743,7 @@ void UGambitDebugAutoPlayer::DecideShopForPlayer(AGambitGameMode* GameMode, AGam
 			continue;
 		}
 
-		const FGambitDebugShopCandidate Candidate = BuildShopCandidate(Offer);
+		const FGambitAutoPlayerShopCandidate Candidate = BuildShopCandidate(Offer);
 		if (Candidate.Priority == MAX_int32)
 		{
 			continue;

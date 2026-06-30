@@ -55,7 +55,7 @@ struct GRANDPAGAMBIT_API FGambitTargetSelectionOption
 	FString Label;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Target Selection")
-	FString DebugText;
+	FString PresentationText;
 };
 
 USTRUCT(BlueprintType)
@@ -115,7 +115,7 @@ struct GRANDPAGAMBIT_API FGambitTargetSelectionRequest
 	FString InvalidReason;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Target Selection")
-	FString DebugText;
+	FString PresentationText;
 
 	bool HasValidOptions() const
 	{

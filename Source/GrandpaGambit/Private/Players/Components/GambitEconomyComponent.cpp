@@ -4,9 +4,9 @@
 
 namespace
 {
-	void AddGoldDebugLine(
-		TArray<FGambitDebugGoldLine>& Lines,
-		const EGambitDebugGoldLineType LineType,
+	void AddGoldBreakdownLine(
+		TArray<FGambitGoldBreakdownLine>& Lines,
+		const EGambitGoldBreakdownLineType LineType,
 		const FName SourceId,
 		const FString& SourceName,
 		const int32 RequestedDelta,
@@ -14,7 +14,7 @@ namespace
 		const int32 GoldAfter,
 		const FString& Summary)
 	{
-		FGambitDebugGoldLine Line;
+		FGambitGoldBreakdownLine Line;
 		Line.LineType = LineType;
 		Line.SourceId = SourceId;
 		Line.SourceName = SourceName;
@@ -77,19 +77,19 @@ bool UGambitEconomyComponent::CanSpendGold(const int32 Cost) const
 
 int32 UGambitEconomyComponent::ApplyRoundEconomy(const int32 BaseGoldReward)
 {
-	TArray<FGambitDebugGoldLine> IgnoredLines;
+	TArray<FGambitGoldBreakdownLine> IgnoredLines;
 	return ApplyRoundEconomyDetailed(BaseGoldReward, IgnoredLines);
 }
 
 int32 UGambitEconomyComponent::ApplyRoundEconomyDetailed(
 	const int32 BaseGoldReward,
-	TArray<FGambitDebugGoldLine>& OutGoldLines)
+	TArray<FGambitGoldBreakdownLine>& OutGoldLines)
 {
 	const int32 BaseBefore = CurrentGold;
 	AddGold(BaseGoldReward);
-	AddGoldDebugLine(
+	AddGoldBreakdownLine(
 		OutGoldLines,
-		EGambitDebugGoldLineType::BaseReward,
+		EGambitGoldBreakdownLineType::BaseReward,
 		TEXT("economy.round_reward"),
 		TEXT("Round reward"),
 		BaseGoldReward,
@@ -101,9 +101,9 @@ int32 UGambitEconomyComponent::ApplyRoundEconomyDetailed(
 	const int32 RecurringGold = ApplyRecurringGoldIncome();
 	if (RecurringGold != 0)
 	{
-		AddGoldDebugLine(
+		AddGoldBreakdownLine(
 			OutGoldLines,
-			EGambitDebugGoldLineType::RecurringIncome,
+			EGambitGoldBreakdownLineType::RecurringIncome,
 			TEXT("economy.recurring_income"),
 			TEXT("Recurring income"),
 			RecurringGold,
@@ -115,9 +115,9 @@ int32 UGambitEconomyComponent::ApplyRoundEconomyDetailed(
 	const int32 InterestBonus = CalculateInterestGoldBonus(CurrentGold);
 	const int32 InterestBefore = CurrentGold;
 	AddGold(InterestBonus);
-	AddGoldDebugLine(
+	AddGoldBreakdownLine(
 		OutGoldLines,
-		EGambitDebugGoldLineType::Interest,
+		EGambitGoldBreakdownLineType::Interest,
 		TEXT("economy.interest"),
 		TEXT("Interest"),
 		InterestBonus,

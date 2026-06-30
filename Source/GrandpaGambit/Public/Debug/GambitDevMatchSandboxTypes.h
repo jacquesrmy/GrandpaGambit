@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitTargetSelectionTypes.h"
 #include "GambitDevMatchSandboxTypes.generated.h"
@@ -122,7 +122,7 @@ struct GRANDPAGAMBIT_API FGambitDevSandboxSnapshot
 	TArray<FGambitDevSandboxPlayerSlotSnapshot> PlayerSlots;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
-	FGambitDebugPlayerSnapshot InspectedPlayer;
+	FGambitPlayerSnapshot InspectedPlayer;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Gambit|Dev Sandbox")
 	FString Summary;

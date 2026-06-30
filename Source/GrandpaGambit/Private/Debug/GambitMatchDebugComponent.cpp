@@ -3,7 +3,7 @@
 #include "Core/Logging/GambitLog.h"
 #include "Core/Settings/GambitGameBalanceSettings.h"
 #include "Core/Settings/GambitStaticDataSettings.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Data/Assets/GambitDiceCatalogDataAsset.h"
 #include "Data/Assets/GambitItemCatalogDataAsset.h"
@@ -508,7 +508,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 	}
 
 	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
-	const FGambitDebugPlayerSnapshot Snapshot = PlayerState->BuildDebugPlayerSnapshot(Players.IndexOfByKey(PlayerState));
+	const FGambitPlayerSnapshot Snapshot = PlayerState->BuildPlayerSnapshot(Players.IndexOfByKey(PlayerState));
 	UE_LOG(
 		LogGambit,
 		Log,
@@ -525,7 +525,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 		Snapshot.GoldLines.Num(),
 		Snapshot.ShopLines.Num());
 
-	for (const FGambitDebugDieSnapshot& Die : Snapshot.Dice)
+	for (const FGambitDiceSnapshot& Die : Snapshot.Dice)
 	{
 		UE_LOG(
 			LogGambit,
@@ -551,7 +551,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			*Die.Summary);
 	}
 
-	for (const FGambitDebugItemSnapshot& Module : Snapshot.ActiveModules)
+	for (const FGambitItemSnapshot& Module : Snapshot.ActiveModules)
 	{
 		UE_LOG(
 			LogGambit,
@@ -567,7 +567,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			*Module.Summary);
 	}
 
-	for (const FGambitDebugItemSnapshot& Consumable : Snapshot.Consumables)
+	for (const FGambitItemSnapshot& Consumable : Snapshot.Consumables)
 	{
 		UE_LOG(
 			LogGambit,
@@ -583,7 +583,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			*Consumable.Summary);
 	}
 
-	for (const FGambitDebugScoreLine& Line : Snapshot.ScoreLines)
+	for (const FGambitScoreBreakdownLine& Line : Snapshot.ScoreLines)
 	{
 		UE_LOG(
 			LogGambit,
@@ -601,7 +601,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			*Line.Summary);
 	}
 
-	for (const FGambitDebugGoldLine& Line : Snapshot.GoldLines)
+	for (const FGambitGoldBreakdownLine& Line : Snapshot.GoldLines)
 	{
 		UE_LOG(
 			LogGambit,
@@ -619,7 +619,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			*Line.Summary);
 	}
 
-	for (const FGambitDebugShopLine& Line : Snapshot.ShopLines)
+	for (const FGambitShopBreakdownLine& Line : Snapshot.ShopLines)
 	{
 		UE_LOG(
 			LogGambit,
@@ -641,7 +641,7 @@ void UGambitMatchDebugComponent::PrintPlayerDebugReport(AGambitPlayerState* Play
 			*Line.Summary);
 	}
 
-	for (const FGambitDebugEffectEvent& Event : Snapshot.EffectEvents)
+	for (const FGambitRoundFeedbackEvent& Event : Snapshot.EffectEvents)
 	{
 		UE_LOG(
 			LogGambit,

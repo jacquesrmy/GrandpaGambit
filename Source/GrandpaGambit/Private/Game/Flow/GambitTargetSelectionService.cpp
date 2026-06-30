@@ -279,7 +279,7 @@ namespace
 	{
 		if (!EffectDefinition)
 		{
-			Option.DebugText = TEXT("Missing effect definition.");
+			Option.PresentationText = TEXT("Missing effect definition.");
 			return false;
 		}
 
@@ -292,7 +292,7 @@ namespace
 			TestContext);
 		if (!ResolveResult.bSuccess)
 		{
-			Option.DebugText = ResolveResult.FailureReason;
+			Option.PresentationText = ResolveResult.FailureReason;
 			return false;
 		}
 
@@ -305,7 +305,7 @@ namespace
 			}
 		}
 
-		Option.DebugText = Option.PreviewDieHandIndexes.Num() > 0
+		Option.PresentationText = Option.PreviewDieHandIndexes.Num() > 0
 			? FString::Printf(TEXT("Validated by %s; preview dice [%s]"),
 				*Option.TargetRuleId.ToString(),
 				*FString::JoinBy(Option.PreviewDieHandIndexes, TEXT(","), [](const int32 Value)
@@ -471,7 +471,7 @@ bool UGambitTargetSelectionService::BuildConsumableTargetSelectionRequest(
 	FGambitTargetSelectionRequirement Requirement;
 	if (!TryBuildSelectionRequirement(ConsumableDefinition, Requirement))
 	{
-		OutRequest.DebugText = FString::Printf(TEXT("%s does not require explicit target selection."), *ResolveItemName(ConsumableDefinition));
+		OutRequest.PresentationText = FString::Printf(TEXT("%s does not require explicit target selection."), *ResolveItemName(ConsumableDefinition));
 		return false;
 	}
 
@@ -487,7 +487,7 @@ bool UGambitTargetSelectionService::BuildConsumableTargetSelectionRequest(
 		OutRequest.InvalidReason = FString::Printf(
 			TEXT("%s cannot be used during this phase."),
 			*ResolveItemName(ConsumableDefinition));
-		OutRequest.DebugText = OutRequest.InvalidReason;
+		OutRequest.PresentationText = OutRequest.InvalidReason;
 		return true;
 	}
 
@@ -515,7 +515,7 @@ bool UGambitTargetSelectionService::BuildConsumableTargetSelectionRequest(
 			*OutRequest.TargetRuleId.ToString());
 	}
 
-	OutRequest.DebugText = OutRequest.bHasValidOptions
+	OutRequest.PresentationText = OutRequest.bHasValidOptions
 		? FString::Printf(
 			TEXT("%s requires %d target option(s) for rule '%s'."),
 			*ResolveItemName(ConsumableDefinition),

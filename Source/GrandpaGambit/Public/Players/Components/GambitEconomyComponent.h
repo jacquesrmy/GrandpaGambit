@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Core/Types/GambitDebugTypes.h"
+#include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "GambitEconomyComponent.generated.h"
 
@@ -32,7 +32,7 @@ public:
 	int32 ApplyRoundEconomy(int32 BaseGoldReward);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Economy")
-	int32 ApplyRoundEconomyDetailed(int32 BaseGoldReward, UPARAM(ref) TArray<FGambitDebugGoldLine>& OutGoldLines);
+	int32 ApplyRoundEconomyDetailed(int32 BaseGoldReward, UPARAM(ref) TArray<FGambitGoldBreakdownLine>& OutGoldLines);
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Economy")
 	void ModifyDebtLimit(int32 DebtLimitDelta);

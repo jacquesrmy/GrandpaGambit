@@ -624,7 +624,7 @@ struct FGambitShopPurchaseContext
 	FString FailureReason;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Shop")
-	TArray<FString> DebugLines;
+	TArray<FString> PresentationLines;
 };
 
 USTRUCT(BlueprintType)

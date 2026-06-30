@@ -128,9 +128,9 @@ namespace
 		return TestContext;
 	}
 
-	int32 CountPreventedDebugEvents(const FGambitEffectExecutionContext& Context)
+	int32 CountPreventedFeedbackEvents(const FGambitEffectExecutionContext& Context)
 	{
-		return Context.DebugEffectEvents.FilterByPredicate([](const FGambitDebugEffectEvent& Event)
+		return Context.RoundFeedbackEvents.FilterByPredicate([](const FGambitRoundFeedbackEvent& Event)
 		{
 			return Event.bPrevented;
 		}).Num();
@@ -992,8 +992,8 @@ bool FGambitModuleFlatScoreEffectTest::RunTest(const FString& Parameters)
 	Resolver->ExecuteItemEffects(ModuleDefinition, Context);
 
 	TestEqual(TEXT("module effect adds +10 score"), Context.ScoreModifierDelta.AdditiveBonus, 10.0f);
-	TestTrue(TEXT("module effect records a debug score line"), Context.DebugScoreLines.Num() > 0);
-	TestTrue(TEXT("module effect records a debug effect event"), Context.DebugEffectEvents.Num() > 0);
+	TestTrue(TEXT("module effect records a score breakdown line"), Context.ScoreBreakdownLines.Num() > 0);
+	TestTrue(TEXT("module effect records a round feedback event"), Context.RoundFeedbackEvents.Num() > 0);
 	return true;
 }
 
@@ -1087,8 +1087,8 @@ bool FGambitConsumableOpponentTargetEffectTest::RunTest(const FString& Parameter
 
 	TestEqual(TEXT("target loses 4 gold"), TargetEconomy->GetCurrentGold(), TargetGoldBefore - 4);
 	TestEqual(TEXT("source gains 4 gold"), SourceEconomy->GetCurrentGold(), SourceGoldBefore + 4);
-	TestEqual(TEXT("steal gold records target loss and source gain"), Context.DebugGoldLines.Num(), 2);
-	TestTrue(TEXT("steal gold records a debug effect event"), Context.DebugEffectEvents.Num() > 0);
+	TestEqual(TEXT("steal gold records target loss and source gain"), Context.GoldBreakdownLines.Num(), 2);
+	TestTrue(TEXT("steal gold records a round feedback event"), Context.RoundFeedbackEvents.Num() > 0);
 	return true;
 }
 
@@ -1205,7 +1205,7 @@ bool FGambitNegativeEffectProtectionCategoriesTest::RunTest(const FString& Param
 		TestFalse(TEXT("legacy global defense blocks gold steal"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
 		TestEqual(TEXT("global defense leaves target gold unchanged"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore);
 		TestEqual(TEXT("global defense leaves source gold unchanged"), TestContext.SourceEconomy->GetCurrentGold(), TestContext.SourceGoldBefore);
-		TestEqual(TEXT("global defense records one prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 1);
+		TestEqual(TEXT("global defense records one prevented event"), CountPreventedFeedbackEvents(TestContext.EffectContext), 1);
 	}
 
 	{
@@ -1219,7 +1219,7 @@ bool FGambitNegativeEffectProtectionCategoriesTest::RunTest(const FString& Param
 		TestTrue(TEXT("filtered GoldSteal defense is applied"), Resolver->ExecuteEffectDefinition(GoldStealDefense, TestContext.EffectContext));
 		TestFalse(TEXT("filtered GoldSteal defense blocks gold steal"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
 		TestEqual(TEXT("filtered defense leaves target gold unchanged"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore);
-		TestEqual(TEXT("filtered defense records one prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 1);
+		TestEqual(TEXT("filtered defense records one prevented event"), CountPreventedFeedbackEvents(TestContext.EffectContext), 1);
 	}
 
 	{
@@ -1240,10 +1240,10 @@ bool FGambitNegativeEffectProtectionCategoriesTest::RunTest(const FString& Param
 		DestroyDie->NegativeEffectCategories.Add(EGambitNegativeEffectCategory::DieDestroyOrRemove);
 
 		TestTrue(TEXT("filtered GoldSteal defense is applied before destroy"), Resolver->ExecuteEffectDefinition(GoldStealDefense, Context));
-		const int32 PreventedEventsBeforeDestroy = CountPreventedDebugEvents(Context);
+		const int32 PreventedEventsBeforeDestroy = CountPreventedFeedbackEvents(Context);
 		TestTrue(TEXT("GoldSteal defense does not block die destroy"), Resolver->ExecuteEffectDefinition(DestroyDie, Context));
 		TestEqual(TEXT("die destroy removes source die"), Context.SourceDice.Num(), 0);
-		TestEqual(TEXT("die destroy did not add a prevented event"), CountPreventedDebugEvents(Context), PreventedEventsBeforeDestroy);
+		TestEqual(TEXT("die destroy did not add a prevented event"), CountPreventedFeedbackEvents(Context), PreventedEventsBeforeDestroy);
 	}
 
 	{
@@ -1257,7 +1257,7 @@ bool FGambitNegativeEffectProtectionCategoriesTest::RunTest(const FString& Param
 		TestTrue(TEXT("Generic defense is applied"), Resolver->ExecuteEffectDefinition(GenericDefense, TestContext.EffectContext));
 		TestFalse(TEXT("Generic fallback blocks uncategorized negative effect"), Resolver->ExecuteEffectDefinition(UncategorizedGoldSteal, TestContext.EffectContext));
 		TestEqual(TEXT("fallback prevention leaves target gold unchanged"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore);
-		TestEqual(TEXT("fallback prevention records one prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 1);
+		TestEqual(TEXT("fallback prevention records one prevented event"), CountPreventedFeedbackEvents(TestContext.EffectContext), 1);
 	}
 
 	{
@@ -1267,7 +1267,7 @@ bool FGambitNegativeEffectProtectionCategoriesTest::RunTest(const FString& Param
 		TestTrue(TEXT("gold steal triggers without defense"), Resolver->ExecuteEffectDefinition(GoldSteal, TestContext.EffectContext));
 		TestEqual(TEXT("no defense lets target lose gold"), TestContext.TargetEconomy->GetCurrentGold(), TestContext.TargetGoldBefore - 4);
 		TestEqual(TEXT("no defense lets source gain gold"), TestContext.SourceEconomy->GetCurrentGold(), TestContext.SourceGoldBefore + 4);
-		TestEqual(TEXT("no defense records no prevented event"), CountPreventedDebugEvents(TestContext.EffectContext), 0);
+		TestEqual(TEXT("no defense records no prevented event"), CountPreventedFeedbackEvents(TestContext.EffectContext), 0);
 	}
 
 	return true;

@@ -224,7 +224,7 @@ void UGambitShopComponent::ResolvePurchasePrice(FGambitShopPurchaseContext& Purc
 {
 	const int32 OldPrice = PurchaseContext.ResolvedPrice;
 	PurchaseContext.ResolvedPrice = CalculateResolvedPrice(PurchaseContext);
-	PurchaseContext.DebugLines.Add(FString::Printf(
+	PurchaseContext.PresentationLines.Add(FString::Printf(
 		TEXT("Price Base=%d Before=%d OldResolved=%d Final=%d Discount=%.2f Surcharge=%.2f FlatDelta=%d Free=%s Reason=%s"),
 		PurchaseContext.BasePrice,
 		PurchaseContext.PriceBeforeModifiers,
