@@ -4,6 +4,7 @@
 #include "GameFramework/GameMode.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitTargetSelectionTypes.h"
+#include "Core/Types/GambitUIContractTypes.h"
 #include "GambitGameMode.generated.h"
 
 class AGambitPlayerState;
@@ -30,25 +31,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
 	void RestartMatchFlow();
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Match Flow")
 	void RequestMainMenu();
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Match Flow")
 	void RequestOpenMatchSetup();
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Match Flow")
 	bool RequestConfigureMatch(int32 LocalPlayerCount, int32 RoundCount);
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Match Flow")
 	bool RequestEnterLobby();
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Match Flow")
 	bool RequestStartConfiguredMatch();
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode|Match Flow")
 	bool RequestReadyAllPlayersForCurrentPhase();
 
-	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode|PC Shell")
+	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode|Match Flow")
 	FGambitMatchSetupConfig GetPendingMatchSetup() const { return PendingMatchSetup; }
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|GameMode")
@@ -98,6 +99,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
 	TArray<FGambitShopOfferSnapshot> BuildShopOfferSnapshots(AGambitPlayerState* PlayerState) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|UI Contract")
+	FGambitUIPlayerActionSnapshot BuildPlayerActionSnapshot(AGambitPlayerState* PlayerState) const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|GameMode")
 	UGambitRoundFlowComponent* GetRoundFlowComponent() const { return RoundFlowComponent; }

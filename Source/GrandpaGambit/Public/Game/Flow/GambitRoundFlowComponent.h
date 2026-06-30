@@ -5,6 +5,7 @@
 #include "Core/Types/GambitGameplayEvents.h"
 #include "Core/Types/GambitGameplayTypes.h"
 #include "Core/Types/GambitTargetSelectionTypes.h"
+#include "Core/Types/GambitUIContractTypes.h"
 #include "Items/Effects/GambitEffectExecutionTypes.h"
 #include "GambitRoundFlowComponent.generated.h"
 
@@ -81,6 +82,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
 	TArray<FGambitShopOfferSnapshot> BuildShopOfferSnapshots(AGambitPlayerState* PlayerState) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|UI Contract")
+	FGambitUIPlayerActionSnapshot BuildPlayerActionSnapshot(AGambitPlayerState* PlayerState) const;
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Round Flow")
 	int32 GetRerollsUsedForPlayer(AGambitPlayerState* PlayerState) const;

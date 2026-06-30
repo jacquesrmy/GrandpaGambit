@@ -1212,6 +1212,212 @@ TArray<FGambitShopOfferSnapshot> UGambitRoundFlowComponent::BuildShopOfferSnapsh
 	return Snapshots;
 }
 
+FGambitUIPlayerActionSnapshot UGambitRoundFlowComponent::BuildPlayerActionSnapshot(
+	AGambitPlayerState* PlayerState) const
+{
+	FGambitUIPlayerActionSnapshot Snapshot;
+
+	const AGambitGameState* GameState = GetGambitGameState();
+	const EGambitRoundPhase CurrentPhase = GameState ? GameState->GetCurrentPhase() : EGambitRoundPhase::None;
+	const TArray<AGambitPlayerState*> Players = GetAllPlayers();
+	Snapshot.PlayerIndex = Players.IndexOfByKey(PlayerState);
+	Snapshot.Phase = CurrentPhase;
+	Snapshot.RerollsUsed = GetRerollCount(PlayerState);
+	Snapshot.RerollLimit = GetEffectiveRerollLimit(PlayerState);
+	Snapshot.RerollsRemaining = FMath::Max(0, Snapshot.RerollLimit - Snapshot.RerollsUsed);
+
+	const bool bReadyGatedPhase = CurrentPhase == EGambitRoundPhase::SelectionReroll
+		|| CurrentPhase == EGambitRoundPhase::Action
+		|| CurrentPhase == EGambitRoundPhase::Shop;
+	Snapshot.bCanReadyForPhase = GameState && PlayerState && bReadyGatedPhase;
+	if (!GameState)
+	{
+		Snapshot.ReadyUnavailableReason = TEXT("Ready unavailable: missing game state.");
+	}
+	else if (!PlayerState)
+	{
+		Snapshot.ReadyUnavailableReason = TEXT("Ready unavailable: invalid player.");
+	}
+	else if (!bReadyGatedPhase)
+	{
+		Snapshot.ReadyUnavailableReason = FString::Printf(
+			TEXT("Ready unavailable: current phase is %s."),
+			*RoundFlowPhaseToString(CurrentPhase));
+	}
+
+	if (!GameState)
+	{
+		Snapshot.RerollUnavailableReason = TEXT("Reroll unavailable: missing game state.");
+	}
+	else if (!PlayerState)
+	{
+		Snapshot.RerollUnavailableReason = TEXT("Reroll unavailable: invalid player.");
+	}
+	else if (CurrentPhase != EGambitRoundPhase::SelectionReroll)
+	{
+		Snapshot.RerollUnavailableReason = FString::Printf(
+			TEXT("Reroll unavailable: current phase is %s, expected Selection / Reroll."),
+			*RoundFlowPhaseToString(CurrentPhase));
+	}
+	else if (Snapshot.RerollsUsed >= Snapshot.RerollLimit)
+	{
+		Snapshot.RerollUnavailableReason = FString::Printf(
+			TEXT("Reroll unavailable: limit reached (%d/%d)."),
+			Snapshot.RerollsUsed,
+			Snapshot.RerollLimit);
+	}
+	else if (!HasUnlockedRerollableDice(PlayerState))
+	{
+		Snapshot.RerollUnavailableReason = TEXT("Reroll unavailable: no unlocked rerollable dice.");
+	}
+	else
+	{
+		Snapshot.bCanReroll = true;
+	}
+
+	if (!PlayerState)
+	{
+		return Snapshot;
+	}
+
+	const TArray<FGambitDiceSnapshot> DiceSnapshots = PlayerState->BuildDiceSnapshot();
+	Snapshot.DiceActions.Reserve(DiceSnapshots.Num());
+	for (const FGambitDiceSnapshot& DiceSnapshot : DiceSnapshots)
+	{
+		FGambitUIDieActionSnapshot DieAction;
+		DieAction.Die = DiceSnapshot;
+
+		if (CurrentPhase != EGambitRoundPhase::SelectionReroll)
+		{
+			DieAction.LockUnavailableReason = FString::Printf(
+				TEXT("Lock unavailable: current phase is %s, expected Selection / Reroll."),
+				*RoundFlowPhaseToString(CurrentPhase));
+		}
+		else if (!DiceSnapshot.bLocked && !DiceSnapshot.bCanBeLocked)
+		{
+			DieAction.LockUnavailableReason = FString::Printf(
+				TEXT("Lock unavailable: die %d cannot be locked."),
+				DiceSnapshot.HandIndex + 1);
+		}
+		else
+		{
+			DieAction.bCanLock = !DiceSnapshot.bLocked;
+			DieAction.bCanUnlock = DiceSnapshot.bLocked;
+			DieAction.bCanToggleLock = DieAction.bCanLock || DieAction.bCanUnlock;
+		}
+
+		if (CurrentPhase != EGambitRoundPhase::SelectionReroll)
+		{
+			DieAction.RerollUnavailableReason = FString::Printf(
+				TEXT("Die reroll unavailable: current phase is %s, expected Selection / Reroll."),
+				*RoundFlowPhaseToString(CurrentPhase));
+		}
+		else if (Snapshot.RerollsUsed >= Snapshot.RerollLimit)
+		{
+			DieAction.RerollUnavailableReason = FString::Printf(
+				TEXT("Die reroll unavailable: limit reached (%d/%d)."),
+				Snapshot.RerollsUsed,
+				Snapshot.RerollLimit);
+		}
+		else if (DiceSnapshot.bLocked)
+		{
+			DieAction.RerollUnavailableReason = FString::Printf(
+				TEXT("Die reroll unavailable: die %d is locked."),
+				DiceSnapshot.HandIndex + 1);
+		}
+		else if (!DiceSnapshot.bCanBeRerolled)
+		{
+			DieAction.RerollUnavailableReason = FString::Printf(
+				TEXT("Die reroll unavailable: die %d cannot be rerolled."),
+				DiceSnapshot.HandIndex + 1);
+		}
+		else
+		{
+			DieAction.bCanBeRerolledByNextReroll = true;
+		}
+
+		Snapshot.DiceActions.Add(DieAction);
+	}
+
+	const TArray<FGambitConsumableRuntimeSlot>& ConsumableSlots = PlayerState->GetConsumableSlotsRef();
+	const TArray<FGambitItemSnapshot> ConsumableSnapshots = PlayerState->BuildConsumableSnapshot();
+	Snapshot.ConsumableActions.Reserve(ConsumableSlots.Num());
+	for (int32 SlotIndex = 0; SlotIndex < ConsumableSlots.Num(); ++SlotIndex)
+	{
+		const FGambitConsumableRuntimeSlot& Slot = ConsumableSlots[SlotIndex];
+		FGambitUIConsumableActionSnapshot ConsumableAction;
+		ConsumableAction.SlotIndex = SlotIndex;
+		ConsumableAction.bSlotOccupied = Slot.IsValid();
+		if (ConsumableSnapshots.IsValidIndex(SlotIndex))
+		{
+			ConsumableAction.Consumable = ConsumableSnapshots[SlotIndex];
+		}
+
+		if (!Slot.IsValid())
+		{
+			ConsumableAction.UseUnavailableReason = FString::Printf(
+				TEXT("Consumable unavailable: slot %d is empty."),
+				SlotIndex + 1);
+		}
+		else if (CurrentPhase != EGambitRoundPhase::Action)
+		{
+			ConsumableAction.UseUnavailableReason = FString::Printf(
+				TEXT("Consumable unavailable: current phase is %s, expected Action."),
+				*RoundFlowPhaseToString(CurrentPhase));
+		}
+		else if (!Slot.Definition->CanBeUsedDuringPhase(CurrentPhase))
+		{
+			ConsumableAction.UseUnavailableReason = FString::Printf(
+				TEXT("Consumable unavailable: slot %d cannot be used during this phase."),
+				SlotIndex + 1);
+		}
+		else
+		{
+			ConsumableAction.bCanUse = true;
+		}
+
+		if (TargetSelectionService && Slot.IsValid() && Slot.Definition->CanBeUsedDuringPhase(CurrentPhase))
+		{
+			FGambitTargetSelectionRequest TargetSelectionPreview;
+			if (BuildConsumableTargetSelectionRequest(PlayerState, SlotIndex, TargetSelectionPreview))
+			{
+				ConsumableAction.TargetSelectionPreview = TargetSelectionPreview;
+				ConsumableAction.bRequiresTargetSelection = TargetSelectionPreview.bRequiresExplicitSelection;
+				ConsumableAction.bHasValidTargetOptions = TargetSelectionPreview.HasValidOptions();
+			}
+		}
+
+		Snapshot.ConsumableActions.Add(ConsumableAction);
+	}
+
+	Snapshot.ShopOffers = BuildShopOfferSnapshots(PlayerState);
+	for (const FGambitShopOfferSnapshot& OfferSnapshot : Snapshot.ShopOffers)
+	{
+		if (OfferSnapshot.bCanPurchase)
+		{
+			Snapshot.bCanPurchaseAnyOffer = true;
+			break;
+		}
+	}
+
+	if (CurrentPhase != EGambitRoundPhase::Shop)
+	{
+		Snapshot.ShopUnavailableReason = FString::Printf(
+			TEXT("Shop unavailable: current phase is %s, expected Shop."),
+			*RoundFlowPhaseToString(CurrentPhase));
+	}
+	else if (Snapshot.ShopOffers.Num() == 0)
+	{
+		Snapshot.ShopUnavailableReason = TEXT("Shop unavailable: no offers were generated.");
+	}
+	else if (!Snapshot.bCanPurchaseAnyOffer)
+	{
+		Snapshot.ShopUnavailableReason = TEXT("Shop unavailable: no offer can currently be purchased.");
+	}
+
+	return Snapshot;
+}
+
 int32 UGambitRoundFlowComponent::GetRerollsUsedForPlayer(AGambitPlayerState* PlayerState) const
 {
 	return GetRerollCount(PlayerState);

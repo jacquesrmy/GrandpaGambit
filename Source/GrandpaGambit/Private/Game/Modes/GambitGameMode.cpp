@@ -332,6 +332,13 @@ TArray<FGambitShopOfferSnapshot> AGambitGameMode::BuildShopOfferSnapshots(AGambi
 		: TArray<FGambitShopOfferSnapshot>();
 }
 
+FGambitUIPlayerActionSnapshot AGambitGameMode::BuildPlayerActionSnapshot(AGambitPlayerState* PlayerState) const
+{
+	return RoundFlowComponent
+		? RoundFlowComponent->BuildPlayerActionSnapshot(PlayerState)
+		: FGambitUIPlayerActionSnapshot();
+}
+
 void AGambitGameMode::InitializePlayerForMatch(APlayerController* PlayerController) const
 {
 	if (!PlayerController)

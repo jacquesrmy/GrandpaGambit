@@ -344,6 +344,41 @@ bool AGambitPlayerController::GetSelectedTargetSelectionOption(FGambitTargetSele
 	return true;
 }
 
+FGambitUITargetSelectionSnapshot AGambitPlayerController::BuildTargetSelectionSnapshot() const
+{
+	FGambitUITargetSelectionSnapshot Snapshot;
+	Snapshot.bHasPendingSelection = bHasPendingTargetSelection;
+	Snapshot.SelectedOptionId = PendingTargetSelectionSelectedOptionId;
+
+	if (!bHasPendingTargetSelection)
+	{
+		Snapshot.ConfirmUnavailableReason = TEXT("No pending target selection.");
+		return Snapshot;
+	}
+
+	Snapshot.Request = PendingTargetSelectionRequest;
+	Snapshot.bHasSelectedOption = GetSelectedTargetSelectionOption(Snapshot.SelectedOption);
+	Snapshot.bCanConfirmSelection = Snapshot.bHasSelectedOption && Snapshot.SelectedOption.bValid;
+	if (!PendingTargetSelectionRequest.HasValidOptions())
+	{
+		Snapshot.ConfirmUnavailableReason = PendingTargetSelectionRequest.InvalidReason.IsEmpty()
+			? TEXT("Target selection has no valid options.")
+			: PendingTargetSelectionRequest.InvalidReason;
+	}
+	else if (!Snapshot.bHasSelectedOption)
+	{
+		Snapshot.ConfirmUnavailableReason = TEXT("No target option selected.");
+	}
+	else if (!Snapshot.SelectedOption.bValid)
+	{
+		Snapshot.ConfirmUnavailableReason = FString::Printf(
+			TEXT("Target option %d is invalid."),
+			Snapshot.SelectedOptionId);
+	}
+
+	return Snapshot;
+}
+
 void AGambitPlayerController::RequestPurchaseOffer(const int32 OfferId)
 {
 	if (HasAuthority())

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "Core/Types/GambitTargetSelectionTypes.h"
+#include "Core/Types/GambitUIContractTypes.h"
 #include "GambitPlayerController.generated.h"
 
 class AGambitGameMode;
@@ -66,6 +67,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|Target Selection")
 	bool GetSelectedTargetSelectionOption(UPARAM(ref) FGambitTargetSelectionOption& OutOption) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|UI Contract")
+	FGambitUITargetSelectionSnapshot BuildTargetSelectionSnapshot() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gambit|Input")
 	void RequestPurchaseOffer(int32 OfferId);

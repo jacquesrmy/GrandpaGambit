@@ -4,6 +4,7 @@
 #include "UObject/Object.h"
 #include "Core/Types/GambitRoundFeedbackTypes.h"
 #include "Core/Types/GambitGameplayTypes.h"
+#include "Core/Types/GambitUIContractTypes.h"
 #include "GambitMatchViewModel.generated.h"
 
 class AGambitGameState;
@@ -32,6 +33,12 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Gambit|UI")
 	TArray<FGambitPlayerSnapshot> BuildPlayerSnapshots() const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|UI Contract")
+	TArray<FGambitUIPlayerSnapshot> BuildUIPlayerSnapshots() const;
+
+	UFUNCTION(BlueprintPure, Category = "Gambit|UI Contract")
+	FGambitUIMatchSnapshot BuildUIMatchSnapshot() const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Gambit|UI")
 	FOnGambitViewModelUpdated OnViewModelUpdated;

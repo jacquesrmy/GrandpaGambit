@@ -351,6 +351,116 @@ bool FGambitPCShellRoundHudCommandTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitProductionUIContractSnapshotTest,
+	"GrandpaGambit.UIContract.Snapshot",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitProductionUIContractSnapshotTest::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	FGambitPCShellFlowWorld TestWorld;
+	if (!BuildPCShellFlowWorld(*this, 2, TestWorld))
+	{
+		return false;
+	}
+
+	AGambitPlayerState* PlayerState = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+	if (!TestNotNull(TEXT("UI contract player state exists"), PlayerState))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	TestWorld.GameState->SetCurrentPhase(EGambitRoundPhase::SelectionReroll);
+	FGambitUIPlayerActionSnapshot SelectionSnapshot = TestWorld.RoundFlow->BuildPlayerActionSnapshot(PlayerState);
+	TestEqual(TEXT("UI contract action snapshot player index"), SelectionSnapshot.PlayerIndex, 0);
+	TestEqual(TEXT("UI contract action snapshot phase"), SelectionSnapshot.Phase, EGambitRoundPhase::SelectionReroll);
+	TestEqual(TEXT("UI contract dice actions mirror dice count"), SelectionSnapshot.DiceActions.Num(), PlayerState->GetDiceStatesRef().Num());
+	TestTrue(TEXT("UI contract exposes reroll availability"), SelectionSnapshot.bCanReroll);
+	if (SelectionSnapshot.DiceActions.Num() > 0)
+	{
+		TestTrue(TEXT("UI contract exposes lock toggle availability"), SelectionSnapshot.DiceActions[0].bCanToggleLock);
+		TestTrue(TEXT("UI contract exposes next-reroll die eligibility"), SelectionSnapshot.DiceActions[0].bCanBeRerolledByNextReroll);
+	}
+
+	TestWorld.RoundFlow->RequestSetDieLockedDetailed(PlayerState, 0, true);
+	const FGambitUIPlayerActionSnapshot LockedSnapshot = TestWorld.RoundFlow->BuildPlayerActionSnapshot(PlayerState);
+	if (LockedSnapshot.DiceActions.Num() > 0)
+	{
+		TestTrue(TEXT("UI contract lock state updates after command"), LockedSnapshot.DiceActions[0].Die.bLocked);
+		TestTrue(TEXT("UI contract exposes unlock availability"), LockedSnapshot.DiceActions[0].bCanUnlock);
+		TestFalse(TEXT("UI contract locked die is excluded from next reroll"), LockedSnapshot.DiceActions[0].bCanBeRerolledByNextReroll);
+	}
+
+	TestWorld.GameState->SetCurrentPhase(EGambitRoundPhase::Action);
+	FreeOneConsumableSlotIfNeeded(PlayerState);
+	UGambitConsumableDefinition* TestConsumable = MakePCShellFlowTestConsumable(
+		GetTransientPackage(),
+		TEXT("consumable.test.ui_contract"),
+		TEXT("UI Contract Consumable"),
+		{ EGambitRoundPhase::Action });
+	PlayerState->GetInventoryComponent()->AddConsumable(TestConsumable);
+	const int32 ConsumableSlotIndex = FindConsumableSlotIndex(PlayerState, TestConsumable);
+	const FGambitUIPlayerActionSnapshot ActionSnapshot = TestWorld.RoundFlow->BuildPlayerActionSnapshot(PlayerState);
+	const FGambitUIConsumableActionSnapshot* ConsumableAction = ActionSnapshot.ConsumableActions.FindByPredicate(
+		[ConsumableSlotIndex](const FGambitUIConsumableActionSnapshot& Candidate)
+		{
+			return Candidate.SlotIndex == ConsumableSlotIndex;
+		});
+	TestNotNull(TEXT("UI contract exposes consumable action by slot"), ConsumableAction);
+	if (ConsumableAction)
+	{
+		TestTrue(TEXT("UI contract exposes consumable use availability"), ConsumableAction->bCanUse);
+	}
+
+	TestWorld.GameState->SetCurrentPhase(EGambitRoundPhase::Shop);
+	PlayerState->AddGold(20);
+	UGambitModuleDefinition* ShopModule = MakePCShellFlowTestModule(
+		GetTransientPackage(),
+		TEXT("module.test.ui_contract_shop"),
+		TEXT("UI Contract Shop Module"),
+		5);
+	PlayerState->GetShopComponent()->SetCurrentOffers({ MakePCShellFlowTestOffer(0, ShopModule, ShopModule->Cost) });
+	const FGambitUIPlayerActionSnapshot ShopSnapshot = TestWorld.RoundFlow->BuildPlayerActionSnapshot(PlayerState);
+	TestEqual(TEXT("UI contract exposes shop offers"), ShopSnapshot.ShopOffers.Num(), 1);
+	TestTrue(TEXT("UI contract exposes purchase availability"), ShopSnapshot.bCanPurchaseAnyOffer);
+
+	AGambitPlayerController* PlayerController = TestWorld.World->SpawnActor<AGambitPlayerController>();
+	if (!TestNotNull(TEXT("UI contract target controller exists"), PlayerController))
+	{
+		TestWorld.Destroy();
+		return false;
+	}
+
+	FGambitTargetSelectionRequest Request;
+	Request.RequestingPlayer = PlayerState;
+	Request.RequestingPlayerIndex = 0;
+	Request.SourceConsumableSlotIndex = 0;
+	Request.SelectionType = EGambitTargetSelectionType::Player;
+	Request.CurrentPhase = EGambitRoundPhase::Action;
+	Request.bRequiresExplicitSelection = true;
+	Request.bHasValidOptions = true;
+	FGambitTargetSelectionOption Option;
+	Option.OptionId = 7;
+	Option.SelectionType = EGambitTargetSelectionType::Player;
+	Option.TargetPlayer = PlayerState;
+	Option.TargetPlayerIndex = 0;
+	Option.bValid = true;
+	Option.Label = TEXT("Self");
+	Request.Options.Add(Option);
+
+	TestTrue(TEXT("UI contract controller starts target selection"), PlayerController->StartTargetSelection(Request));
+	const FGambitUITargetSelectionSnapshot TargetSelectionSnapshot = PlayerController->BuildTargetSelectionSnapshot();
+	TestTrue(TEXT("UI contract exposes pending target selection"), TargetSelectionSnapshot.bHasPendingSelection);
+	TestTrue(TEXT("UI contract exposes confirm availability"), TargetSelectionSnapshot.bCanConfirmSelection);
+	TestEqual(TEXT("UI contract exposes selected option"), TargetSelectionSnapshot.SelectedOptionId, Option.OptionId);
+
+	TestWorld.Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FGambitPCShellRoundHudActionConsumableFeedbackTest,
 	"GrandpaGambit.PCShell.RoundHud.ActionConsumableFeedback",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
