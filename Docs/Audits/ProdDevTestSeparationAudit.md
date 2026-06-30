@@ -1,13 +1,13 @@
 # Grandpa Gambit - Prod / Dev / Debug / Sandbox / Tests Separation Audit
 
 Date: 2026-06-30
-Scope: prod/dev/test separation audit before final UI work. Pass 1 gates debug/sandbox ownership and controller exec commands for non-shipping builds only. Pass 2 renames runtime feedback/snapshot APIs away from `Debug`. Pass 3 defines the stable production UI snapshot/action/command contract that final UI can consume later. No gameplay, UI-final, map, Blueprint, DataAsset, or validation script changes were made.
+Scope: prod/dev/test separation audit before final UI work. Pass 1 gates debug/sandbox ownership and controller exec commands for non-shipping builds only. Pass 2 renames runtime feedback/snapshot APIs away from `Debug`. Pass 3 defines the stable production UI snapshot/action/command contract that final UI can consume later. Pass 4 cleans default production startup config/content references to dev/legacy assets. No gameplay rules, final UI, gamepad navigation, gameplay DataAssets, dev/sandbox maps, or validation script changes were made.
 
 ## 1. Statut global
 
 ### Verdict court
 
-Risque actuel apres Pass 3: **moyen avant UI finale**.
+Risque actuel apres Pass 4: **moyen-bas avant UI finale**.
 
 The production runtime does **not** appear to call automation tests or test fixtures directly. Automation code is under `Source/GrandpaGambit/Private/Tests` and guarded with `WITH_DEV_AUTOMATION_TESTS`.
 
@@ -32,7 +32,15 @@ Pass 3 stabilized the production UI contract without building final UI:
 - `UGambitMatchViewModel::BuildUIPlayerSnapshots()` and `BuildUIMatchSnapshot()` aggregate GameState, PlayerState, RoundFlow, shop, dice, inventory/loadout, economy, ranking, and target-selection state for future UI consumption.
 - Existing `Request...` production commands remain the UI command boundary; PC shell behavior was not changed beyond compile-time access to the same runtime APIs.
 
-Remaining risk before final UI comes from later passes: the default `GameInstanceClass` path under `Blueprints/Dev`, stale legacy/debug content references, and the temporary PC shell quarantine/deprecation policy.
+Pass 4 cleaned the default startup flow:
+
+- `Config/DefaultEngine.ini` now uses `GameInstanceClass=/Script/Engine.GameInstance`; normal startup no longer points to `/Blueprints/Dev/BP_GambitGameInstance`.
+- `GameDefaultMap` and `EditorStartupMap` remain `/Game/GrandpaGambit/Maps/Gambit.Gambit`; `GlobalDefaultGameMode` remains `/Game/GrandpaGambit/Blueprints/Game/BP_GambitGameMode.BP_GambitGameMode_C`.
+- `Content/GrandpaGambit/Maps/Gambit.umap` was resaved through Unreal Editor-Cmd after removing the legacy Level Blueprint `EventGraph` that spawned the deleted debug widget.
+- A binary content scan found no remaining `WBP_DebugMatchInspector` references in `Content`.
+- `BP_GambitGameInstance` is classified as **dev-only**, not mislocated production, because it derives directly from `UGameInstance`, contains dev player/AI setup fields, and is now referenced only by dev UI widgets after the default config repoint.
+
+Remaining risk before final UI comes from later passes: the temporary PC shell quarantine/deprecation policy, fixture/legacy asset policy, and optional validation/script tightening.
 
 ### Est-ce que la prod appelle du test/sandbox/debug ?
 
@@ -107,8 +115,8 @@ It can stay in runtime for V0.1 because the current target is PC keyboard/mouse 
 
 | Path | Current category | Target category | Action | Risk | Justification |
 | --- | --- | --- | --- | --- | --- |
-| `Config/DefaultEngine.ini` | Production config with dev asset reference | Production config | Replace or rename/move dev GameInstance later | High | `GameInstanceClass` points to `/Blueprints/Dev/BP_GambitGameInstance`. |
-| `Config/DefaultEngine.ini` maps | Production config | Production config | Keep default map if editor cleanup confirms no legacy refs | Medium | `GameDefaultMap` and `EditorStartupMap` both point to `Gambit.umap`; docs report a legacy missing debug widget load warning. |
+| `Config/DefaultEngine.ini` | Production config | Production config | Pass 4 done: `GameInstanceClass` repointed to native `UGameInstance` | Low | Normal startup no longer points to `/Blueprints/Dev/BP_GambitGameInstance`. |
+| `Config/DefaultEngine.ini` maps | Production config | Production config | Pass 4 verified | Low | `GameDefaultMap` and `EditorStartupMap` both point to `Gambit.umap`; `GlobalDefaultGameMode` points to production `BP_GambitGameMode`. |
 | `Config/DefaultGame.ini` | Production settings/data config | Production config | Keep | Low | Points to production data settings/catalog/loadout/shared pool/shop definitions. |
 | `Config/DefaultInput.ini` | Production input config with console enabled | Production config plus dev/debug console policy | Gate/disable risky debug commands later, not necessarily the console itself | Medium | Console key is enabled, making exec command exposure important. |
 | `Config/DefaultEditor.ini` | Editor config | Docs/Scripts / Editor config | Keep | Low | No production dependency concern found in this audit. |
@@ -129,14 +137,14 @@ It can stay in runtime for V0.1 because the current target is PC keyboard/mouse 
 
 ### Content inventory
 
-Binary `.uasset` files were inventoried by path only. They were not edited.
+Binary `.uasset`/`.umap` files were inventoried by path. Pass 4 edited only `Content/GrandpaGambit/Maps/Gambit.umap`, through Unreal Editor-Cmd, to remove the stale legacy debug widget Level Blueprint graph.
 
 | Path | Current category | Target category | Action | Risk | Justification |
 | --- | --- | --- | --- | --- | --- |
-| `Content/GrandpaGambit/Maps/Gambit.umap` | Current default map | Production entry map | Inspect in editor later | Medium | Default map; docs report legacy `WBP_DebugMatchInspector` load issue during automation startup. |
+| `Content/GrandpaGambit/Maps/Gambit.umap` | Current default map with stale legacy Level Blueprint before Pass 4 | Production entry map | Pass 4 done: removed legacy Level Blueprint `EventGraph` and resaved map | Low | Default map no longer contains `WBP_DebugMatchInspector`, `K2Node_CreateWidget`, `ReceiveBeginPlay`, or UMG debug widget bootstrap references; clean map load verified through Unreal Editor-Cmd. |
 | `Content/GrandpaGambit/Maps/L_DevMatchSandbox.umap` | Sandbox map | Sandbox | Keep isolated from default startup | Medium | Dev sandbox should not become normal player flow. |
 | `Content/GrandpaGambit/Maps/L_Menu_DevMatch.umap` | Dev menu/legacy map | Sandbox / Legacy | Keep until replacement, then remove later | Medium | Not default entry per docs; should stay dev-only. |
-| `Content/GrandpaGambit/Blueprints/Dev/BP_GambitGameInstance.uasset` | Dev Blueprint used by default config | Production config issue or mislocated prod asset | Replace, rename, or move later | High | DefaultEngine points production startup to a `Dev` path. |
+| `Content/GrandpaGambit/Blueprints/Dev/BP_GambitGameInstance.uasset` | Dev Blueprint formerly used by default config | Dev Tools | Pass 4 decision: keep as dev-only, not normal startup | Low | DefaultEngine no longer points here; binary scan shows remaining references only from `WBP_DevMainMenu` and `WBP_DevMatchSandbox`. |
 | `Content/GrandpaGambit/Blueprints/Game/BP_GambitGameMode.uasset` | Production Blueprint | Production Runtime integration | Inspect only if GameMode separation changes C++ defaults | Medium | Blueprint derives from production mode; may inherit debug/sandbox component subobjects. |
 | `Content/GrandpaGambit/Blueprints/Game/BP_GambitGameState.uasset` | Production Blueprint | Production Runtime integration | Keep | Low | No direct issue found by path. |
 | `Content/GrandpaGambit/Blueprints/Players/BP_GambitPlayerController.uasset` | Production Blueprint | Production Runtime integration | Inspect after controller command gating | Medium | Controller class currently exposes debug/dev exec commands. |
@@ -159,8 +167,8 @@ Binary `.uasset` files were inventoried by path only. They were not edited.
 | `UGambitMatchViewModel` | `FGambitPlayerSnapshot` | UI-facing API returns stable player snapshot types | Fixed in Pass 2. | `BuildDebugPlayerSnapshots()` was replaced with `BuildPlayerSnapshots()`. | P1 done |
 | `UGambitMatchViewModel` / `UGambitRoundFlowComponent` / `AGambitPlayerController` | `Core/Types/GambitUIContractTypes.h` | UI-facing read-only contract uses production snapshots and action availability | Fixed in Pass 3. | `BuildUIMatchSnapshot()`, `BuildUIPlayerSnapshots()`, `BuildPlayerActionSnapshot()`, and `BuildTargetSelectionSnapshot()` define the final-UI-facing read contract without debug/sandbox/test dependencies. | P1 done |
 | `FGambitTargetSelectionRequest/Option` | `PresentationText` | Runtime target selection API exposes production presentation copy | Fixed in Pass 2. | `DebugText` was renamed to `PresentationText` without changing target selection behavior. | P2 done |
-| `Config/DefaultEngine.ini` | `/Blueprints/Dev/BP_GambitGameInstance` | Production startup config points to Dev asset | Default game boot path depends on an asset categorized as dev. | Replace with production GameInstance asset/class, or rename/move the asset if it is actually production. | P1 |
-| `Gambit.umap` content path | Missing/legacy `WBP_DebugMatchInspector` reference reported by existing audit | Binary Blueprint/map reference | Startup automation logs a legacy debug widget dependency. | Open in editor, remove stale widget reference, resave map/Blueprint in a content cleanup pass. | P1 |
+| `Config/DefaultEngine.ini` | `/Script/Engine.GameInstance` | Production startup config uses native GameInstance | Fixed in Pass 4. | `BP_GambitGameInstance` was classified as dev-only and removed from normal startup by repointing to native `UGameInstance`. | P1 done |
+| `Gambit.umap` content path | No `WBP_DebugMatchInspector` reference after Pass 4 | Binary Blueprint/map reference | Fixed in Pass 4. | Removed the legacy Level Blueprint `EventGraph` that spawned the deleted debug widget and resaved only `Content/GrandpaGambit/Maps/Gambit.umap`. | P1 done |
 | `Config/DefaultInput.ini` console key + controller exec commands | Debug/cheat command surface | Runtime input can reach debug commands in normal builds | Console itself can be useful, but debug/grant commands must be gated. | Gate commands first; then decide shipping console policy. | P1 |
 
 ## 5. Dependances acceptables
@@ -201,8 +209,8 @@ These directions must remain forbidden:
 - [x] Rename target selection `DebugText` fields to production presentation names.
 - [x] Add stable production UI contract snapshots for match/player/action/dice/consumables/shop/target selection.
 - [x] Expose UI action availability through production `RoundFlow`, `GameMode`, `PlayerController`, and `MatchViewModel` APIs.
-- Replace or relocate `/Blueprints/Dev/BP_GambitGameInstance` if it is part of normal startup.
-- Clean stale legacy debug widget references from `Gambit.umap` or the Blueprint that owns them.
+- [x] Remove `/Blueprints/Dev/BP_GambitGameInstance` from normal startup if it is dev-only.
+- [x] Clean stale legacy debug widget references from `Gambit.umap` or the Blueprint that owns them.
 
 ### C. Suppression a faire seulement apres remplacement
 
@@ -503,6 +511,28 @@ Done criteria:
 - Default config no longer points to a `Dev` asset for normal startup.
 - Default map has no stale debug widget load errors.
 
+Pass 4 implemented boundary:
+
+- `Config/DefaultEngine.ini`: `GameInstanceClass` changed from `/Game/GrandpaGambit/Blueprints/Dev/BP_GambitGameInstance.BP_GambitGameInstance_C` to `/Script/Engine.GameInstance`.
+- `Config/DefaultEngine.ini`: `GameDefaultMap` stayed `/Game/GrandpaGambit/Maps/Gambit.Gambit`.
+- `Config/DefaultEngine.ini`: `EditorStartupMap` stayed `/Game/GrandpaGambit/Maps/Gambit.Gambit`.
+- `Config/DefaultEngine.ini`: `GlobalDefaultGameMode` stayed `/Game/GrandpaGambit/Blueprints/Game/BP_GambitGameMode.BP_GambitGameMode_C`.
+- `Content/GrandpaGambit/Maps/Gambit.umap`: loaded in Unreal Editor-Cmd, legacy Level Blueprint `EventGraph` removed via `BlueprintEditorLibrary.remove_graph()`, compiled, and resaved. This removed the old `ReceiveBeginPlay`/`CreateWidget`/`AddToViewport` debug widget bootstrap.
+- Verification load of `/Game/GrandpaGambit/Maps/Gambit` through Unreal Editor-Cmd finished with `Success - 0 error(s)` and no `WBP_DebugMatchInspector`/CreateWidget compile error.
+- Binary scan after the fix found no `WBP_DebugMatchInspector` references in `Content`.
+- Binary scan after the fix found remaining `/Game/GrandpaGambit/Blueprints/UI/Debug` references only in `L_Menu_DevMatch.umap` and `L_DevMatchSandbox.umap`, both non-default dev/sandbox maps.
+- Binary scan after the fix found remaining `BP_GambitGameInstance` references only in `BP_GambitGameInstance.uasset`, `WBP_DevMainMenu.uasset`, and `WBP_DevMatchSandbox.uasset`.
+
+Pass 4 decision on `BP_GambitGameInstance`:
+
+- `BP_GambitGameInstance` is **dev-only**, not production content in the wrong folder.
+- Evidence: it derives directly from `/Script/Engine.GameInstance`, stores dev setup fields such as dev player count / AI toggles, and its remaining consumers are dev UI widgets only.
+- Action: no binary edit, move, rename, or deletion was done to `BP_GambitGameInstance`; only the default config was repointed away from it.
+
+Pass 4 explicit non-changes:
+
+- No final UI, final widgets, UI layout, gamepad navigation, gameplay rule changes, DataAssets, dev/sandbox map edits, broad content deletion, validation script edits, PC shell quarantine/deprecation work, or Pass 5+ work were done.
+
 ### Pass 5 - PC shell quarantine/deprecation policy
 
 Objective: explicitly freeze the PC shell as V0.1 temporary UI and prevent it from becoming final UI architecture by accident.
@@ -596,13 +626,13 @@ Done criteria:
 
 ## 9. Prompt suivant
 
-Pass 3 is complete and validated. The next executable pass, if intentionally requested later, is Pass 4 - Content/config default-flow cleanup. Do not reuse the old Pass 3 prompt.
+Pass 4 is complete and validated. The next executable pass, if intentionally requested later, is Pass 5 - PC shell quarantine/deprecation policy. Do not do Pass 5+ as part of Pass 4.
 
-## 10. Taches restantes apres la Pass 3
+## 10. Taches restantes apres la Pass 4
 
 - [x] Pass 2 - Rename runtime feedback APIs away from `Debug`.
 - [x] Pass 3 - Stable production UI snapshot and command contract.
-- [ ] Pass 4 - Content/config default-flow cleanup.
+- [x] Pass 4 - Content/config default-flow cleanup.
 - [ ] Pass 5 - PC shell quarantine/deprecation policy.
 - [ ] Pass 6 - Legacy/test fixture asset policy.
 - [ ] Pass 7 - Validation/script tightening.
@@ -677,4 +707,29 @@ Logs:
 
 ```text
 Saved/Automation/GambitValidation/20260630-113323
+```
+
+## 14. Validation locale de la Pass 4
+
+Status: **passed** on 2026-06-30.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Scripts\Run-GambitValidation.ps1
+```
+
+Result:
+
+| Gate item | Result | Details |
+| --- | --- | --- |
+| Build | OK | `GrandpaGambitEditor Win64 Development` built successfully. |
+| DataAssets audit | OK | `total=291`, `valid=291`, `warning=0`, `error=0`. |
+| Audit files / matrix comparison | OK | Audit generated outputs and comparison gate passed. |
+| Automation | OK | `success=84`, `warning=0`, `failed=0`, `notRun=0`, `inProcess=0`. |
+| Legacy startup log check | OK | No `WBP_DebugMatchInspector`, CreateWidget/`Creer un widget`, or `LogBlueprint: Error` matches in final Pass 4 validation logs. |
+| `git diff --check` | OK | No whitespace/error findings. |
+
+Logs:
+
+```text
+Saved/Automation/GambitValidation/20260630-143238
 ```
