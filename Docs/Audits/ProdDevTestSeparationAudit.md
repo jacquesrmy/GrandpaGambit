@@ -1,13 +1,13 @@
 # Grandpa Gambit - Prod / Dev / Debug / Sandbox / Tests Separation Audit
 
 Date: 2026-06-30
-Scope: prod/dev/test separation audit before final UI work. Pass 1 gates debug/sandbox ownership and controller exec commands for non-shipping builds only. Pass 2 renames runtime feedback/snapshot APIs away from `Debug`. Pass 3 defines the stable production UI snapshot/action/command contract that final UI can consume later. Pass 4 cleans default production startup config/content references to dev/legacy assets. No gameplay rules, final UI, gamepad navigation, gameplay DataAssets, dev/sandbox maps, or validation script changes were made.
+Scope: prod/dev/test separation audit before final UI work. Pass 1 gates debug/sandbox ownership and controller exec commands for non-shipping builds only. Pass 2 renames runtime feedback/snapshot APIs away from `Debug`. Pass 3 defines the stable production UI snapshot/action/command contract that final UI can consume later. Pass 4 cleans default production startup config/content references to dev/legacy assets. Pass 5 clarifies and quarantines the temporary V0.1 PC shell without renaming or replacing it. No gameplay rules, final UI, gamepad navigation, gameplay DataAssets, dev/sandbox maps, or validation script changes were made.
 
 ## 1. Statut global
 
 ### Verdict court
 
-Risque actuel apres Pass 4: **moyen-bas avant UI finale**.
+Risque actuel apres Pass 5: **bas-moyen avant UI finale**.
 
 The production runtime does **not** appear to call automation tests or test fixtures directly. Automation code is under `Source/GrandpaGambit/Private/Tests` and guarded with `WITH_DEV_AUTOMATION_TESTS`.
 
@@ -40,7 +40,14 @@ Pass 4 cleaned the default startup flow:
 - A binary content scan found no remaining `WBP_DebugMatchInspector` references in `Content`.
 - `BP_GambitGameInstance` is classified as **dev-only**, not mislocated production, because it derives directly from `UGameInstance`, contains dev player/AI setup fields, and is now referenced only by dev UI widgets after the default config repoint.
 
-Remaining risk before final UI comes from later passes: the temporary PC shell quarantine/deprecation policy, fixture/legacy asset policy, and optional validation/script tightening.
+Pass 5 quarantined the current PC shell as a temporary V0.1 playable surface:
+
+- `UGambitPCShellWidget` keeps its name; the rename to `UGambitV01PCShellWidget` was rejected for this pass because the class name does not claim final UI ownership and Unreal rename churn is not justified before replacement.
+- `UGambitPCShellWidget` now has an API comment stating that it is runtime only to keep V0.1 playable, is not final UI architecture, must not own gameplay truth, should consume stable production UI contract snapshots where they fit, and should be replaced by final UI later.
+- PC shell-related Blueprint categories were clarified as `V0.1 PC Shell` metadata only.
+- `Docs/V01PCShell.md`, `Docs/V01RoundHUD.md`, and `GambitPCShellFlowTests.cpp` now explicitly separate V0.1 shell playability/smoke coverage from final UI architecture.
+
+Remaining risk before final UI comes from later passes: fixture/legacy asset policy and optional validation/script tightening.
 
 ### Est-ce que la prod appelle du test/sandbox/debug ?
 
@@ -55,7 +62,7 @@ Remaining risk before final UI comes from later passes: the temporary PC shell q
 
 `UGambitPCShellWidget` is best classified as **Temporary PC Shell / Production UI V0.1**, not as final UI and not as pure debug UI.
 
-It can stay in runtime for V0.1 because the current target is PC keyboard/mouse and docs already define it as a minimal playable shell. After Pass 2 it consumes stable feedback/snapshot APIs instead of `FGambitDebug...` snapshots or `DebugText`, but it should still not become the final UI foundation without a dedicated shell quarantine/deprecation pass.
+It can stay in runtime for V0.1 because the current target is PC keyboard/mouse and docs define it as a minimal playable shell. Pass 5 explicitly freezes that role: the shell is allowed to display state and send production `Request...` commands, but it must not become gameplay truth or the final UI foundation. Final UI should consume the stable production UI contract from Pass 3 and replace this shell presentation.
 
 ## 2. Taxonomie officielle
 
@@ -78,9 +85,9 @@ It can stay in runtime for V0.1 because the current target is PC keyboard/mouse 
 
 | Path | Current category | Target category | Action | Risk | Justification |
 | --- | --- | --- | --- | --- | --- |
-| `Source/GrandpaGambit/Public/Game/Modes/GambitGameMode.h` | Production Runtime with non-shipping debug/sandbox accessors and UI contract wrapper | Production Runtime | Pass 1 done; Pass 3 added `BuildPlayerActionSnapshot()` wrapper and moved match setup command categories from PC Shell to Match Flow | Medium | Shipping `AGambitGameMode` no longer exposes debug/sandbox component getters or component storage; UI command/snapshot wrappers route to production RoundFlow. |
+| `Source/GrandpaGambit/Public/Game/Modes/GambitGameMode.h` | Production Runtime with non-shipping debug/sandbox accessors and UI contract wrapper | Production Runtime | Pass 1 done; Pass 3 added `BuildPlayerActionSnapshot()` wrapper and moved match setup command categories from PC Shell to Match Flow; Pass 5 clarified remaining shell metadata as V0.1-only | Medium | Shipping `AGambitGameMode` no longer exposes debug/sandbox component getters or component storage; UI command/snapshot wrappers route to production RoundFlow. |
 | `Source/GrandpaGambit/Private/Game/Modes/GambitGameMode.cpp` | Production Runtime with non-shipping debug/sandbox subobjects and UI contract wrapper | Production Runtime | Pass 1 done; Pass 3 added `BuildPlayerActionSnapshot()` wrapper | Medium | Shipping constructor creates only `UGambitRoundFlowComponent`; UI snapshot wrapper does not add gameplay behavior. |
-| `Source/GrandpaGambit/Public/Players/Controllers/GambitPlayerController.h` | Production Runtime plus gated Debug Commands and target-selection UI contract | Production Runtime plus gated Debug Commands | Pass 1 done; Pass 3 added `BuildTargetSelectionSnapshot()` | Medium | Debug/dev exec surface remains development-marked and runtime-gated; pending target selection state is exposed through a production read-only snapshot. |
+| `Source/GrandpaGambit/Public/Players/Controllers/GambitPlayerController.h` | Production Runtime plus gated Debug Commands, target-selection UI contract, and temporary V0.1 shell bootstrap | Production Runtime plus gated Debug Commands | Pass 1 done; Pass 3 added `BuildTargetSelectionSnapshot()`; Pass 5 documented `PCShellWidgetClass` as temporary V0.1 bootstrap | Medium | Debug/dev exec surface remains development-marked and runtime-gated; pending target selection state is exposed through a production read-only snapshot; shell bootstrap is not final UI launch policy. |
 | `Source/GrandpaGambit/Private/Players/Controllers/GambitPlayerController.cpp` | Production Runtime plus gated Debug Commands and target-selection UI contract | Production Runtime plus gated Debug Commands | Pass 1 done; Pass 3 added pending target-selection snapshot builder | Medium | `Gambit...` debug/dev commands still call debug/sandbox components only in non-shipping builds; target selection snapshot reads existing pending state only. |
 | `Source/GrandpaGambit/Public/Game/States/GambitGameState.h` and `.cpp` | Production Runtime | Production Runtime | Keep | Low | Owns visible match state and runtime components; no test dependency found. |
 | `Source/GrandpaGambit/Public/Game/Flow/GambitRoundFlowComponent.h` and `.cpp` | Production Runtime feedback and UI action contract | Production Runtime | Pass 2 done; Pass 3 added `BuildPlayerActionSnapshot()` | Low | Generates stable feedback and exposes read-only action availability for ready/reroll/dice locks/consumables/shop without changing scoring/shop/dice behavior. |
@@ -93,7 +100,7 @@ It can stay in runtime for V0.1 because the current target is PC keyboard/mouse 
 | `Source/GrandpaGambit/Public/Players/Components/GambitPlayerRoundStateComponent.h` and `.cpp` | Production Runtime feedback storage | Production Runtime | Pass 2 done: feedback storage/API renamed | Low | Stores round breakdowns for runtime display and audit with stable naming. |
 | `Source/GrandpaGambit/Public/Players/States/GambitPlayerState.h` and `.cpp` | Production Runtime snapshot API | Production Runtime | Pass 2 done: snapshot and feedback APIs renamed | Low | Exposes `BuildPlayerSnapshot()`, `BuildDiceSnapshot()`, and `Get...BreakdownLines()` APIs. |
 | `Source/GrandpaGambit/Public/Players/Components/GambitEconomyComponent.h` and `.cpp` | Production Runtime gold feedback | Production Runtime | Pass 2 done: gold feedback output renamed | Low | Gold breakdown lines remain production feedback. |
-| `Source/GrandpaGambit/Public/UI/Widgets/GambitPCShellWidget.h` and `.cpp` | Temporary PC Shell / Production UI V0.1 | Temporary PC Shell until final UI replaces it | Pass 2 done for API names; Pass 3 did not convert it into final UI | Medium | Enables current playable loop; remains a temporary consumer of production runtime APIs, not the final UI foundation. |
+| `Source/GrandpaGambit/Public/UI/Widgets/GambitPCShellWidget.h` and `.cpp` | Temporary PC Shell / Production UI V0.1 | Temporary PC Shell until final UI replaces it | Pass 5 done: name kept, V0.1-only API comments/categories added, no behavior change | Low-medium | Enables current playable loop; remains a temporary consumer of production runtime APIs and production UI contract data where useful, not the final UI foundation. |
 | `Source/GrandpaGambit/Public/UI/ViewModels/GambitMatchViewModel.h` and `.cpp` | UI snapshot API | Production UI API | Pass 3 done: added `BuildUIPlayerSnapshots()` and `BuildUIMatchSnapshot()` | Low | Future UI can consume aggregated match/player/action snapshots without debug/sandbox/test APIs. |
 | `Source/GrandpaGambit/Public/UI/Widgets/GambitDevMatchSandboxWidget.h` and `.cpp` | Dev Sandbox UI | Sandbox / Dev Tools | Pass 1 partial: `ResolveSandboxComponent()` returns `nullptr` in Shipping | Medium | Correct category; still a dev tool, and it no longer resolves a production `GameMode` sandbox component in Shipping. |
 
@@ -106,7 +113,7 @@ It can stay in runtime for V0.1 because the current target is PC keyboard/mouse 
 | `Source/GrandpaGambit/Public/Debug/GambitDevMatchSandboxTypes.h` | Sandbox data types | Sandbox / Dev Tools | Pass 2 mechanical update only | Medium | Dev sandbox now embeds `FGambitPlayerSnapshot`; sandbox/debug ownership remains unchanged. |
 | `Source/GrandpaGambit/Public/Debug/GambitDebugAutoPlayer.h` and `.cpp` | Debug AI / smoke helper | Dev Tools / Automation helper | Keep isolated from production flow | Medium | Useful for command-driven smoke/manual tests, not gameplay AI. |
 | `Source/GrandpaGambit/Private/Tests/GambitEffectResolverTests.cpp` | Automation Tests | Automation Tests | Keep | Low | Guarded by `WITH_DEV_AUTOMATION_TESTS`; tests runtime effect logic. |
-| `Source/GrandpaGambit/Private/Tests/GambitPCShellFlowTests.cpp` | Automation Tests / smoke flow | Automation Tests | Pass 3 added one UI contract snapshot smoke test | Low | Guarded by `WITH_DEV_AUTOMATION_TESTS`; exercises V0.1 PC shell flow and verifies the production UI contract snapshot surface remains buildable. |
+| `Source/GrandpaGambit/Private/Tests/GambitPCShellFlowTests.cpp` | Automation Tests / smoke flow | Automation Tests | Pass 3 added one UI contract snapshot smoke test; Pass 5 added a non-behavioral note that tests protect V0.1 shell playability and contract buildability only | Low | Guarded by `WITH_DEV_AUTOMATION_TESTS`; exercises V0.1 PC shell flow and verifies the production UI contract snapshot surface remains buildable without promoting the shell to final UI architecture. |
 | `Source/GrandpaGambit/Private/Tests/GambitTargetSelectionTests.cpp` | Automation Tests | Automation Tests | Keep | Low | Guarded by `WITH_DEV_AUTOMATION_TESTS`; verifies target selection. |
 | `Source/GrandpaGambit/Public/Data/Validation/*Commandlet.h` and `Private/Data/Validation/*Commandlet.cpp` | Data validation commandlets | Docs/Scripts support / Dev validation | Keep | Low | Commandlets are invoked by validation scripts and do not represent runtime flow. |
 | `Source/GrandpaGambit/GrandpaGambit.Build.cs` | Build configuration | Build configuration | Review in later pass only if needed | Low | No separate test module exists yet; current tests are dev-automation guarded. |
@@ -129,8 +136,8 @@ It can stay in runtime for V0.1 because the current target is PC keyboard/mouse 
 | `Scripts/README.md` | Validation documentation | Docs/Scripts | Keep | Low | Documents build, data audit, automation, matrix comparison, diff checks. |
 | `Docs/Audits/PostFoundationV01Roadmap.md` | Roadmap/audit | Docs/Scripts | Keep | Low | Defines V0.1 backlog and constraints. |
 | `Docs/Audits/V01PCPlayableLoopAudit.md` | Playable loop audit | Docs/Scripts | Keep | Low | Documents current playable shell and known legacy map warning. |
-| `Docs/V01PCShell.md` | PC shell doc | Docs/Scripts | Keep, update after PC shell pass | Low | Correctly states PC shell is minimal and not final UI. |
-| `Docs/V01RoundHUD.md` | Round HUD/shell doc | Docs/Scripts | Keep, update after UI API pass | Low | Clarifies current text-first shell behavior. |
+| `Docs/V01PCShell.md` | PC shell doc | Docs/Scripts | Pass 5 done: added status/quarantine boundary and name decision | Low | Correctly states PC shell is temporary V0.1 playability UI, not final UI, and should be replaced later. |
+| `Docs/V01RoundHUD.md` | Round HUD/shell doc | Docs/Scripts | Pass 5 done: added status/quarantine boundary and removed stale debug wording for production breakdown lines | Low | Clarifies current text-first shell behavior and final UI replacement boundary. |
 | `Docs/Audits/DataAssetsAudit.md` | Generated/manual audit output | Docs/Scripts | Keep | Low | Tracks data audit and exclusions. |
 | `Docs/Audits/DataAssetsAuditExclusions.json` | Audit fixture/exclusion policy | Docs/Scripts / Test Fixtures policy | Keep | Low | Excludes examples/legacy/smoke assets from matrix comparison. |
 | `Docs/RoundGameplayEvents.md` | Runtime feedback documentation | Docs/Scripts | Keep, align names after feedback rename | Low | Already explains that event ledger is feedback/debug audit, not authoritative replay. |
@@ -162,7 +169,7 @@ Binary `.uasset`/`.umap` files were inventoried by path. Pass 4 edited only `Con
 | `AGambitGameMode` | `UGambitDevMatchSandboxComponent` | Non-shipping compile-time include, public getter, default subobject ownership | Fixed for Shipping in Pass 1. | `#if !UE_BUILD_SHIPPING` now gates the include, getter, property, and default subobject creation. | P0 done |
 | `AGambitPlayerController` | `UGambitMatchDebugComponent` | Development-marked exec commands call debug component only in non-shipping implementations | Fixed for Shipping in Pass 1. | `#if !UE_BUILD_SHIPPING` now gates debug includes, real command implementations, and helper resolution; Shipping stubs do not touch debug components. | P0 done |
 | `AGambitPlayerController` | `UGambitDevMatchSandboxComponent` | Development-marked exec commands call sandbox component only in non-shipping implementations | Fixed for Shipping in Pass 1. | `#if !UE_BUILD_SHIPPING` now gates sandbox includes, real command implementations, and helper resolution; Shipping stubs do not touch sandbox components. | P0 done |
-| `AGambitPlayerController` | `UGambitPCShellWidget` | Runtime widget bootstrap | Acceptable for V0.1, but blocks final UI if treated as final. | Keep for V0.1; introduce a final UI bootstrap/presentation policy later. | P2 |
+| `AGambitPlayerController` | `UGambitPCShellWidget` | Runtime widget bootstrap | Acceptable for V0.1, but blocks final UI if treated as final. | Pass 5 clarified this as temporary V0.1 bootstrap only; introduce a final UI bootstrap/presentation policy later. | P2 |
 | Runtime feedback systems | `Core/Types/GambitRoundFeedbackTypes.h` | Runtime state and execution contexts use stable feedback/snapshot types | Fixed in Pass 2. | `GambitDebugTypes.h` was replaced by `GambitRoundFeedbackTypes.h`; runtime systems use round feedback, score/gold/shop breakdown, and snapshot names. | P1 done |
 | `UGambitMatchViewModel` | `FGambitPlayerSnapshot` | UI-facing API returns stable player snapshot types | Fixed in Pass 2. | `BuildDebugPlayerSnapshots()` was replaced with `BuildPlayerSnapshots()`. | P1 done |
 | `UGambitMatchViewModel` / `UGambitRoundFlowComponent` / `AGambitPlayerController` | `Core/Types/GambitUIContractTypes.h` | UI-facing read-only contract uses production snapshots and action availability | Fixed in Pass 3. | `BuildUIMatchSnapshot()`, `BuildUIPlayerSnapshots()`, `BuildPlayerActionSnapshot()`, and `BuildTargetSelectionSnapshot()` define the final-UI-facing read contract without debug/sandbox/test dependencies. | P1 done |
@@ -221,7 +228,7 @@ These directions must remain forbidden:
 
 ### D. A garder mais renommer/documenter
 
-- `UGambitPCShellWidget`: keep for V0.1, consider `UGambitV01PCShellWidget` later only if rename cost is acceptable.
+- `UGambitPCShellWidget`: Pass 5 keeps the current name for V0.1 and documents it as temporary; consider `UGambitV01PCShellWidget` only in a dedicated replacement/rename pass if the cost is acceptable.
 - Runtime feedback structs: behavior kept; Pass 2 renamed them to stable production feedback/snapshot names.
 - Data validation commandlets: keep as validation tooling.
 - `UGambitDebugAutoPlayer`: keep as debug/smoke helper, not production AI.
@@ -239,6 +246,8 @@ These directions must remain forbidden:
 
 Decision: `UGambitPCShellWidget` is a **Temporary PC Shell that also serves as the Production UI V0.1**.
 
+Pass 5 final name decision: **keep `UGambitPCShellWidget`**. A note/API quarantine is sufficient for now because the name says PC shell, not final UI, and renaming the Unreal class before final replacement would create avoidable C++/Blueprint churn. Do not rename it to `DevShell`, because this is still the V0.1 player path.
+
 Answers:
 
 - Is it a temporary tool or V0.1 base?
@@ -248,10 +257,10 @@ Answers:
   Yes. The current target is PC keyboard/mouse, and the shell provides the playable loop without owning gameplay truth.
 
 - Should it be renamed to `DevShell`, `PCShell`, or another name?
-  Do **not** rename it to `DevShell`; that would incorrectly classify the V0.1 player path as dev-only. `GambitPCShellWidget` is acceptable for now. `GambitV01PCShellWidget` would be clearer later, but only in a dedicated rename pass.
+  Do **not** rename it to `DevShell`; that would incorrectly classify the V0.1 player path as dev-only. `GambitPCShellWidget` is acceptable for now and remains the name after Pass 5. `GambitV01PCShellWidget` would be clearer later, but only in a dedicated replacement/rename pass.
 
 - What should final UI replace or reuse?
-  Final UI should replace the shell presentation and consume stable runtime APIs: GameState/PlayerState snapshots, `Request...` commands, RoundFlow status, shop/inventory/dice/target selection snapshots. It may reuse small formatting concepts, but not the shell layout or debug-named snapshot contract as the final foundation.
+  Final UI should replace the shell presentation and consume stable runtime APIs and Pass 3 UI contract snapshots: GameState/PlayerState snapshots, `Request...` commands, RoundFlow status, shop/inventory/dice/target selection snapshots. It may reuse small formatting concepts, but not the shell layout or shell-only text formatting as the final foundation.
 
 ## 8. Plan d'execution en passes
 
@@ -565,6 +574,22 @@ Done criteria:
 
 - Shell role is clear in code/docs and cannot be mistaken for final UI.
 
+Pass 5 implemented boundary:
+
+- `UGambitPCShellWidget` was **not renamed**. Current name is accepted because the class is a PC shell and not presented as final UI; a later dedicated replacement/rename pass may introduce `UGambitV01PCShellWidget` if still useful.
+- `Source/GrandpaGambit/Public/UI/Widgets/GambitPCShellWidget.h`: added API comments that freeze the widget as a temporary playable V0.1 PC keyboard/mouse shell, forbid gameplay truth/final layout/navigation ownership, and point future extensions toward stable production UI contract snapshots where applicable.
+- `Source/GrandpaGambit/Private/UI/Widgets/GambitPCShellWidget.cpp`: added a construction comment clarifying that the text/button tree is intentionally plain V0.1 shell presentation only.
+- `Source/GrandpaGambit/Public/Players/Controllers/GambitPlayerController.h`: documented `PCShellWidgetClass` as temporary primary-local-player V0.1 bootstrap, not final UI launch policy.
+- `Source/GrandpaGambit/Public/Game/Modes/GambitGameMode.h`: clarified remaining shell-facing metadata categories as `V0.1 PC Shell`.
+- `Source/GrandpaGambit/Private/Tests/GambitPCShellFlowTests.cpp`: documented that the smoke tests protect V0.1 shell playability and production UI contract buildability without promoting the shell to final UI architecture.
+- `Docs/V01PCShell.md`: added status/quarantine, name decision, allowed boundary, UI contract guidance, and final replacement note.
+- `Docs/V01RoundHUD.md`: added status/quarantine, final replacement guidance, and removed stale debug wording for production score/gold breakdown lines.
+
+Pass 5 explicit non-changes:
+
+- No final UI, final widgets, UI layout redesign, gamepad/controller navigation, gameplay rule changes, DataAssets, maps, Blueprints, content edits, validation script edits, PC shell deletion, or Pass 6+ work were done.
+- V0.1 PC keyboard/mouse playability remains intact; the shell still displays state and sends the same production `Request...` commands.
+
 ### Pass 6 - Legacy/test fixture asset policy
 
 Objective: confirm fixture/legacy/smoke DataAssets are excluded from production runtime pools.
@@ -626,14 +651,14 @@ Done criteria:
 
 ## 9. Prompt suivant
 
-Pass 4 is complete and validated. The next executable pass, if intentionally requested later, is Pass 5 - PC shell quarantine/deprecation policy. Do not do Pass 5+ as part of Pass 4.
+Pass 5 is complete and validated. The next executable pass, if intentionally requested later, is Pass 6 - Legacy/test fixture asset policy. Do not do Pass 6+ as part of Pass 5.
 
-## 10. Taches restantes apres la Pass 4
+## 10. Taches restantes apres la Pass 5
 
 - [x] Pass 2 - Rename runtime feedback APIs away from `Debug`.
 - [x] Pass 3 - Stable production UI snapshot and command contract.
 - [x] Pass 4 - Content/config default-flow cleanup.
-- [ ] Pass 5 - PC shell quarantine/deprecation policy.
+- [x] Pass 5 - PC shell quarantine/deprecation policy.
 - [ ] Pass 6 - Legacy/test fixture asset policy.
 - [ ] Pass 7 - Validation/script tightening.
 
@@ -732,4 +757,28 @@ Logs:
 
 ```text
 Saved/Automation/GambitValidation/20260630-143238
+```
+
+## 15. Validation locale de la Pass 5
+
+Status: **passed** on 2026-06-30.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Scripts\Run-GambitValidation.ps1
+```
+
+Result:
+
+| Gate item | Result | Details |
+| --- | --- | --- |
+| Build | OK | `GrandpaGambitEditor Win64 Development` built successfully. |
+| DataAssets audit | OK | `total=291`, `valid=291`, `warning=0`, `error=0`. |
+| Audit files / matrix comparison | OK | Audit generated outputs and comparison gate passed. |
+| Automation | OK | `success=84`, `warning=0`, `failed=0`, `notRun=0`, `inProcess=0`. |
+| `git diff --check` | OK | No whitespace/error findings. |
+
+Logs:
+
+```text
+Saved/Automation/GambitValidation/20260630-144916
 ```

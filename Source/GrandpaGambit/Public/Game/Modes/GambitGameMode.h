@@ -129,10 +129,10 @@ private:
 	UGambitDevMatchSandboxComponent* DevMatchSandboxComponent = nullptr;
 #endif
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|GameMode|PC Shell", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|GameMode|V0.1 PC Shell", meta = (AllowPrivateAccess = "true"))
 	bool bAutoStartMatchOnBeginPlay = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode|PC Shell", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gambit|GameMode|V0.1 PC Shell", meta = (AllowPrivateAccess = "true"))
 	FGambitMatchSetupConfig PendingMatchSetup;
 
 	bool bMatchFlowStarted = false;

@@ -289,7 +289,9 @@ private:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|Local Multiplayer Input", meta = (AllowPrivateAccess = "true"))
 	bool bOnlyPrimaryLocalPlayerCanManageRoster = true;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|PC Shell", meta = (AllowPrivateAccess = "true"))
+	// Temporary V0.1 PC shell bootstrap for the primary local player. Final UI
+	// should use its own presentation bootstrap and the stable UI contract.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Gambit|V0.1 PC Shell", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UGambitPCShellWidget> PCShellWidgetClass;
 
 	UPROPERTY(Transient)

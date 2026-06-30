@@ -2,6 +2,16 @@
 
 This pass keeps the playable PC keyboard/mouse roll, lock, and reroll slice, keeps readable end-of-round feedback for resolution/rewards/ranking, keeps the first PC Action phase consumable + target-selection controls, and adds the minimal PC Shop purchase flow.
 
+## Status
+
+This HUD is the text-first surface inside `UGambitPCShellWidget`. It exists to
+keep V0.1 playable on PC keyboard/mouse and is not the final match HUD.
+
+Future final UI work should replace this presentation and consume the stable
+production UI contract snapshots/commands where applicable. Do not add gameplay
+truth, final layout policy, animation policy, focus policy, or gamepad/navigation
+policy to this shell HUD.
+
 ## Scope
 
 - Roll remains automatic when `UGambitRoundFlowComponent` enters `Roll`.
@@ -17,8 +27,8 @@ This pass keeps the playable PC keyboard/mouse roll, lock, and reroll slice, kee
 - Target options are displayed from the existing `FGambitTargetSelectionRequest`; the HUD does not calculate valid targets.
 - PC mouse buttons allow selecting one option, confirming the selected option, or cancelling the pending request.
 - A successful confirm calls the existing controller command and consumes the consumable only after round flow accepts the confirmed result.
-- After resolution, each player row shows the scored combination, raw score, final score, score totals, and score debug breakdown lines already produced by scoring/effect systems.
-- After reward/ranking data exists, each player row shows round gold delta, gold breakdown lines, and VP gained when available.
+- After resolution, each player row shows the scored combination, raw score, final score, score totals, and score breakdown lines already produced by scoring/effect systems.
+- After reward/ranking data exists, each player row shows round gold delta, production gold breakdown lines, and VP gained when available.
 - After ranking exists, the HUD shows the round ranking snapshot from `AGambitGameState`.
 - During `Shop`, each player row shows that player's generated offers.
 - Shop offers show display name, stable item id, item type, rarity, gold cost, shared-pool state when relevant, and whether the offer is currently buyable.
@@ -39,7 +49,7 @@ This pass keeps the playable PC keyboard/mouse roll, lock, and reroll slice, kee
 - `UGambitDiceComponent` owns runtime dice state and performs lock/reroll mutation.
 - `UGambitInventoryComponent` owns consumable runtime slots and inventory instances.
 - `UGambitShopComponent` owns offer storage, purchase preview validation, price resolution, gold spend, shared-pool commit, and inventory grant mechanics.
-- `UGambitPlayerRoundStateComponent` owns the current round score, last score breakdown, debug score/gold lines, and round event ledger.
+- `UGambitPlayerRoundStateComponent` owns the current round score, last score breakdown, score/gold breakdown lines, and round event ledger.
 - `AGambitGameState` owns the round ranking snapshot.
 - `UGambitPCShellWidget` displays state and sends player/die/consumable/target-selection/shop command requests. It does not calculate gameplay truth.
 
@@ -119,5 +129,5 @@ The HUD also shows a top-level feedback line after lock/reroll commands. Example
 - Target selection is single-option confirmation over existing request options; no real multi-target selection was added.
 - Shop is the minimal V0.1 one-purchase flow only: no reroll shop, central market, auctions, reservation UI, non-gold costs, or advanced sell/replace flow.
 - No new objects or DataAssets were created.
-- Action, target-selection, resolution, reward, ranking, shop, and ledger feedback is text-first debug/playability UI, not final presentation.
+- Action, target-selection, resolution, reward, ranking, shop, and ledger feedback is text-first playability UI, not final presentation.
 - The shell still does not pause separately on automatic Resolution/Reward/Ranking phases; their results remain visible afterward, including during Shop.

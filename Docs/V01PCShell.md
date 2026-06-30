@@ -2,6 +2,21 @@
 
 This pass adds the first minimal PC keyboard/mouse shell for a local match.
 
+## Status
+
+`UGambitPCShellWidget` is intentionally kept under its current name for Pass 5.
+It is the temporary playable V0.1 PC shell, not the final UI foundation.
+Renaming it to `UGambitV01PCShellWidget` would be clearer in isolation, but the
+Unreal rename churn is not useful until a dedicated replacement/rename pass.
+
+Boundary rules:
+
+- keep it playable for V0.1 keyboard/mouse;
+- do not add final UI layout, animation, focus, or gamepad/navigation policy here;
+- do not move gameplay rules, scoring, economy, shop, dice, ranking, target-selection, or item-effect truth into the widget;
+- consume stable production runtime APIs and the production UI contract snapshots when a shell extension overlaps with that contract;
+- replace the shell with the final UI later instead of growing final UI architecture inside this class.
+
 ## Flow
 
 1. Open the default map `Content/GrandpaGambit/Maps/Gambit.umap`.
@@ -28,6 +43,7 @@ See `Docs/V01RoundHUD.md` for the Roll / Lock / Reroll HUD contract and manual t
 - `AGambitGameState` owns visible lifecycle state, selected setup, current phase/round, and final ranking snapshots.
 - `UGambitRoundFlowComponent` owns round progression, lock/reroll validation, reroll counters, and final ranking generation.
 - `UGambitPCShellWidget` only displays state, sends commands, and shows command feedback.
+- The stable production UI contract from Pass 3 is the intended read model for final UI work. The shell may consume it where useful, but it is not itself that contract.
 
 ## Launch map
 

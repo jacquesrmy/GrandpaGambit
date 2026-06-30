@@ -22,6 +22,9 @@
 #include "Shop/Components/GambitShopComponent.h"
 #include "UI/Widgets/GambitPCShellWidget.h"
 
+// These smoke tests protect the temporary V0.1 PC shell playability and the
+// production UI contract surface. They do not promote UGambitPCShellWidget to
+// final UI architecture.
 namespace
 {
 	UGambitDiceDefinition* MakePCShellFlowTestDie(UObject* Outer, const TCHAR* DiceId, const TArray<int32>& Faces)

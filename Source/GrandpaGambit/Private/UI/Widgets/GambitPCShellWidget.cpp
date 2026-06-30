@@ -432,6 +432,8 @@ bool UGambitPCShellWidget::InitializeShellWidget()
 		return false;
 	}
 
+	// Intentionally plain C++ text/button shell for V0.1 playability only.
+	// Final UI should be built separately against the stable UI contract.
 	UBorder* Background = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PCShellBackground"));
 	Background->SetBrushColor(FLinearColor(0.015f, 0.015f, 0.015f, 0.94f));
 	Background->SetPadding(FMargin(32.0f, 28.0f));

@@ -16,6 +16,8 @@ class UHorizontalBox;
 class UTextBlock;
 class UVerticalBox;
 
+// Temporary V0.1 shell-only action verbs. Do not treat this enum as the final UI
+// command contract; final UI should call the stable Request... APIs directly.
 UENUM()
 enum class EGambitPCShellActionKind : uint8
 {
@@ -52,6 +54,14 @@ private:
 	int32 ActionIndex = INDEX_NONE;
 };
 
+/**
+ * Temporary playable PC keyboard/mouse shell for V0.1.
+ *
+ * This widget is runtime because V0.1 must remain playable, but it is not the
+ * final UI architecture. Keep gameplay truth in GameMode/RoundFlow/Controller
+ * services, consume stable production UI contract snapshots where they fit, and
+ * replace this shell instead of growing final layout/navigation here.
+ */
 UCLASS(BlueprintType, Blueprintable)
 class GRANDPAGAMBIT_API UGambitPCShellWidget : public UUserWidget
 {
@@ -62,10 +72,10 @@ public:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|V0.1 PC Shell")
 	bool InitializeShellWidget();
 
-	UFUNCTION(BlueprintCallable, Category = "Gambit|PC Shell")
+	UFUNCTION(BlueprintCallable, Category = "Gambit|V0.1 PC Shell")
 	void RefreshShell();
 
 	void ExecutePlayerAction(
