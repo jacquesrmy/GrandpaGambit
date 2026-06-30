@@ -45,6 +45,28 @@ namespace
 		return ConsumableDefinition;
 	}
 
+	UGambitConsumableDefinition* MakePCShellFlowSelfGoldConsumable(
+		UObject* Outer,
+		const TCHAR* ItemId,
+		const TCHAR* DisplayName,
+		const float Amount)
+	{
+		UGambitItemEffectDefinition* EffectDefinition = NewObject<UGambitItemEffectDefinition>(Outer);
+		EffectDefinition->Hook = EGambitEffectHook::ConsumableUse;
+		EffectDefinition->EffectType = EGambitItemEffectType::AddGold;
+		EffectDefinition->Target = EGambitEffectTarget::Source;
+		EffectDefinition->Amount = Amount;
+		EffectDefinition->EffectId = FName(*FString::Printf(TEXT("effect.test.%s.gold"), ItemId));
+
+		UGambitConsumableDefinition* ConsumableDefinition = MakePCShellFlowTestConsumable(
+			Outer,
+			ItemId,
+			DisplayName,
+			{ EGambitRoundPhase::Action });
+		ConsumableDefinition->EffectDefinitions.Add(EffectDefinition);
+		return ConsumableDefinition;
+	}
+
 	UGambitModuleDefinition* MakePCShellFlowTestModule(
 		UObject* Outer,
 		const TCHAR* ItemId,
@@ -132,6 +154,52 @@ namespace
 		}
 
 		return true;
+	}
+
+	void FreeOneConsumableSlotIfNeeded(AGambitPlayerState* PlayerState)
+	{
+		UGambitInventoryComponent* InventoryComponent = PlayerState ? PlayerState->GetInventoryComponent() : nullptr;
+		if (!InventoryComponent)
+		{
+			return;
+		}
+
+		if (!InventoryComponent->HasAvailableConsumableSlot() && InventoryComponent->GetConsumableSlotsUsed() > 0)
+		{
+			UGambitConsumableDefinition* RemovedConsumableDefinition = nullptr;
+			InventoryComponent->RemoveConsumableAtSlot(0, RemovedConsumableDefinition);
+		}
+	}
+
+	int32 FindConsumableSlotIndex(
+		const AGambitPlayerState* PlayerState,
+		const UGambitConsumableDefinition* ConsumableDefinition)
+	{
+		if (!PlayerState || !ConsumableDefinition)
+		{
+			return INDEX_NONE;
+		}
+
+		return PlayerState->GetConsumableSlotsRef().IndexOfByPredicate(
+			[ConsumableDefinition](const FGambitConsumableRuntimeSlot& Slot)
+			{
+				return Slot.Definition == ConsumableDefinition;
+			});
+	}
+
+	void MarkAllPlayersReady(
+		UGambitRoundFlowComponent* RoundFlow,
+		const TArray<AGambitPlayerState*>& Players)
+	{
+		if (!RoundFlow)
+		{
+			return;
+		}
+
+		for (AGambitPlayerState* PlayerState : Players)
+		{
+			RoundFlow->SetPlayerReady(PlayerState, true);
+		}
 	}
 
 	bool ContainsShellLine(const TArray<FString>& Lines, const FString& Needle)
@@ -835,6 +903,222 @@ bool FGambitPCShellShopContinueFlowTest::RunTest(const FString& Parameters)
 			FString::Printf(TEXT("%d-player shop continue increments round index"), PlayerCount),
 			TestWorld.GameState->GetCurrentRoundIndex(),
 			2);
+
+		TestWorld.Destroy();
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGambitPCShellFullPlayableLoop2To4Test,
+	"GrandpaGambit.PCShell.FullPlayableLoop2To4",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGambitPCShellFullPlayableLoop2To4Test::RunTest(const FString& Parameters)
+{
+	(void)Parameters;
+
+	for (const int32 PlayerCount : {2, 3, 4})
+	{
+		FGambitPCShellFlowWorld TestWorld;
+		if (!BuildPCShellFlowWorld(*this, PlayerCount, TestWorld))
+		{
+			return false;
+		}
+
+		FGambitMatchSetupConfig MatchSetup;
+		MatchSetup.LocalPlayerCount = PlayerCount;
+		MatchSetup.RoundCount = 2;
+		TestWorld.RoundFlow->ApplyMatchSetup(MatchSetup);
+		TestWorld.GameState->SetMatchLifecycleState(EGambitMatchLifecycleState::InMatch);
+		TestWorld.RoundFlow->StartMatchFlow();
+
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke starts round one"), PlayerCount),
+			TestWorld.GameState->GetCurrentRoundIndex(),
+			1);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke enters Selection/Reroll after Roll"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::SelectionReroll);
+		TestEqual(
+			FString::Printf(TEXT("%d-player setup is published to GameState"), PlayerCount),
+			TestWorld.GameState->GetMatchSetupConfig().LocalPlayerCount,
+			PlayerCount);
+
+		AGambitPlayerState* Buyer = TestWorld.Players.IsValidIndex(0) ? TestWorld.Players[0] : nullptr;
+		if (!TestNotNull(FString::Printf(TEXT("%d-player smoke buyer exists"), PlayerCount), Buyer))
+		{
+			TestWorld.Destroy();
+			return false;
+		}
+		TestTrue(
+			FString::Printf(TEXT("%d-player smoke buyer has rolled dice"), PlayerCount),
+			Buyer->GetDiceStatesRef().Num() > 1);
+
+		const FGambitRoundCommandResult LockResult = TestWorld.RoundFlow->RequestSetDieLockedDetailed(Buyer, 0, true);
+		TestTrue(FString::Printf(TEXT("%d-player smoke lock succeeds"), PlayerCount), LockResult.bSuccess);
+		TestTrue(FString::Printf(TEXT("%d-player smoke die is locked"), PlayerCount), Buyer->GetDiceStatesRef()[0].bLocked);
+
+		const FGambitRoundCommandResult UnlockResult = TestWorld.RoundFlow->RequestSetDieLockedDetailed(Buyer, 0, false);
+		TestTrue(FString::Printf(TEXT("%d-player smoke unlock succeeds"), PlayerCount), UnlockResult.bSuccess);
+		TestFalse(FString::Printf(TEXT("%d-player smoke die is unlocked"), PlayerCount), Buyer->GetDiceStatesRef()[0].bLocked);
+
+		const FGambitRoundCommandResult RelockResult = TestWorld.RoundFlow->RequestSetDieLockedDetailed(Buyer, 0, true);
+		TestTrue(FString::Printf(TEXT("%d-player smoke relock succeeds"), PlayerCount), RelockResult.bSuccess);
+		const int32 LockedValueBeforeReroll = Buyer->GetDiceStatesRef()[0].EffectiveValue;
+		const FGambitRoundCommandResult RerollResult = TestWorld.RoundFlow->RequestRerollDetailed(Buyer);
+		TestTrue(FString::Printf(TEXT("%d-player smoke reroll succeeds"), PlayerCount), RerollResult.bSuccess);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke locked die keeps value through reroll"), PlayerCount),
+			Buyer->GetDiceStatesRef()[0].EffectiveValue,
+			LockedValueBeforeReroll);
+
+		FreeOneConsumableSlotIfNeeded(Buyer);
+		const FString DirectConsumableId = FString::Printf(TEXT("consumable.test.direct_%d"), PlayerCount);
+		UGambitConsumableDefinition* DirectConsumable = MakePCShellFlowSelfGoldConsumable(
+			GetTransientPackage(),
+			*DirectConsumableId,
+			TEXT("Direct Coffee"),
+			2.0f);
+		TestTrue(
+			FString::Printf(TEXT("%d-player smoke direct consumable is added"), PlayerCount),
+			Buyer->GetInventoryComponent()->AddConsumable(DirectConsumable));
+		const int32 DirectConsumableSlot = FindConsumableSlotIndex(Buyer, DirectConsumable);
+		TestTrue(
+			FString::Printf(TEXT("%d-player smoke direct consumable slot is found"), PlayerCount),
+			DirectConsumableSlot != INDEX_NONE);
+
+		MarkAllPlayersReady(TestWorld.RoundFlow, TestWorld.Players);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke reaches Action"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::Action);
+
+		const int32 GoldBeforeConsumable = Buyer->GetCurrentGold();
+		TestTrue(
+			FString::Printf(TEXT("%d-player smoke direct consumable succeeds"), PlayerCount),
+			TestWorld.RoundFlow->RequestUseConsumable(Buyer, DirectConsumableSlot));
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke direct consumable applies gold"), PlayerCount),
+			Buyer->GetCurrentGold(),
+			GoldBeforeConsumable + 2);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke direct consumable slot is consumed"), PlayerCount),
+			FindConsumableSlotIndex(Buyer, DirectConsumable),
+			INDEX_NONE);
+
+		MarkAllPlayersReady(TestWorld.RoundFlow, TestWorld.Players);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke reaches Shop after resolution/reward/ranking"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::Shop);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke records round ranking"), PlayerCount),
+			TestWorld.GameState->GetRoundRankingSnapshotRef().Num(),
+			PlayerCount);
+
+		for (AGambitPlayerState* PlayerState : TestWorld.Players)
+		{
+			TestTrue(
+				FString::Printf(TEXT("%d-player smoke scored player %s"), PlayerCount, *PlayerState->GetPlayerName()),
+				PlayerState->HasEventThisRound(EGambitRoundGameplayEventType::RoundScored));
+		}
+
+		FreeOneConsumableSlotIfNeeded(Buyer);
+		const FString ShopConsumableAId = FString::Printf(TEXT("consumable.test.shop_%d_a"), PlayerCount);
+		const FString ShopConsumableBId = FString::Printf(TEXT("consumable.test.shop_%d_b"), PlayerCount);
+		UGambitConsumableDefinition* ShopConsumableA = MakePCShellFlowTestConsumable(
+			GetTransientPackage(),
+			*ShopConsumableAId,
+			TEXT("Shop Coffee A"),
+			{ EGambitRoundPhase::Action });
+		UGambitConsumableDefinition* ShopConsumableB = MakePCShellFlowTestConsumable(
+			GetTransientPackage(),
+			*ShopConsumableBId,
+			TEXT("Shop Coffee B"),
+			{ EGambitRoundPhase::Action });
+		Buyer->GetEconomyComponent()->AddGold(10);
+		Buyer->GetShopComponent()->SetCurrentOffers({
+			MakePCShellFlowTestOffer(0, ShopConsumableA, 1),
+			MakePCShellFlowTestOffer(1, ShopConsumableB, 1)
+		});
+
+		const TArray<FGambitShopOfferSnapshot> ShopSnapshotsBeforePurchase = TestWorld.RoundFlow->BuildShopOfferSnapshots(Buyer);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke exposes injected shop offers"), PlayerCount),
+			ShopSnapshotsBeforePurchase.Num(),
+			2);
+		TestTrue(
+			FString::Printf(TEXT("%d-player smoke has a buyable shop offer"), PlayerCount),
+			ShopSnapshotsBeforePurchase.ContainsByPredicate([](const FGambitShopOfferSnapshot& Snapshot)
+			{
+				return Snapshot.bCanPurchase;
+			}));
+
+		const int32 GoldBeforePurchase = Buyer->GetCurrentGold();
+		const FGambitRoundCommandResult PurchaseResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(Buyer, 0);
+		TestTrue(FString::Printf(TEXT("%d-player smoke shop purchase succeeds"), PlayerCount), PurchaseResult.bSuccess);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke shop purchase spends gold"), PlayerCount),
+			Buyer->GetCurrentGold(),
+			GoldBeforePurchase - 1);
+		TestTrue(
+			FString::Printf(TEXT("%d-player smoke purchased consumable is owned"), PlayerCount),
+			Buyer->GetInventoryComponent()->HasItemDefinition(ShopConsumableA));
+
+		const FGambitRoundCommandResult SecondPurchaseResult = TestWorld.RoundFlow->RequestPurchaseOfferDetailed(Buyer, 1);
+		TestFalse(FString::Printf(TEXT("%d-player smoke second shop purchase is refused"), PlayerCount), SecondPurchaseResult.bSuccess);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke second purchase refusal is typed"), PlayerCount),
+			SecondPurchaseResult.Status,
+			EGambitRoundCommandStatus::PurchaseAlreadyMade);
+
+		MarkAllPlayersReady(TestWorld.RoundFlow, TestWorld.Players);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke advances to round two"), PlayerCount),
+			TestWorld.GameState->GetCurrentRoundIndex(),
+			2);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke round two starts at Selection/Reroll"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::SelectionReroll);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke remains in match before final round end"), PlayerCount),
+			TestWorld.GameState->GetMatchLifecycleState(),
+			EGambitMatchLifecycleState::InMatch);
+
+		MarkAllPlayersReady(TestWorld.RoundFlow, TestWorld.Players);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke reaches second Action"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::Action);
+		MarkAllPlayersReady(TestWorld.RoundFlow, TestWorld.Players);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke reaches final Shop"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::Shop);
+		MarkAllPlayersReady(TestWorld.RoundFlow, TestWorld.Players);
+
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke final match clears phase"), PlayerCount),
+			TestWorld.GameState->GetCurrentPhase(),
+			EGambitRoundPhase::None);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke final match completes"), PlayerCount),
+			TestWorld.GameState->GetMatchLifecycleState(),
+			EGambitMatchLifecycleState::MatchComplete);
+		TestEqual(
+			FString::Printf(TEXT("%d-player smoke final ranking has all players"), PlayerCount),
+			TestWorld.GameState->GetFinalRankingSnapshotRef().Num(),
+			PlayerCount);
+		if (TestWorld.GameState->GetFinalRankingSnapshotRef().Num() > 0)
+		{
+			TestTrue(
+				FString::Printf(TEXT("%d-player smoke final winner is flagged"), PlayerCount),
+				TestWorld.GameState->GetFinalRankingSnapshotRef()[0].bWinner);
+		}
 
 		TestWorld.Destroy();
 	}
